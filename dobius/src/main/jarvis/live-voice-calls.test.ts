@@ -139,6 +139,16 @@ describe('delegation round trip', () => {
     await expect(answer).resolves.toEqual({ ok: true, kind: 'cancelled', speak: '' })
   })
 
+  it('an answer that lands just as Carson says stop is not spoken', async () => {
+    const calls = makeCalls()
+    calls.callStarted(7)
+    const answer = calls.delegate(7, { request: 'status' })
+    cancelAdam.mockImplementationOnce(() => undefined)
+    pending?.resolve({ kind: 'answer', text: 'All green.' })
+    calls.cancelDelegation(7)
+    await expect(answer).resolves.toEqual({ ok: true, kind: 'cancelled', speak: '' })
+  })
+
   it('hanging up cancels the ADAM turn for that call', async () => {
     const calls = makeCalls()
     calls.callStarted(7)

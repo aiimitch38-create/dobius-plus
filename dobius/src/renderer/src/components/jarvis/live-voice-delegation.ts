@@ -32,6 +32,7 @@ export type DelegationHost = {
  */
 export class LiveDelegations {
   private pending = 0
+  private waitingForWords = 0
 
   constructor(private readonly host: DelegationHost) {}
 
@@ -39,8 +40,14 @@ export class LiveDelegations {
     return this.pending
   }
 
+  /** True while a delegation has not yet taken Carson's words. */
+  get awaitingWords(): boolean {
+    return this.waitingForWords > 0
+  }
+
   reset(): void {
     this.pending = 0
+    this.waitingForWords = 0
   }
 
   /** Drops ADAM's work for this call, if any is running. */
@@ -58,6 +65,7 @@ export class LiveDelegations {
     const generation = host.generation()
     const isCurrent = (): boolean => host.generation() === generation
     this.pending += 1
+    this.waitingForWords += 1
     host.settle()
     try {
       const startedAt = host.now()
@@ -70,6 +78,7 @@ export class LiveDelegations {
           return
         }
       }
+      this.waitingForWords = Math.max(0, this.waitingForWords - 1)
       const request = host.transcript.takeRequest()
       if (!request) {
         host.send(commentaryEvent(LIVE_NOT_HEARD_TEXT, delegationId))

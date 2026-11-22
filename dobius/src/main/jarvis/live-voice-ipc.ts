@@ -75,20 +75,43 @@ function getLiveCalls(store: Store, deps: LiveVoiceIpcDeps): LiveVoiceCalls {
 let liveSessionInFlight = false
 
 /**
- * The live session a window currently owns. Holds the one 'destroyed' listener
- * on the owner so a new owner or a repeat connect replaces it, never stacks it.
+ * Calls `onGone` once when the window's page goes away: closed, crashed, or
+ * reloaded / navigated (a reload keeps the same WebContents, so 'destroyed'
+ * alone would leave a paid call owned by a page that no longer exists).
+ * Returns the unsubscribe.
+ */
+function watchOwnerGone(owner: LiveSender, onGone: () => void): () => void {
+  const onNavigate = (details: { isMainFrame?: boolean; isSameDocument?: boolean }): void => {
+    if (details?.isMainFrame !== false && details?.isSameDocument !== true) {
+      onGone()
+    }
+  }
+  const navigate = onNavigate as unknown as (...args: unknown[]) => void
+  owner.once('destroyed', onGone)
+  owner.once('render-process-gone', onGone)
+  owner.on('did-start-navigation', navigate)
+  return () => {
+    owner.removeListener('destroyed', onGone)
+    owner.removeListener('render-process-gone', onGone)
+    owner.removeListener('did-start-navigation', navigate)
+  }
+}
+
+/**
+ * The live session a window currently owns, with the one set of owner
+ * listeners, so a new owner replaces them and never stacks them.
  */
 let activeLiveSession: {
   owner: LiveSender
   ownerId: number
   sessionId: string | null
-  onOwnerDestroyed: () => void
+  unwatch: () => void
 } | null = null
 
 function clearActiveLiveSession(): void {
   const current = activeLiveSession
   activeLiveSession = null
-  current?.owner.removeListener('destroyed', current.onOwnerDestroyed)
+  current?.unwatch()
   // Why here: every way a call ends (hang-up, a new call, the window
   // closing) stops the meter and drops ADAM's work for it.
   if (current) {
@@ -98,13 +121,12 @@ function clearActiveLiveSession(): void {
 
 function setActiveLiveSession(owner: LiveSender, sessionId: string | null): void {
   clearActiveLiveSession()
-  const onOwnerDestroyed = (): void => {
+  const unwatch = watchOwnerGone(owner, () => {
     if (activeLiveSession?.owner === owner) {
       clearActiveLiveSession()
     }
-  }
-  owner.once('destroyed', onOwnerDestroyed)
-  activeLiveSession = { owner, ownerId: owner.id, sessionId, onOwnerDestroyed }
+  })
+  activeLiveSession = { owner, ownerId: owner.id, sessionId, unwatch }
 }
 
 export function getActiveLiveSessionForTest(): {
@@ -127,12 +149,11 @@ async function runLiveSessionOnce<T>(
   // Why: a create still in flight when its window closes would open a session
   // nobody can use or hang up, so the request is aborted with the window.
   const controller = new AbortController()
-  const abort = (): void => controller.abort()
-  sender.once('destroyed', abort)
+  const unwatch = watchOwnerGone(sender, () => controller.abort())
   try {
     return await run(controller.signal)
   } finally {
-    sender.removeListener('destroyed', abort)
+    unwatch()
     liveSessionInFlight = false
   }
 }
@@ -157,6 +178,14 @@ export function registerLiveVoiceIpc(store: Store, deps: LiveVoiceIpcDeps): void
     if (live.engine !== 'openai-live' || !OPENAI_LIVE_CALL_READY) {
       return liveVoiceFailure('not-ready')
     }
+    // Why refuse while another window's call is open: a second session would
+    // bill while only one is metered. The owning window reports 'closed'
+    // before it reconnects, so a connect from the owner itself means its page
+    // lost the old call (its peer died with it): end that one and go on.
+    if (liveSessionInFlight || (activeLiveSession && activeLiveSession.owner !== sender)) {
+      return liveVoiceFailure('busy')
+    }
+    clearActiveLiveSession()
     const refused = calls.refuseStart()
     if (refused) {
       return refused
@@ -166,9 +195,13 @@ export function registerLiveVoiceIpc(store: Store, deps: LiveVoiceIpcDeps): void
         ? (payload as { offerSdp?: unknown }).offerSdp
         : undefined
     // createOpenAiLiveSession validates the offer itself and reads the key.
-    const options = await liveSessionOptions(store, deps)
-    // Why re-check: the window may have closed while the thread was read.
-    if (sender.isDestroyed()) {
+    let gone = false
+    const unwatch = watchOwnerGone(sender, () => {
+      gone = true
+    })
+    const options = await liveSessionOptions(store, deps).finally(unwatch)
+    // Why re-check: the page may have closed or reloaded while the thread was read.
+    if (gone || sender.isDestroyed()) {
       return liveVoiceFailure('cancelled')
     }
     const result = await runLiveSessionOnce(sender, (signal) =>

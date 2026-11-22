@@ -1,3 +1,4 @@
+import type { OpenAiLiveErrorKind } from '../../../../shared/speech-types'
 import type { NamedTimers } from './live-voice-timers'
 
 // Why these numbers: the Live API ends a connected call after 2 hours with
@@ -10,6 +11,16 @@ export const LIVE_RECYCLE_FORCE_AFTER_MS = 4 * 60_000
 export const LIVE_RECYCLE_RETRY_MS = 5_000
 export const LIVE_RECYCLE_MIN_MS = 60_000
 export const LIVE_RECONNECT_DELAYS_MS = [1_000, 3_000, 8_000] as const
+
+/** Setup failures worth another try; a cap, key or access refusal is final. */
+export const LIVE_RETRYABLE_KINDS: ReadonlySet<OpenAiLiveErrorKind> = new Set([
+  'busy',
+  'network',
+  'timeout',
+  'server',
+  'rate-limited',
+  'cancelled'
+])
 
 /** What the reconnect logic needs from the call. */
 export type ReconnectHost = {
@@ -30,12 +41,15 @@ export type ReconnectHost = {
 export class LiveReconnectPolicy {
   private attempts = 0
   private forceAt = 0
+  // True from a drop or recycle until the next session.started.
+  private reconnecting = false
 
   constructor(private readonly host: ReconnectHost) {}
 
   /** session.started: a good connection resets the retry count and plans the recycle. */
   started(expiresAtMs: number | null): void {
     this.attempts = 0
+    this.reconnecting = false
     const now = this.host.now()
     const recycleAt = (expiresAtMs ?? now + LIVE_SESSION_MAX_MS) - LIVE_RECYCLE_LEAD_MS
     this.forceAt = recycleAt + LIVE_RECYCLE_FORCE_AFTER_MS
@@ -55,11 +69,18 @@ export class LiveReconnectPolicy {
       return
     }
     this.attempts += 1
+    this.reconnecting = true
     this.host.reopen(delay)
+  }
+
+  /** True when a failed reconnect should be counted as one more drop. */
+  retries(kind: OpenAiLiveErrorKind): boolean {
+    return this.reconnecting && LIVE_RETRYABLE_KINDS.has(kind)
   }
 
   reset(): void {
     this.attempts = 0
+    this.reconnecting = false
   }
 
   private recycle(): void {
@@ -67,6 +88,7 @@ export class LiveReconnectPolicy {
       this.host.timers.arm('recycle', LIVE_RECYCLE_RETRY_MS, () => this.recycle())
       return
     }
+    this.reconnecting = true
     this.host.reopen(0)
   }
 }

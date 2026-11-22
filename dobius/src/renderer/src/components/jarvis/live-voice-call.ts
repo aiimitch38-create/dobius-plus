@@ -1,4 +1,8 @@
-import type { LiveVoiceMicMode, LiveVoiceNotice } from '../../../../shared/speech-types'
+import type {
+  LiveVoiceMicMode,
+  LiveVoiceNotice,
+  OpenAiLiveErrorKind
+} from '../../../../shared/speech-types'
 import {
   LIVE_CAP_HANG_UP_GRACE_MS,
   LIVE_CONNECT_TIMEOUT_MS,
@@ -7,20 +11,18 @@ import {
   LIVE_IDLE_HANGUP_MS,
   LIVE_INTENT_SETTLE_MS,
   LIVE_SPEAKING_QUIET_MS,
-  type LevelReader,
   type LivePeerCall,
   type LiveVoiceCallDeps,
   type LiveVoiceSnapshot,
   sameSnapshot
 } from './live-voice-call-types'
-import { closeLivePeer, openLivePeer } from './live-voice-peer'
+import { closeLivePeer, muteLivePeer, openLivePeer } from './live-voice-peer'
 import { NamedTimers } from './live-voice-timers'
 import { LiveDelegations } from './live-voice-delegation'
-import { LiveReconnectPolicy, LIVE_RECYCLE_RETRY_MS } from './live-voice-reconnect'
+import { LIVE_RECYCLE_RETRY_MS, LiveReconnectPolicy } from './live-voice-reconnect'
+import { LiveLevels } from './live-voice-levels'
 import { LiveTranscript } from './live-voice-transcript'
 import { commentaryEvent, muteEvent, parseLiveEvent, type LiveEvent } from './live-voice-wire'
-
-export * from './live-voice-call-types'
 
 /**
  * One OpenAI Live call: the microphone, the WebRTC peer, the data channel,
@@ -43,14 +45,14 @@ export class LiveVoiceCall {
   private lastInputAt = 0
   private capWarned = false
   private readonly reconnect: LiveReconnectPolicy
-  private inputLevel: LevelReader | null = null
-  private outputLevel: LevelReader | null = null
+  private readonly levels: LiveLevels
 
   constructor(
     private readonly deps: LiveVoiceCallDeps,
     private readonly onChange: (snapshot: LiveVoiceSnapshot) => void = () => undefined
   ) {
     this.timers = new NamedTimers(deps.setTimeout, deps.clearTimeout)
+    this.levels = new LiveLevels(deps.levelOf)
     this.transcript = new LiveTranscript((line) => {
       void deps.api.liveTranscript(line).catch(() => undefined)
     })
@@ -82,8 +84,8 @@ export class LiveVoiceCall {
     return this.call !== null || this.starting || this.timers.has('reconnect')
   }
 
-  getInputLevel = (): number => (this.snapshot.muted ? 0 : (this.inputLevel?.read() ?? 0))
-  getOutputLevel = (): number => this.outputLevel?.read() ?? 0
+  getInputLevel = (): number => (this.snapshot.muted ? 0 : this.levels.read('input'))
+  getOutputLevel = (): number => this.levels.read('output')
 
   /** The orb or Cmd+T: start a call, or (push-to-talk) mute and unmute, or hang up. */
   press(micMode: LiveVoiceMicMode): void {
@@ -116,17 +118,14 @@ export class LiveVoiceCall {
           }
         },
         onDropped: (why) => this.dropped(why),
-        onRemoteStream: (stream) => {
-          this.outputLevel?.dispose()
-          this.outputLevel = this.deps.levelOf?.(stream) ?? null
-        }
+        onRemoteStream: (stream) => this.levels.set('output', stream)
       })
       if (!opened) {
         return
       }
       const { call, offerSdp } = opened
       this.call = call
-      this.inputLevel = this.deps.levelOf?.(call.mic) ?? null
+      this.levels.set('input', call.mic)
       const result = await this.deps.api.liveSessionConnect(offerSdp)
       if (!isCurrent()) {
         // Why report: main already counts this session as this window's
@@ -137,7 +136,7 @@ export class LiveVoiceCall {
         return
       }
       if (!result.ok) {
-        this.fail(result.error)
+        this.failOrRetry(result.error, result.kind)
         return
       }
       call.connected = true
@@ -149,7 +148,7 @@ export class LiveVoiceCall {
       }
     } catch (error) {
       if (isCurrent()) {
-        this.fail(error instanceof Error ? error.message : String(error))
+        this.failOrRetry(error instanceof Error ? error.message : String(error), 'network')
       }
     } finally {
       if (isCurrent()) {
@@ -169,12 +168,8 @@ export class LiveVoiceCall {
   }
 
   setMuted(muted: boolean): void {
-    const call = this.call
-    if (call) {
-      for (const track of call.mic.getAudioTracks()) {
-        track.enabled = !muted
-      }
-      this.send(muteEvent(muted))
+    if (this.call) {
+      muteLivePeer(this.call, muted)
     }
     this.update({ muted })
     this.settleState()
@@ -220,7 +215,7 @@ export class LiveVoiceCall {
         this.settleState()
         return
       case 'input':
-        this.transcript.addInput(event.delta)
+        this.transcript.addInput(event.delta, this.delegations.awaitingWords)
         this.lastInputAt = this.now()
         this.touchIdle()
         if (this.snapshot.state === 'standby') {
@@ -264,6 +259,9 @@ export class LiveVoiceCall {
 
   private reopen(delayMs: number): void {
     this.generation += 1
+    // Why: a drop can land while start() still awaits; that start is retired
+    // and its finally no longer runs, so its flag is cleared here.
+    this.starting = false
     this.delegations.cancel()
     this.teardown()
     this.update({ state: 'connecting' })
@@ -276,10 +274,7 @@ export class LiveVoiceCall {
     const call = this.call
     this.call = null
     this.delegations.reset()
-    this.inputLevel?.dispose()
-    this.outputLevel?.dispose()
-    this.inputLevel = null
-    this.outputLevel = null
+    this.levels.dispose()
     if (!call) {
       return
     }
@@ -314,6 +309,15 @@ export class LiveVoiceCall {
 
   private report(type: 'paused' | 'resumed' | 'closed'): void {
     void this.deps.api.liveSessionReport({ type }).catch(() => undefined)
+  }
+
+  /** A reconnect that fails for a passing reason keeps trying; others stop. */
+  private failOrRetry(errorText: string, kind: OpenAiLiveErrorKind): void {
+    if (this.reconnect.retries(kind)) {
+      this.dropped(`reconnect failed (${kind})`)
+      return
+    }
+    this.fail(errorText)
   }
 
   private fail(errorText: string): void {

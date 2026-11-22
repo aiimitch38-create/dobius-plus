@@ -1,5 +1,5 @@
 import type { LivePeerCall, LiveVoiceCallDeps } from './live-voice-call-types'
-import { LIVE_DATA_CHANNEL } from './live-voice-wire'
+import { LIVE_DATA_CHANNEL, muteEvent } from './live-voice-wire'
 
 export type LivePeerHandlers = {
   onMessage: (data: unknown) => void
@@ -60,6 +60,16 @@ export async function openLivePeer(
   }
   closeLivePeer(call)
   return null
+}
+
+/** Mutes or unmutes the microphone here and tells the session (the session keeps billing). */
+export function muteLivePeer(call: LivePeerCall, muted: boolean): void {
+  for (const track of call.mic.getAudioTracks()) {
+    track.enabled = !muted
+  }
+  if (call.channel.readyState === 'open') {
+    call.channel.send(muteEvent(muted))
+  }
 }
 
 /** Stops audio and the microphone and closes the peer; safe to call twice. */

@@ -219,7 +219,9 @@ export class LiveVoiceCalls {
       )
       // Why re-check after the await: a hang-up or a new call while ADAM
       // worked means nobody is listening for this answer any more.
-      if (this.ownerId !== ownerId) {
+      // A "stop" clears the token: even an answer that finished meanwhile
+      // must not be spoken.
+      if (this.ownerId !== ownerId || this.delegation?.token !== token) {
         return { ok: true, kind: 'cancelled', speak: '' }
       }
       return { ok: true, kind: result.kind, speak: spokenFor(result) }

@@ -4,14 +4,14 @@ import {
   LIVE_RECYCLE_FORCE_AFTER_MS,
   LIVE_RECYCLE_MIN_MS
 } from './live-voice-reconnect'
+import { LiveVoiceCall } from './live-voice-call'
 import {
   LIVE_DROPPED_TEXT,
   LIVE_CAP_HANG_UP_GRACE_MS,
   LIVE_IDLE_HANGUP_MS,
-  LiveVoiceCall,
   type LiveVoiceApi,
   type LiveVoiceSnapshot
-} from './live-voice-call'
+} from './live-voice-call-types'
 import { LIVE_DATA_CHANNEL } from './live-voice-wire'
 
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void }
@@ -397,5 +397,42 @@ describe('reconnect', () => {
     expect(call.getSnapshot().state).toBe('connecting')
     peer().channel.emit({ type: 'session.started' })
     expect(call.getSnapshot().state).toBe('listening')
+  })
+})
+
+describe('reconnect edge cases', () => {
+  it('a drop while connecting still reconnects', async () => {
+    const call = makeCall()
+    void call.start()
+    await vi.advanceTimersByTimeAsync(0)
+    peer().channel.onclose?.()
+    connect.resolve(OK)
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(peers).toHaveLength(2)
+    expect(api.liveSessionConnect).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps retrying a reconnect that fails for a passing reason, and stops on a cap refusal', async () => {
+    const call = makeCall()
+    await connected(call)
+    api.liveSessionConnect.mockResolvedValueOnce({ ok: false, kind: 'network', error: 'net' })
+    peer().channel.onclose?.()
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(call.getSnapshot().state).toBe('connecting')
+    api.liveSessionConnect.mockResolvedValueOnce({ ok: false, kind: 'over-cap', error: 'cap' })
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(call.getSnapshot()).toMatchObject({ state: 'error', errorText: 'cap' })
+    expect(api.liveSessionConnect).toHaveBeenCalledTimes(3)
+  })
+
+  it('the voice saying "on it" mid-request does not split Carson’s words', async () => {
+    const call = makeCall()
+    await connected(call)
+    peer().channel.emit({ type: 'session.input_transcript.delta', delta: 'Check the' })
+    peer().channel.emit({ type: 'session.delegation.created' })
+    peer().channel.emit({ type: 'session.output_transcript.delta', delta: 'On it.' })
+    peer().channel.emit({ type: 'session.input_transcript.delta', delta: ' build' })
+    await vi.advanceTimersByTimeAsync(700)
+    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'Check the build', callLines: [] })
   })
 })

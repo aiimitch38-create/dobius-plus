@@ -50,12 +50,16 @@ export class LiveTranscript {
 
   constructor(private readonly record: TranscriptRecorder) {}
 
-  addInput(delta: string): void {
+  /**
+   * `keepRequest`: a delegation is still waiting for Carson's words, so the
+   * voice's filler ("On it") must not split his request in two.
+   */
+  addInput(delta: string, keepRequest = false): void {
     if (!delta) {
       return
     }
     if (this.lastSpeaker === 'assistant') {
-      this.flush()
+      this.flush(keepRequest)
     }
     this.input = `${this.input}${delta}`.slice(-MAX_BUFFER_CHARS)
     this.lastSpeaker = 'user'
@@ -90,19 +94,20 @@ export class LiveTranscript {
   }
 
   /** Ends the current exchange: saves what ADAM did not already get. */
-  flush(): void {
-    const user = this.input.trim()
+  flush(keepRequest = false): void {
+    const user = keepRequest ? '' : this.input.trim()
     const said = this.output.trim()
     const itemId = String(++this.exchange)
     if (user) {
       this.record({ role: 'user', text: user, itemId })
       this.remember(`Carson: ${user}`)
     }
-    if (said && !this.delegated) {
+    // Filler spoken while a request is pending ("On it") is not worth keeping.
+    if (said && !this.delegated && !keepRequest) {
       this.record({ role: 'assistant', text: said, itemId })
       this.remember(`ADAM's voice: ${said}`)
     }
-    this.input = ''
+    this.input = keepRequest ? this.input : ''
     this.output = ''
     this.delegated = false
     this.lastSpeaker = null

@@ -4,7 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LiveVoiceNotice } from '../../../../shared/speech-types'
-import type { LiveVoiceCallDeps, PeerLike } from './live-voice-call'
+import type { LiveVoiceCallDeps, PeerLike } from './live-voice-call-types'
 import { useLiveVoice, type LiveVoice } from './use-live-voice'
 
 let root: Root | null = null

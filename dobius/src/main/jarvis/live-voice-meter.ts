@@ -161,7 +161,11 @@ export class LiveVoiceMeter {
     } catch (error) {
       // Why keep going: the in-memory total still enforces the cap this run.
       console.warn('[jarvis-live] spend meter could not be saved:', error)
-      rmSync(temp, { force: true })
+      try {
+        rmSync(temp, { force: true })
+      } catch {
+        // Best effort: a stray temp file is harmless, a throw here is not.
+      }
     }
   }
 }

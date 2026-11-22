@@ -598,8 +598,33 @@ describe('OpenAI Live session IPC', () => {
     expect(await transcript(from(contents), line)).toEqual({ ok: false })
     await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
     expect(await transcript(from(contents), line)).toEqual({ ok: true })
-    const rows = (await handler('jarvis:adamThreadGet')()) as { text: string; voice?: boolean }[]
+    const rows = (await handler('jarvis:adamThreadGet')(from(contents))) as {
+      text: string
+      voice?: boolean
+    }[]
     expect(rows.at(-1)).toMatchObject({ text: 'hi', voice: true })
+  })
+
+  it('forgets the call when its page reloads, so the reloaded page can call again', async () => {
+    const { window, contents } = liveWindow(7)
+    await register(liveStore({}), window)
+    const { getActiveLiveSessionForTest } = await import('./jarvis-ipc')
+    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: true })
+    expect(getActiveLiveSessionForTest()).not.toBeNull()
+    contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+    expect(getActiveLiveSessionForTest()).toBeNull()
+    expect(contents.listenerCount('did-start-navigation')).toBe(0)
+  })
+
+  it('a stop during the thread save keeps the request from ever reaching ADAM', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    const answer = handler('jarvis:liveDelegate')(from(contents), { request: 'deploy it' })
+    await handler('jarvis:liveCancel')(from(contents))
+    expect(await answer).toEqual({ ok: true, kind: 'cancelled', speak: '' })
+    expect(adam.ask).not.toHaveBeenCalled()
   })
 
   it('has no connection-test handler, so nothing can open a session just to test', async () => {

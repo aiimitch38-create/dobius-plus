@@ -177,7 +177,10 @@ export function registerJarvisIpcHandlers(store: Store, mainWindow: BrowserWindo
     trustedSender: trustedLiveSender,
     askAdam,
     isAdamBusy,
-    cancelAdam: () => adamVoice?.cancel(),
+    cancelAdam: () => {
+      adamConversation?.cancel()
+      adamVoice?.cancel()
+    },
     lookingAt: () => lastLookingAt,
     thread: getAdamThread
   })

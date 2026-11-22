@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LiveVoiceMicMode } from '../../../../shared/speech-types'
-import {
-  LiveVoiceCall,
-  type LiveVoiceCallDeps,
-  type LiveVoiceSnapshot,
-  type LiveVoiceState,
-  type LevelReader,
-  type MicStreamLike,
-  type PeerLike
-} from './live-voice-call'
+import { LiveVoiceCall } from './live-voice-call'
+import type {
+  LiveVoiceCallDeps,
+  LiveVoiceSnapshot,
+  LiveVoiceState,
+  LevelReader,
+  MicStreamLike,
+  PeerLike
+} from './live-voice-call-types'
 
 export type LiveVoice = {
   state: LiveVoiceState
