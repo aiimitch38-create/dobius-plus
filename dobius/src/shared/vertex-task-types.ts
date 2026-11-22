@@ -202,6 +202,31 @@ export type VertexTaskDispatch = {
   report?: string
 }
 
+/** What main's bug auto-fix did with a bug card. Written only by main
+ * (renderer patches drop it), so it doubles as the "never twice" mark.
+ *
+ * 'queued'   waiting for the crew to be running and a free slot
+ * 'starting' the card was claimed and its workspace is being created
+ * 'dispatched' a fixing agent was started in `worktreeId`
+ * 'ended'    that agent is no longer running in its workspace
+ * 'skipped'  not started, and never will be (see `reason`)
+ * 'failed'   the start failed; never retried automatically (see `reason`) */
+export type VertexTaskAutoFix = {
+  status: 'queued' | 'starting' | 'dispatched' | 'ended' | 'skipped' | 'failed'
+  queuedAt: number
+  updatedAt: number
+  /** Launch identity, written before the workspace is created. */
+  repoId?: string
+  worktreeName?: string
+  startedAt?: number
+  worktreeId?: string
+  worktreePath?: string
+  branch?: string
+  agent?: string
+  /** Plain-English reason for 'skipped' / 'failed', or a start warning. */
+  reason?: string
+}
+
 export type VertexTaskLink = {
   id: string
   label: string
@@ -291,6 +316,11 @@ export type VertexTask = {
   origin?: VertexTaskOrigin
   /** Set by the auto-mode dispatcher; absent means never dispatched. */
   dispatch?: VertexTaskDispatch
+  /** Stamped by main only, never taken from a caller: 'operator-ui' means the
+   *  card was filed from the top frame of a first-party Dobius+ window. */
+  provenance?: { channel: 'operator-ui'; at: number }
+  /** Set by main's bug auto-fix; absent means never considered. */
+  autoFix?: VertexTaskAutoFix
   /** Forward seam for Missions (an objective that spawns many tasks). Missions
    * have no store yet; carrying the id now avoids a migration later. */
   missionId?: string

@@ -2690,6 +2690,9 @@ export type GlobalSettings = {
   /** Dispatch Dobius board tasks to their assigned agent automatically.
    *  Off by default: it starts agent runs, which cost money, with no click. */
   vertexAutoModeEnabled?: boolean
+  /** Start one fixing agent, in its own workspace, for each bug reported on
+   *  the Kanban. Absent means on (Carson's default); false turns it off. */
+  bugAutoFixEnabled?: boolean
   /** Why: Dobius Mobile remains reachable from Settings; this only controls
    *  whether the top-level sidebar shortcut is shown. */
   showMobileButton?: boolean
@@ -3710,6 +3713,9 @@ export type SearchOptions = {
   useRegex?: boolean
   includePattern?: string
   excludePattern?: string
+  /** Extra excludes matched case-insensitively and never split or merged
+   *  with excludePattern (agent file search keeps secrets out with these). */
+  caseInsensitiveExcludeGlobs?: readonly string[]
   maxResults?: number
 }
 

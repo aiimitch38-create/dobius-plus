@@ -5,10 +5,18 @@ const updateCard = vi.fn()
 const closeTerminalTab = vi.fn()
 const resolvePinnedAgentCommand = vi.fn()
 const toastError = vi.fn()
+let worktrees: { id: string; path: string }[] = []
+const launchConfigs: Record<string, { launchConfig: { agentCommand?: string; agentArgs: string } }> = {}
 
 vi.mock('@/lib/launch-agent-in-new-tab', () => ({ launchAgentInNewTab }))
 vi.mock('@/components/terminal/terminal-tab-actions', () => ({ closeTerminalTab }))
-vi.mock('@/store', () => ({ useAppStore: { getState: () => ({ updateCard }) } }))
+vi.mock('@/store', () => ({
+  useAppStore: { getState: () => ({
+      updateCard,
+      agentLaunchConfigByPaneKey: launchConfigs,
+      allWorktrees: () => worktrees
+    }) }
+}))
 const flushBoardPersistence = vi.fn(async () => {})
 vi.mock('@/store/slices/board', () => ({ getBoard: vi.fn(), flushBoardPersistence }))
 vi.mock('./board-pause', () => ({ markConsolePaused: vi.fn() }))
@@ -41,6 +49,10 @@ const card = (extra: Partial<Card> = {}): Card =>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  worktrees = []
+  for (const key of Object.keys(launchConfigs)) {
+    delete launchConfigs[key]
+  }
   launchAgentInNewTab.mockReturnValue({ tabId: 'new-tab' })
 })
 
@@ -106,6 +118,56 @@ describe('restartConsole account handling', () => {
       tabId: 'new-tab',
       agentKind: 'gemini',
       accountId: undefined
+    })
+  })
+})
+
+describe('restartConsole keeps a bug-fix console restricted', () => {
+  const restricted =
+    "claude '--restricted' '--strict-mcp-config' '--tools' 'Bash,Read' '--permission-mode' 'acceptEdits'"
+
+  it('relaunches with the current profile, never an older captured one', async () => {
+    const { bugFixClaudeArgs } = await import('../../../../../shared/bug-fix-agent-profile')
+    worktrees = [{ id: 'wt', path: '/ws/dobius-plus/autofix-login-abcd1234' }]
+    launchConfigs['old-tab:11111111-1111-4111-8111-111111111111'] = {
+      launchConfig: { agentCommand: `${restricted} '--allowedTools' 'Bash(npx vitest run *)'`, agentArgs: '' }
+    }
+    expect(restartConsole('wt', card(), 'codex')).toBe(true)
+    expect(launchAgentInNewTab).toHaveBeenCalledWith({
+      agent: 'claude',
+      worktreeId: 'wt',
+      launchSource: 'unknown',
+      agentCommandOverride: 'claude',
+      agentArgs: bugFixClaudeArgs()
+    })
+    expect(resolvePinnedAgentCommand).not.toHaveBeenCalled()
+    // The old tab still closes only after the board save (9.7).
+    await vi.waitFor(() => expect(closeTerminalTab).toHaveBeenCalledWith('old-tab'))
+    expect(flushBoardPersistence).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays restricted after the agent exited and its captured launch is gone', async () => {
+    const { bugFixClaudeArgs } = await import('../../../../../shared/bug-fix-agent-profile')
+    worktrees = [{ id: 'wt', path: '/ws/dobius-plus/autofix-login-abcd1234' }]
+    expect(restartConsole('wt', card(), 'codex')).toBe(true)
+    expect(launchAgentInNewTab).toHaveBeenCalledWith({
+      agent: 'claude',
+      worktreeId: 'wt',
+      launchSource: 'unknown',
+      agentCommandOverride: 'claude',
+      agentArgs: bugFixClaudeArgs()
+    })
+  })
+
+  it("leaves other consoles' restarts unchanged", () => {
+    launchConfigs['old-tab:11111111-1111-4111-8111-111111111111'] = {
+      launchConfig: { agentCommand: "claude '--dangerously-skip-permissions'", agentArgs: '' }
+    }
+    restartConsole('wt', card())
+    expect(launchAgentInNewTab).toHaveBeenCalledWith({
+      agent: 'claude',
+      worktreeId: 'wt',
+      launchSource: 'unknown'
     })
   })
 })

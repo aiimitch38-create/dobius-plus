@@ -29,6 +29,8 @@ import { VM_HANDLERS } from './handlers/vm'
 import { TASK_HANDLERS } from './handlers/tasks'
 import { BOARD_HANDLERS } from './handlers/board'
 import { LEAD_HANDLERS } from './handlers/lead'
+import { TABS_HANDLERS } from './handlers/tabs'
+import { SYSTEM_HANDLERS } from './handlers/system'
 import { CREW_HANDLERS } from './handlers/crew'
 import { GIT_HANDLERS } from './handlers/git'
 import { PR_HANDLERS } from './handlers/pr'
@@ -77,6 +79,8 @@ function buildHandlers(): Map<string, CommandHandler> {
     TASK_HANDLERS,
     BOARD_HANDLERS,
     LEAD_HANDLERS,
+    TABS_HANDLERS,
+    SYSTEM_HANDLERS,
     CREW_HANDLERS,
     GIT_HANDLERS,
     PR_HANDLERS,

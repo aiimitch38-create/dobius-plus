@@ -22216,6 +22216,131 @@ describe('DobiusRuntimeService', () => {
     expect(spawn).not.toHaveBeenCalled()
   })
 
+  it('re-checks Pause crew right before a gated terminal spawns', async () => {
+    const metaById: Record<string, WorktreeMeta> = {}
+    const runtimeStore = {
+      ...store,
+      getSettings: () => ({ ...store.getSettings(), agentCmdOverrides: {} }),
+      getAllWorktreeMeta: () => metaById,
+      getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
+      setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
+        metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
+        return metaById[worktreeId]
+      }
+    }
+    const runtime = new DobiusRuntimeService(runtimeStore as never)
+    const spawn = vi.fn().mockResolvedValue({ id: 'pty-gated-terminal' })
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    runtime.setNotifier({
+      worktreesChanged: vi.fn(),
+      reposChanged: vi.fn(),
+      activateWorktree: vi.fn(),
+      createTerminal: vi.fn(),
+      revealTerminalSession: vi.fn().mockResolvedValue({ tabId: 'tab-gated-terminal' }),
+      splitTerminal: vi.fn(),
+      renameTerminal: vi.fn(),
+      focusTerminal: vi.fn(),
+      closeTerminal: vi.fn(),
+      sleepWorktree: vi.fn(),
+      terminalFitOverrideChanged: vi.fn(),
+      terminalDriverChanged: vi.fn()
+    })
+    runtime.attachWindow(1)
+    computeWorktreePathMock.mockReturnValue('/tmp/workspaces/runtime-gated-terminal')
+    ensurePathWithinWorkspaceMock.mockReturnValue('/tmp/workspaces/runtime-gated-terminal')
+    vi.mocked(listWorktrees).mockResolvedValue([
+      {
+        path: '/tmp/workspaces/runtime-gated-terminal',
+        head: 'def',
+        branch: 'runtime-gated-terminal',
+        isBare: false,
+        isMainWorktree: false
+      }
+    ])
+    executionGateState.paused = false
+    const created = await runtime.createManagedWorktree({
+      repoSelector: TEST_REPO_ID,
+      name: 'runtime-gated-terminal'
+    })
+    spawn.mockClear()
+    executionGateState.paused = true
+    await expect(
+      runtime.createTerminal(`id:${created.worktree.id}`, {
+        command: 'claude',
+        executionOrigin: 'bug-report'
+      })
+    ).rejects.toThrow(/Crew is paused/)
+    expect(spawn).not.toHaveBeenCalled()
+    executionGateState.paused = false
+  })
+
+  it('prepares a new workspace before its startup agent spawns', async () => {
+    const metaById: Record<string, WorktreeMeta> = {}
+    const runtimeStore = {
+      ...store,
+      getSettings: () => ({ ...store.getSettings(), agentCmdOverrides: {} }),
+      getAllWorktreeMeta: () => metaById,
+      getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
+      setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
+        metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
+        return metaById[worktreeId]
+      }
+    }
+    const runtime = new DobiusRuntimeService(runtimeStore as never)
+    const order: string[] = []
+    const spawn = vi.fn(async () => {
+      order.push('spawn')
+      return { id: 'pty-prepared' }
+    })
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    runtime.setNotifier({
+      worktreesChanged: vi.fn(),
+      reposChanged: vi.fn(),
+      activateWorktree: vi.fn(),
+      createTerminal: vi.fn(),
+      revealTerminalSession: vi.fn().mockResolvedValue({ tabId: 'tab-prepared' }),
+      splitTerminal: vi.fn(),
+      renameTerminal: vi.fn(),
+      focusTerminal: vi.fn(),
+      closeTerminal: vi.fn(),
+      sleepWorktree: vi.fn(),
+      terminalFitOverrideChanged: vi.fn(),
+      terminalDriverChanged: vi.fn()
+    })
+    runtime.attachWindow(1)
+    computeWorktreePathMock.mockReturnValue('/tmp/workspaces/runtime-prepared')
+    ensurePathWithinWorkspaceMock.mockReturnValue('/tmp/workspaces/runtime-prepared')
+    vi.mocked(listWorktrees).mockResolvedValue([
+      {
+        path: '/tmp/workspaces/runtime-prepared',
+        head: 'def',
+        branch: 'runtime-prepared',
+        isBare: false,
+        isMainWorktree: false
+      }
+    ])
+    const prepareWorkspace = vi.fn(async (path: string) => {
+      order.push(`prepare:${path}`)
+    })
+    await runtime.createManagedWorktree({
+      repoSelector: TEST_REPO_ID,
+      name: 'runtime-prepared',
+      startup: { command: 'claude' },
+      prepareWorkspace
+    })
+    expect(order).toEqual(['prepare:/tmp/workspaces/runtime-prepared', 'spawn'])
+  })
+
   it('launches explicit startup agents with prompts for CLI-created worktrees', async () => {
     const metaById: Record<string, WorktreeMeta> = {}
     const runtimeStore = {

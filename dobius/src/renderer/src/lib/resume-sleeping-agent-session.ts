@@ -5,6 +5,8 @@ import { buildAgentResumeStartupPlan } from '@/lib/tui-agent-startup'
 import { tuiAgentToAgentKind } from '@/lib/telemetry'
 import { reconcileTabOrder } from '@/components/tab-bar/reconcile-order'
 import { isWslUncPath } from '../../../shared/wsl-paths'
+import { bugFixLaunchOverrides } from '../../../shared/bug-fix-agent-profile'
+import { findWorktreeById } from '@/store/slices/worktree-helpers'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import {
   resolveTuiAgentLaunchArgs,
@@ -102,6 +104,12 @@ async function launchSleepingAgentSession(record: SleepingAgentSessionRecord): P
         ? launchConfig.agentEnv
         : resolveTuiAgentLaunchEnv(record.agent, state.settings?.agentDefaultEnv),
     ...(launchConfig?.agentCommand ? { agentCommand: launchConfig.agentCommand } : {}),
+    // Why last: an auto-fix session wakes only with the current restricted
+    // profile, never Settings defaults or an older captured one.
+    ...bugFixLaunchOverrides(
+      record.agent,
+      findWorktreeById(state.worktreesByRepo, record.worktreeId)?.path
+    ),
     platform: getResumeLaunchPlatform(record.worktreeId)
   })
   if (!startupPlan) {

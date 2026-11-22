@@ -973,6 +973,8 @@ type RuntimePtyWorktreeRecord = {
 
 type TerminalCreateOptions = {
   command?: string
+  /** Autonomous launches: Pause crew is re-checked right before the PTY spawns. */
+  executionOrigin?: ExecutionOrigin
   claudeAgentTeamsSourceCommand?: string
   cwd?: string
   env?: Record<string, string>
@@ -5161,6 +5163,20 @@ export class DobiusRuntimeService {
 
   // Why: mobile write guards (mobile-write-path-guard.ts) check targets
   // relative to the real worktree root, and skip disk checks over SSH.
+  // Why: agent file methods resolve the selector once and then address the
+  // concrete id, so a selector that changes meaning mid-call (rename, new
+  // branch) cannot point the access at a different worktree than the check.
+  async resolveAgentFileTarget(
+    worktreeSelector: string
+  ): Promise<{ worktreeId: string; root: string; connectionId?: string }> {
+    const target = await this.resolveRuntimeFileTarget(worktreeSelector)
+    return {
+      worktreeId: target.worktree.id,
+      root: target.worktree.path,
+      connectionId: target.connectionId
+    }
+  }
+
   async resolveMobileWriteRoot(
     worktreeSelector: string
   ): Promise<{ root: string; connectionId?: string }> {
@@ -12337,7 +12353,9 @@ export class DobiusRuntimeService {
   }
 
   async killWorkspacePort(args: WorkspacePortKillRequest): Promise<WorkspacePortKillResult> {
-    return killWorkspacePort(await this.getWorkspacePortProbes(args.repoId), args)
+    // Why every worktree: a repo filter hides nested worktrees of other repos,
+    // whose listeners would then be credited to the parent worktree.
+    return killWorkspacePort(await this.getWorkspacePortProbes(), args)
   }
 
   // Why: remote clients may invoke this over RPC, so the runtime derives
@@ -12949,6 +12967,8 @@ export class DobiusRuntimeService {
     startupPrompt?: string
     /** Set by autonomous launches: Pause crew is re-checked right before the agent spawns. */
     executionOrigin?: ExecutionOrigin
+    /** Local workspaces only: runs after the folder exists, before the startup agent spawns. */
+    prepareWorkspace?: (worktreePath: string) => Promise<void> | void
     pendingFirstAgentMessageRename?: boolean
     automationProvenance?: AutomationWorkspaceProvenance
     startup?: WorktreeStartupLaunch
@@ -13050,8 +13070,10 @@ export class DobiusRuntimeService {
           if (startupTrustAgent) {
             this.markLocalWorkspaceTrustedForAgent(startupTrustAgent, worktree.path)
           }
+          await args.prepareWorkspace?.(worktree.path)
           this.assertAgentSpawnAdmitted(args.executionOrigin, worktree.path)
           const terminal = await this.createTerminal(`id:${worktree.id}`, {
+            executionOrigin: args.executionOrigin,
             command: effectiveStartup.command,
             env: effectiveStartup.env,
             ...(effectiveStartup.launchConfig
@@ -13737,8 +13759,10 @@ export class DobiusRuntimeService {
         if (startupTrustAgent) {
           this.markLocalWorkspaceTrustedForAgent(startupTrustAgent, worktreePath)
         }
+        await args.prepareWorkspace?.(worktreePath)
         this.assertAgentSpawnAdmitted(args.executionOrigin, worktreePath)
         const terminal = await this.createTerminal(`id:${worktree.id}`, {
+          executionOrigin: args.executionOrigin,
           command: sequencedStartup.command,
           ...(setup && effectiveStartup
             ? { claudeAgentTeamsSourceCommand: effectiveStartup.command }
@@ -14045,6 +14069,7 @@ export class DobiusRuntimeService {
         }
         this.assertAgentSpawnAdmitted(args.executionOrigin, result.worktree.path)
         const terminal = await this.createTerminal(`path:${result.worktree.path}`, {
+          executionOrigin: args.executionOrigin,
           command: sequencedStartup.command,
           ...(result.setup && args.startup
             ? { claudeAgentTeamsSourceCommand: args.startup.command }
@@ -15923,6 +15948,8 @@ export class DobiusRuntimeService {
         tabId,
         agentTeamsPlan?.env
       )
+      // Why here: the launch prep above awaits; a pause during it must still win.
+      this.assertAgentSpawnAdmitted(opts.executionOrigin, workspace.path)
       const result = await this.ptyController.spawn({
         cols: 120,
         rows: 40,
@@ -16105,6 +16132,7 @@ export class DobiusRuntimeService {
     // Why: Pause crew can turn on during the awaits above; re-check before the spawn.
     this.assertAgentSpawnAdmitted(opts.executionOrigin)
     return await this.createTerminal(`id:${worktree.id}`, {
+      executionOrigin: opts.executionOrigin,
       command: startup.startup.command,
       env: startup.startup.env,
       ...(startup.startup.launchConfig ? { launchConfig: startup.startup.launchConfig } : {}),
