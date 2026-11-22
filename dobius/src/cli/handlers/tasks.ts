@@ -253,6 +253,13 @@ const LIST_STATUSES = [
   'done'
 ] as const
 
+// Why: done and in-progress have their own commands (complete, claim).
+const MOVE_STATUSES = ['backlog', 'todo', 'blocked', 'review', 'testing'] as const
+
+function missingTo(): never {
+  throw new RuntimeClientError('invalid_argument', `Missing --to (${MOVE_STATUSES.join(', ')})`)
+}
+
 export const TASK_HANDLERS: Record<string, CommandHandler> = {
   'tasks list': async ({ client, flags, json }) => {
     const result = await client.call<{ tasks: TaskView[] }>('tasks.list', {
@@ -391,6 +398,55 @@ export const TASK_HANDLERS: Record<string, CommandHandler> = {
       },
       'Released'
     ),
+  'tasks update': async (ctx) => {
+    const { flags } = ctx
+    const assigneeId = getOptionalStringFlag(flags, 'assignee')
+    if (assigneeId === undefined && (flags.has('assignee-kind') || flags.has('assignee-name'))) {
+      throw new RuntimeClientError(
+        'invalid_argument',
+        '--assignee-kind and --assignee-name need --assignee'
+      )
+    }
+    const labels = flags.has('label') ? getRepeatedStringFlag(flags, 'label') : undefined
+    await runOp(
+      ctx,
+      'tasks.update',
+      {
+        id: getRequiredStringFlag(flags, 'id'),
+        by: getRequiredStringFlag(flags, 'by'),
+        title: getOptionalStringFlag(flags, 'title'),
+        description: getTextOrFile(ctx, 'body', 'body-file'),
+        labels,
+        priority: getEnumFlag(flags, 'priority', PRIORITIES),
+        assignee:
+          assigneeId === undefined
+            ? undefined
+            : {
+                id: assigneeId,
+                kind: getEnumFlag(flags, 'assignee-kind', ASSIGNEE_KINDS) ?? 'hermes-profile',
+                name: getOptionalStringFlag(flags, 'assignee-name') ?? assigneeId
+              }
+      },
+      'Updated'
+    )
+  },
+  'tasks move': async (ctx) => {
+    const index = getOptionalStringFlag(ctx.flags, 'index')
+    if (index !== undefined && !/^\d+$/.test(index)) {
+      throw new RuntimeClientError('invalid_argument', '--index must be a whole number, 0 or more')
+    }
+    await runOp(
+      ctx,
+      'tasks.move',
+      {
+        id: getRequiredStringFlag(ctx.flags, 'id'),
+        by: getRequiredStringFlag(ctx.flags, 'by'),
+        to: getEnumFlag(ctx.flags, 'to', MOVE_STATUSES) ?? missingTo(),
+        ...(index !== undefined ? { index: Number.parseInt(index, 10) } : {})
+      },
+      'Moved'
+    )
+  },
   'tasks comment': async ({ client, flags, json }) => {
     const result = await client.call<{ task: TaskView }>('tasks.comment', {
       id: getRequiredStringFlag(flags, 'id'),

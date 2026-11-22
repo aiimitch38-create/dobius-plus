@@ -175,6 +175,52 @@ export const TASK_COMMAND_SPECS: CommandSpec[] = [
     examples: ['dobius tasks release --id 3f1c... --by console-w1']
   },
   {
+    path: ['tasks', 'update'],
+    summary: 'Change the title, body, labels, priority or assignee of a card',
+    usage:
+      'dobius tasks update --id <task-id> --by <id> [--title <text>] [--body <text> | --body-file <path>] [--label <text>]... [--priority <low|medium|high|urgent>] [--assignee <id> [--assignee-kind <hermes-profile|console|human>] [--assignee-name <text>]] [--json]',
+    allowedFlags: [
+      ...GLOBAL_FLAGS,
+      'id',
+      'by',
+      'title',
+      'body',
+      'body-file',
+      'label',
+      'priority',
+      'assignee',
+      'assignee-kind',
+      'assignee-name'
+    ],
+    positionalArgs: ['id'],
+    notes: [
+      'A card held by someone else can only be changed by its holder (refused as held-by:<id>).',
+      '--label replaces all labels; repeat it for several. Kind agent is not accepted as assignee.',
+      'To change the column use dobius tasks move.',
+      EXIT_3_NOTE
+    ],
+    examples: [
+      'dobius tasks update --id 3f1c... --by adam --title "Fix login redirect" --priority high --json',
+      'dobius tasks update --id 3f1c... --by adam --assignee console-w2 --assignee-kind console'
+    ]
+  },
+  {
+    path: ['tasks', 'move'],
+    summary: 'Move a card to another column (backlog, todo, blocked, review, testing)',
+    usage:
+      'dobius tasks move --id <task-id> --by <id> --to <backlog|todo|blocked|review|testing> [--index <n>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'by', 'to', 'index'],
+    positionalArgs: ['id'],
+    notes: [
+      'Done goes through dobius tasks complete (it needs a result note); in-progress through dobius tasks claim.',
+      'A card held by someone else can only be moved by its holder. Moving it out of in-progress drops the lease.',
+      'An agent card is never moved back to To Do from here: that would start a paid run.',
+      '--index is the position in the new column (0 = top); default is the bottom.',
+      EXIT_3_NOTE
+    ],
+    examples: ['dobius tasks move --id 3f1c... --by adam --to backlog --json']
+  },
+  {
     path: ['tasks', 'comment'],
     summary: 'Add a comment to a card',
     usage: 'dobius tasks comment --id <task-id> --author <id> --body <text> [--json]',

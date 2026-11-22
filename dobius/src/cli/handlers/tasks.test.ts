@@ -137,3 +137,79 @@ describe('dobius tasks attach / review / block', () => {
     expect(callMock).toHaveBeenCalledWith('tasks.block', { id: 't1', by: 'w', reason: 'needs Carson' })
   })
 })
+
+describe('dobius tasks update', () => {
+  it('maps flags to tasks.update, with repeated --label replacing labels', async () => {
+    callMock.mockResolvedValueOnce({ result: { ok: true, task: okTask } })
+    await TASK_HANDLERS['tasks update'](
+      ctx({
+        id: 't1',
+        by: 'adam',
+        title: 'New title',
+        label: ['auth', 'urgent'].join(REPEATED_FLAG_SEPARATOR),
+        priority: 'high',
+        assignee: 'console-w2',
+        'assignee-kind': 'console'
+      })
+    )
+    expect(callMock.mock.calls[0]).toEqual([
+      'tasks.update',
+      {
+        id: 't1',
+        by: 'adam',
+        title: 'New title',
+        description: undefined,
+        labels: ['auth', 'urgent'],
+        priority: 'high',
+        assignee: { id: 'console-w2', kind: 'console', name: 'console-w2' }
+      }
+    ])
+    expect(process.exitCode).toBeUndefined()
+  })
+
+  it('exits 3 when the board refuses (held by someone else)', async () => {
+    callMock.mockResolvedValueOnce({ result: { ok: false, reason: 'held-by:console-w1' } })
+    await TASK_HANDLERS['tasks update'](ctx({ id: 't1', by: 'adam', title: 'x' }))
+    expect(process.exitCode).toBe(3)
+  })
+
+  it('refuses --assignee-kind without --assignee and a bad priority before calling', async () => {
+    await expect(
+      TASK_HANDLERS['tasks update'](ctx({ id: 't1', by: 'adam', 'assignee-kind': 'console' }))
+    ).rejects.toThrow(/need --assignee/)
+    await expect(
+      TASK_HANDLERS['tasks update'](ctx({ id: 't1', by: 'adam', priority: 'now' }))
+    ).rejects.toThrow(/--priority must be one of/)
+    expect(callMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('dobius tasks move', () => {
+  it('maps --to and --index to tasks.move', async () => {
+    callMock.mockResolvedValueOnce({ result: { ok: true, task: okTask } })
+    await TASK_HANDLERS['tasks move'](ctx({ id: 't1', by: 'adam', to: 'review', index: '0' }))
+    expect(callMock.mock.calls[0]).toEqual([
+      'tasks.move',
+      { id: 't1', by: 'adam', to: 'review', index: 0 }
+    ])
+  })
+
+  it('refuses done, in-progress, a missing --to and a bad --index without calling', async () => {
+    const cases: Record<string, string>[] = [
+      { id: 't1', by: 'adam', to: 'done' },
+      { id: 't1', by: 'adam', to: 'in-progress' },
+      { id: 't1', by: 'adam' },
+      { id: 't1', by: 'adam', to: 'todo', index: '-1' }
+    ]
+    for (const flags of cases) {
+      await expect(TASK_HANDLERS['tasks move'](ctx(flags))).rejects.toThrow()
+    }
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
+  it('exits 3 on a refusal from the board', async () => {
+    callMock.mockResolvedValueOnce({ result: { ok: false, reason: 'agent-dispatch' } })
+    await TASK_HANDLERS['tasks move'](ctx({ id: 't1', by: 'adam', to: 'todo' }))
+    expect(process.exitCode).toBe(3)
+  })
+})
