@@ -4,6 +4,9 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useBoardConductor, type BoardConductor } from './use-board-conductor'
 
+const toastError = vi.hoisted(() => vi.fn())
+vi.mock('sonner', () => ({ toast: { error: toastError } }))
+
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let root: Root
@@ -53,6 +56,7 @@ const open = async (project: string): Promise<void> => {
 const shown = (): string[] => conductor.messages.map((message) => message.text)
 
 beforeEach(() => {
+  toastError.mockClear()
   window.localStorage.clear()
   installMain()
   container = document.createElement('div')
@@ -115,6 +119,20 @@ describe('useBoardConductor: ADAM has one thread for every project', () => {
     await open('project-a')
     expect(shown()).toEqual([])
     expect(window.localStorage.getItem('dobius.board.thread.v1.repo-a')).toBe(old)
+  })
+
+  it('tells Carson when main could not save the thread, and still shows the row', async () => {
+    await open('project-a')
+    const jarvis = (window as unknown as { api: { jarvis: Record<string, unknown> } }).api.jarvis
+    jarvis.adamThreadAppend = async (row: Row) => {
+      mainRows = [...mainRows, row]
+      tell?.(mainRows)
+      return { ok: false, error: 'not-saved' }
+    }
+    await act(async () => conductor.append({ role: 'user', text: 'hello' }))
+    expect(shown()).toEqual(['hello'])
+    expect(toastError).toHaveBeenCalledTimes(1)
+    expect(toastError.mock.calls[0][0]).toContain('could not be saved to disk')
   })
 
   it('clears the thread through main and never saves a thinking row', async () => {

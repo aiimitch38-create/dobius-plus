@@ -12520,7 +12520,15 @@
         "SortableTabContextMenu": {
           "switchToTerminalView": "Switch to terminal view",
           "switchToChatView": "Switch to chat view",
-          "openInNewWindow": "Open in new window"
+          "openInNewWindow": "Open in new window",
+          "snooze": "Snooze"
+        },
+        "SnoozeTabConfirmDialog": {
+          "title": "Snooze a tab that is still working?",
+          "stops": "Snoozing stops it now. What it was doing will not carry on when the tab comes back.",
+          "resumes": "Snoozing stops it now. The conversation picks up where it left off when the tab comes back.",
+          "cancel": "Cancel",
+          "confirm": "Snooze"
         }
       }
     },
@@ -12533,6 +12541,14 @@
           "gitlabMergeRequestNumber": "MR #{{value0}}",
           "githubPullRequestNumber": "PR #{{value0}}"
         }
+      }
+    },
+    "sidebar": {
+      "WorktreeCardSnoozedShelf": {
+        "title": "Snoozed",
+        "bringBack": "Bring back now",
+        "snoozeUntil": "Snooze until",
+        "closeForGood": "Close for good"
       }
     }
   },
@@ -13331,7 +13347,8 @@
         "restart": "Restart {{name}}",
         "kill": "Kill {{name}}"
       },
-      "rows": "Wired consoles"
+      "rows": "Wired consoles",
+      "refuseAmbiguous": "Several wired consoles have that name, so nothing was sent. Rename one first."
     },
     "text": {
       "label": "Text",
@@ -13375,7 +13392,7 @@
         "waiting": "Needs you",
         "idle": "Idle",
         "paused": "Paused",
-        "done": "Done",
+        "done": "Exited",
         "error": "Terminal closed",
         "shell": "At its shell",
         "gone": "Terminal closed"
@@ -13405,7 +13422,10 @@
       "accountSystem": "system login",
       "duplicateFailed": "Could not start a copy of {{name}}.",
       "glance": "Latest output from {{title}}",
-      "glanceEmpty": "No output yet"
+      "glanceEmpty": "No output yet",
+      "notRunning": "Not running",
+      "restartNamed": "Restart {{name}}",
+      "restartSaveFailed": "Restarted {{name}}, but the Board could not be saved, so its old terminal was left open: {{reason}}"
     },
     "foundBug": "Found a bug?",
     "report": {
@@ -14200,7 +14220,8 @@
       "unreachable": "This window could not reach ADAM’s Hermes connection. Quit and reopen Dobius+, then send your message again.",
       "cancelled": "ADAM’s answer was stopped before it finished. Send your message again.",
       "emptyReply": "He sent back an empty reply. Try again.",
-      "tooLong": "That message is too long for one turn. Send it in shorter parts."
+      "tooLong": "That message is too long for one turn. Send it in shorter parts.",
+      "threadNotSaved": "ADAM’s thread could not be saved to disk. It is still shown here, and Dobius+ will try again with the next message. If this keeps happening, check free disk space."
     }
   },
   "start": "Start",
@@ -14305,6 +14326,29 @@
       "adding": "Adding…",
       "add": "Add screenshot",
       "empty": "None yet. Paste or drop an image here, or add one."
+    }
+  },
+  "lib": {
+    "tabSnooze": {
+      "pick": {
+        "tonight": "Tonight",
+        "tomorrowNight": "Tomorrow night",
+        "morning": "Tomorrow morning",
+        "24h": "24 hours",
+        "2d": "2 days",
+        "week": "Next week",
+        "manual": "Until I bring it back",
+        "devMinute": "1 minute (dev only)"
+      },
+      "untilBroughtBack": "until you bring it back",
+      "snoozed": "Tab snoozed. It waits in the sidebar.",
+      "splitPanes": "Snooze works on tabs with one pane. Close the extra panes first.",
+      "conversationNotResumable": "This conversation cannot be saved for later yet. Try again in a moment.",
+      "full": "The Snoozed shelf is full. Bring a tab back or close one for good first.",
+      "failed": "This tab could not be snoozed.",
+      "back": "A snoozed tab is back",
+      "alreadyOpen": "That conversation is already open in another tab.",
+      "putBack": "This tab could not pick its conversation back up, so it is still in Snoozed."
     }
   }
 }

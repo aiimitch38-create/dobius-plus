@@ -735,6 +735,227 @@ describe('registerPtyHandlers', () => {
     ]
   }
 
+  it('lets a snoozed tab claim its conversation only for the window returning it, once the old terminal is gone', async () => {
+    const { createTabSnoozeService } = await import('../tab-snooze')
+    const { setActiveTabSnoozeService } = await import('../tab-snooze-active')
+    const leafId = '11111111-1111-4111-8111-111111111111'
+    const owner: AgentResumeOwner = {
+      authority: { kind: 'local' },
+      worktreeId: 'wt-snooze',
+      tabId: 'tab-snooze',
+      leafId,
+      paneKey: `tab-snooze:${leafId}`,
+      ptyId: 'snoozed-source-pty',
+      launchToken: 'snoozed-launch-token',
+      agent: 'claude',
+      providerSession: { key: 'session_id', id: 'snoozed-session' }
+    }
+    let saved: unknown = []
+    const snooze = createTabSnoozeService({
+      load: () => saved,
+      save: (entries) => {
+        saved = entries
+      },
+      scrollback: { write: () => null, read: () => null, remove: () => {} },
+      onChange: () => {}
+    })
+    setActiveTabSnoozeService(snooze)
+    try {
+      const ref = { worktreeId: owner.worktreeId, tabId: owner.tabId }
+      snooze.add({
+        ...ref,
+        title: 'Fix',
+        until: null,
+        agentSession: {
+          paneKey: owner.paneKey,
+          tabId: owner.tabId,
+          worktreeId: owner.worktreeId,
+          agent: owner.agent,
+          providerSession: owner.providerSession,
+          prompt: 'fix it',
+          state: 'done',
+          capturedAt: 2,
+          updatedAt: 1,
+          connectionId: null,
+          origin: 'worktree-sleep',
+          resumeOwner: owner
+        }
+      })
+      getAgentStatusSnapshotMock.mockReturnValue([])
+      handlers.clear()
+      registerPtyHandlers(mainWindow as never, undefined, undefined, undefined, undefined, {
+        getWorkspaceSession: () => ({})
+      } as never)
+      const claimFrom = (id: number): unknown =>
+        handlers.get('pty:claimAgentResume')!({ sender: { id } }, owner)
+
+      // Still on the shelf: snoozing alone frees the conversation for no one.
+      expect(claimFrom(7)).toBeNull()
+      snooze.take(ref, { rendererId: 7 })
+      // Another window cannot ride on this window's return.
+      expect(claimFrom(8)).toBeNull()
+      // The terminal that ran the conversation has not exited yet.
+      setPtyOwnership(owner.ptyId, null)
+      expect(claimFrom(7)).toBeNull()
+      deletePtyOwnership(owner.ptyId)
+      expect(claimFrom(7)).toMatchObject({ ok: true })
+    } finally {
+      snooze.stop()
+      setActiveTabSnoozeService(null)
+    }
+  })
+
+  it('keeps a snoozed tab until its terminal binding is saved, and retries cleanly when the save fails', async () => {
+    const { createTabSnoozeService } = await import('../tab-snooze')
+    const { setActiveTabSnoozeService } = await import('../tab-snooze-active')
+    const { mainProcessAgentResumeClaims } = await import('../pty/agent-resume-claims')
+    const leafId = '11111111-1111-4111-8111-111111111111'
+    const owner: AgentResumeOwner = {
+      authority: { kind: 'local' },
+      worktreeId: 'wt-snooze',
+      tabId: 'tab-snooze',
+      leafId,
+      paneKey: `tab-snooze:${leafId}`,
+      ptyId: 'snoozed-source-pty-2',
+      launchToken: 'snoozed-launch-token',
+      // Why codex: a Claude launch would stay marked live for later tests.
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: 'snoozed-session-save' }
+    }
+    let saved: unknown = []
+    const snooze = createTabSnoozeService({
+      load: () => saved,
+      save: (entries) => {
+        saved = entries
+      },
+      scrollback: { write: () => null, read: () => null, remove: () => {} },
+      onChange: () => {},
+      abandonReturnClaim: (claimed) => mainProcessAgentResumeClaims.abandon(claimed)
+    })
+    setActiveTabSnoozeService(snooze)
+    const sender = mainWindow.webContents as { id?: number }
+    sender.id = 7
+    try {
+      const ref = { worktreeId: owner.worktreeId, tabId: owner.tabId }
+      snooze.add({
+        ...ref,
+        title: 'Fix',
+        until: null,
+        agentSession: {
+          paneKey: owner.paneKey,
+          tabId: owner.tabId,
+          worktreeId: owner.worktreeId,
+          agent: owner.agent,
+          providerSession: owner.providerSession,
+          prompt: 'fix it',
+          state: 'done',
+          capturedAt: 2,
+          updatedAt: 1,
+          connectionId: null,
+          origin: 'worktree-sleep',
+          resumeOwner: owner
+        }
+      })
+      getAgentStatusSnapshotMock.mockReturnValue([])
+      let spawned = 0
+      let duringSpawn: (() => void) | null = null
+      let duringShutdown: (() => void) | null = null
+      const shutdown = vi.fn(async () => duringShutdown?.())
+      setLocalPtyProvider({
+        spawn: vi.fn(async () => {
+          duringSpawn?.()
+          return { id: `returned-pty-${++spawned}` }
+        }),
+        write: vi.fn(),
+        resize: vi.fn(),
+        kill: vi.fn(),
+        shutdown,
+        onData: vi.fn(() => vi.fn()),
+        onExit: vi.fn(() => vi.fn()),
+        listProcesses: vi.fn(async () => []),
+        getForegroundProcess: vi.fn(async () => null)
+      } as never)
+      const rowsAtSave: number[] = []
+      let saveFails = true
+      const persistPtyBinding = vi.fn(() => {
+        rowsAtSave.push(snooze.list().length)
+        if (saveFails) {
+          throw new Error('disk full')
+        }
+      })
+      handlers.clear()
+      registerPtyHandlers(mainWindow as never, undefined, undefined, undefined, undefined, {
+        getWorkspaceSession: () => ({}),
+        persistPtyBinding
+      } as never)
+      type Claim = { token: string; target: AgentResumeSpawnTarget }
+      const claimReturn = async (): Promise<Claim> => {
+        expect(snooze.take(ref, { rendererId: 7, returnTabId: 'tab-returned' })).not.toBeNull()
+        const claim = await handlers.get('pty:claimAgentResume')!(mainWindowIpcEvent, owner)
+        expect(claim).toMatchObject({ ok: true })
+        return claim as Claim
+      }
+      const spawnWith = (claim: Claim): unknown =>
+        handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+          cols: 80,
+          rows: 24,
+          worktreeId: owner.worktreeId,
+          tabId: 'tab-returned',
+          leafId,
+          launchAgent: owner.agent,
+          command: 'codex resume snoozed-session-save',
+          env: {
+            [AGENT_RESUME_CLAIM_ENV]: encodeAgentResumeSpawnClaim({
+              token: claim.token,
+              owner,
+              target: claim.target
+            })
+          }
+        })
+      const expectOnShelf = (): void => {
+        expect(snooze.list()).toHaveLength(1)
+        expect(snooze.list()[0].returning).toBeUndefined()
+      }
+
+      // The save fails and the window goes away while the terminal is being
+      // killed: the row left the list in the same save as the binding, comes
+      // back on the shelf, and the killed terminal's claim is retryable.
+      duringShutdown = () => snooze.releaseRenderer(7)
+      await expect(spawnWith(await claimReturn())).rejects.toThrow()
+      duringShutdown = null
+      expect(rowsAtSave).toEqual([0])
+      expect(shutdown).toHaveBeenCalledTimes(1)
+      expectOnShelf()
+
+      // A stale spawn request (its window left, a new return claimed since)
+      // is rejected without touching the newer return.
+      const stale = await claimReturn()
+      snooze.releaseRenderer(7)
+      const current = await claimReturn()
+      await expect(spawnWith(stale)).rejects.toThrow(
+        'Automatic agent-resume ownership changed before PTY spawn'
+      )
+      expect(snooze.list()[0].returning).toBe(true)
+
+      // The user closes the returning tab while its terminal is starting: the
+      // terminal is stopped, the entry is back on the shelf, the claim retryable.
+      saveFails = false
+      duringSpawn = () => expect(snooze.putBack(ref, 7)).toBe(false)
+      await expect(spawnWith(current)).rejects.toThrow()
+      duringSpawn = null
+      expect(shutdown).toHaveBeenCalledTimes(2)
+      expectOnShelf()
+
+      await expect(spawnWith(await claimReturn())).resolves.toMatchObject({ id: 'returned-pty-3' })
+      expect(rowsAtSave.at(-1)).toBe(0)
+      expect(snooze.list()).toEqual([])
+    } finally {
+      delete sender.id
+      snooze.stop()
+      setActiveTabSnoozeService(null)
+    }
+  })
+
   it('requires a persisted owner claim and carries it across renderer record consumption', async () => {
     const paneKey = 'tab-resume:11111111-1111-4111-8111-111111111111'
     const owner: AgentResumeOwner = {
@@ -3416,9 +3637,9 @@ describe('registerPtyHandlers', () => {
     handlers.clear()
     registerPtyHandlers(mainWindow as never)
 
-    await expect(handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'local-pty' })).rejects.toThrow(
-      'daemon unavailable'
-    )
+    await expect(
+      handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'local-pty' })
+    ).rejects.toThrow('daemon unavailable')
   })
 
   it('synthesizes runtime exit after ordinary daemon-backed pty kill', async () => {
@@ -3816,8 +4037,12 @@ describe('registerPtyHandlers', () => {
     } as never)
     registerPtyHandlers(mainWindow as never)
 
-    await expect(handlers.get('pty:hasPty')!(mainWindowIpcEvent, { id: 'live-pty' })).resolves.toBe(true)
-    await expect(handlers.get('pty:hasPty')!(mainWindowIpcEvent, { id: 'dead-pty' })).resolves.toBe(false)
+    await expect(handlers.get('pty:hasPty')!(mainWindowIpcEvent, { id: 'live-pty' })).resolves.toBe(
+      true
+    )
+    await expect(handlers.get('pty:hasPty')!(mainWindowIpcEvent, { id: 'dead-pty' })).resolves.toBe(
+      false
+    )
 
     expect(hasPty).toHaveBeenCalledWith('live-pty')
     expect(hasPty).toHaveBeenCalledWith('dead-pty')
@@ -3849,7 +4074,9 @@ describe('registerPtyHandlers', () => {
     } as never)
     registerPtyHandlers(mainWindow as never)
 
-    await expect(handlers.get('pty:hasPty')!(mainWindowIpcEvent, { id: 'maybe-pty' })).resolves.toBe(null)
+    await expect(
+      handlers.get('pty:hasPty')!(mainWindowIpcEvent, { id: 'maybe-pty' })
+    ).resolves.toBe(null)
 
     const hasPty = vi.fn(() => {
       throw new Error('provider unavailable')
@@ -3878,7 +4105,9 @@ describe('registerPtyHandlers', () => {
       getProfiles: vi.fn()
     } as never)
 
-    await expect(handlers.get('pty:hasPty')!(mainWindowIpcEvent, { id: 'maybe-pty' })).resolves.toBe(null)
+    await expect(
+      handlers.get('pty:hasPty')!(mainWindowIpcEvent, { id: 'maybe-pty' })
+    ).resolves.toBe(null)
   })
 
   it('lists duplicate SSH relay session ids as distinct app sessions', async () => {
@@ -4124,12 +4353,16 @@ describe('registerPtyHandlers', () => {
     expect(() =>
       listenerFor('pty:resize')(mainWindowIpcEvent, { id: 'remote-pty', cols: 100, rows: 30 })
     ).not.toThrow()
-    expect(() => listenerFor('pty:ackColdRestore')(mainWindowIpcEvent, { id: 'remote-pty' })).not.toThrow()
+    expect(() =>
+      listenerFor('pty:ackColdRestore')(mainWindowIpcEvent, { id: 'remote-pty' })
+    ).not.toThrow()
     expect(() =>
       listenerFor('pty:signal')(mainWindowIpcEvent, { id: 'remote-pty', signal: 'SIGINT' })
     ).not.toThrow()
 
-    await expect(handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'remote-pty' })).resolves.toBeUndefined()
+    await expect(
+      handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'remote-pty' })
+    ).resolves.toBeUndefined()
     expect(store.markSshRemotePtyLease).toHaveBeenCalledWith('ssh-1', 'remote-pty', 'terminated')
   })
 
@@ -4160,9 +4393,9 @@ describe('registerPtyHandlers', () => {
     setPtyOwnership('remote-pty', 'ssh-1')
     unregisterSshPtyProvider('ssh-1')
 
-    await expect(handlers.get('pty:hasChildProcesses')!(mainWindowIpcEvent, { id: 'remote-pty' })).resolves.toBe(
-      false
-    )
+    await expect(
+      handlers.get('pty:hasChildProcesses')!(mainWindowIpcEvent, { id: 'remote-pty' })
+    ).resolves.toBe(false)
     await expect(
       handlers.get('pty:getForegroundProcess')!(mainWindowIpcEvent, { id: 'remote-pty' })
     ).resolves.toBeNull()
@@ -4214,7 +4447,11 @@ describe('registerPtyHandlers', () => {
       setupProviderWithAppliedSize({ applied: { cols: 200, rows: 50 } })
       handlers.clear()
       registerPtyHandlers(mainWindow as never)
-      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 200, rows: 50, env: {} })
+      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+        cols: 200,
+        rows: 50,
+        env: {}
+      })
       const id = (spawn as { id: string }).id
 
       // Renderer forwards a corrective narrow resize; it is dropped daemon-side.
@@ -4245,7 +4482,11 @@ describe('registerPtyHandlers', () => {
       } as never)
       handlers.clear()
       registerPtyHandlers(mainWindow as never)
-      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 200, rows: 50, env: {} })
+      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+        cols: 200,
+        rows: 50,
+        env: {}
+      })
       const id = (spawn as { id: string }).id
       resizeListener()(mainWindowIpcEvent, { id, cols: 80, rows: 24 })
 
@@ -4263,7 +4504,11 @@ describe('registerPtyHandlers', () => {
       })
       handlers.clear()
       registerPtyHandlers(mainWindow as never)
-      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 100, rows: 30, env: {} })
+      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+        cols: 100,
+        rows: 30,
+        env: {}
+      })
       const id = (spawn as { id: string }).id
 
       const reported = await handlers.get('pty:getSize')!(mainWindowIpcEvent, { id })
@@ -4286,7 +4531,11 @@ describe('registerPtyHandlers', () => {
       }
       handlers.clear()
       registerPtyHandlers(mainWindow as never, runtime as never)
-      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24, env: {} })
+      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+        cols: 80,
+        rows: 24,
+        env: {}
+      })
       const id = (spawn as { id: string }).id
 
       resizeListener()(mainWindowIpcEvent, { id, cols: 120, rows: 30 })
@@ -4318,7 +4567,11 @@ describe('registerPtyHandlers', () => {
       }
       handlers.clear()
       registerPtyHandlers(mainWindow as never, runtime as never)
-      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24, env: {} })
+      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+        cols: 80,
+        rows: 24,
+        env: {}
+      })
       const id = (spawn as { id: string }).id
 
       resizeListener()(mainWindowIpcEvent, { id, cols: 120, rows: 30 })
@@ -4947,7 +5200,9 @@ describe('registerPtyHandlers', () => {
     // A second spawn for the same pane must run a fresh spawn rather than await
     // the leaked (never-settled) reservation promise.
     let hangTimer: ReturnType<typeof setTimeout> | undefined
-    const second = handlers.get('pty:spawn')!(mainWindowIpcEvent, spawnArgs) as Promise<{ id: string }>
+    const second = handlers.get('pty:spawn')!(mainWindowIpcEvent, spawnArgs) as Promise<{
+      id: string
+    }>
     const result = await Promise.race([
       second,
       new Promise<never>((_, reject) => {
@@ -6177,7 +6432,11 @@ describe('registerPtyHandlers', () => {
             terminalWindowsPowerShellImplementation: 'pwsh.exe'
           }) as never
       )
-      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24, shellOverride: 'pwsh.exe' })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+        cols: 80,
+        rows: 24,
+        shellOverride: 'pwsh.exe'
+      })
 
       expect(spawnMock).toHaveBeenCalledWith(
         RESOLVED_PWSH7,
@@ -8414,7 +8673,10 @@ describe('registerPtyHandlers', () => {
     )?.[1] as (() => void) | undefined
     expect(didFinishLoad).toBeTypeOf('function')
 
-    const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })) as {
+    const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+      cols: 80,
+      rows: 24
+    })) as {
       id: string
     }
 
@@ -8468,7 +8730,10 @@ describe('registerPtyHandlers', () => {
       ([eventName]) => eventName === 'did-finish-load'
     )?.[1] as (() => void) | undefined
 
-    const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })) as {
+    const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+      cols: 80,
+      rows: 24
+    })) as {
       id: string
     }
 
@@ -8519,7 +8784,9 @@ describe('registerPtyHandlers', () => {
       process: 'zsh',
       pid: 111
     })
-    const ptyA = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })) as { id: string }
+    const ptyA = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })) as {
+      id: string
+    }
 
     // Advance the generation without sweeping (recovery-in-flight), then spawn a
     // second PTY so the two live in different load generations.
@@ -8534,7 +8801,9 @@ describe('registerPtyHandlers', () => {
       process: 'zsh',
       pid: 222
     })
-    const ptyB = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })) as { id: string }
+    const ptyB = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })) as {
+      id: string
+    }
 
     didFinishLoad?.()
 
@@ -8567,7 +8836,9 @@ describe('registerPtyHandlers', () => {
 
     await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: spawnResult.id })
 
-    expect(await handlers.get('pty:hasChildProcesses')!(mainWindowIpcEvent, { id: spawnResult.id })).toBe(false)
+    expect(
+      await handlers.get('pty:hasChildProcesses')!(mainWindowIpcEvent, { id: spawnResult.id })
+    ).toBe(false)
     expect(openCodeClearPtyMock).toHaveBeenCalledWith(spawnResult.id)
     expect(piClearPtyMock).toHaveBeenCalledWith(spawnResult.id)
   })
@@ -8769,7 +9040,10 @@ describe('registerPtyHandlers', () => {
       await new Promise((r) => setTimeout(r, 0))
       expect(resolved).toBe(false)
 
-      listener(mainWindowIpcEvent, { requestId: realRequestId, snapshot: { data: 'ok', cols: 80, rows: 24 } })
+      listener(mainWindowIpcEvent, {
+        requestId: realRequestId,
+        snapshot: { data: 'ok', cols: 80, rows: 24 }
+      })
       await expect(pending).resolves.toEqual({ data: 'ok', cols: 80, rows: 24 })
     })
 

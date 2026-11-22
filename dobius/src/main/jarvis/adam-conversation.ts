@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type {
   AdamLookingAt,
+  AdamThreadRow,
   AdamTurnEvent,
   AdamTurnSource,
   JarvisAskResult
@@ -47,6 +48,47 @@ export function voiceMessage(utterance: string, lookingAt: AdamLookingAt): strin
   ].join('\n')
 }
 
+/**
+ * The thread row for one event of a spoken turn (typed turns write their own
+ * rows). Written by main, so a voice turn is kept even if no window is open.
+ * The ids come from the turn, so a turn can never be written twice.
+ * The wording matches the Board thread's own (adam-thread.ts in the renderer).
+ */
+export function voiceTurnRow(event: AdamTurnEvent): AdamThreadRow | null {
+  if (event.source !== 'voice') {
+    return null
+  }
+  // Why clipped: the thread refuses a row over its size limit, and a long reply
+  // must still be kept (he has already said all of it out loud).
+  const clip = (value: string): string =>
+    value.length > MAX_VOICE_ROW_CHARS ? `${value.slice(0, MAX_VOICE_ROW_CHARS)}…` : value
+  if (event.phase === 'asked') {
+    return { id: `${event.turnId}:asked`, role: 'user', text: clip(event.text), voice: true }
+  }
+  const id = `${event.turnId}:answered`
+  const text = clip(event.result.text.trim())
+  if (event.result.kind === 'cancelled') {
+    return {
+      id,
+      role: 'system',
+      text: 'ADAM’s answer was stopped before it finished. Send your message again.',
+      voice: true
+    }
+  }
+  if (event.result.kind === 'error' || !text) {
+    return {
+      id,
+      role: 'system',
+      tone: 'error',
+      text: `ADAM could not answer. ${text || 'He sent back an empty reply. Try again.'}`,
+      voice: true
+    }
+  }
+  return { id, role: 'assistant', text, voice: true }
+}
+
+const MAX_VOICE_ROW_CHARS = 20_000
+
 type AdamBrain = { ask: (text: string) => Promise<JarvisAskResult> }
 
 /**
@@ -60,7 +102,7 @@ export class AdamConversation {
 
   constructor(
     private readonly brain: AdamBrain,
-    private readonly announce: (event: AdamTurnEvent) => void
+    private readonly announce: (event: AdamTurnEvent) => void | Promise<void>
   ) {}
 
   /** True while a turn is running; a live call checks it before asking. */
@@ -80,14 +122,14 @@ export class AdamConversation {
     this.inFlight = true
     const turn = { turnId: randomUUID(), source: options.source }
     try {
-      this.announce({ ...turn, phase: 'asked', text: options.said ?? text, at: Date.now() })
+      await this.announce({ ...turn, phase: 'asked', text: options.said ?? text, at: Date.now() })
       let result: JarvisAskResult
       try {
         result = await this.brain.ask(text)
       } catch {
         result = { kind: 'error', text: 'ADAM is unreachable' }
       }
-      this.announce({ ...turn, phase: 'answered', result, at: Date.now() })
+      await this.announce({ ...turn, phase: 'answered', result, at: Date.now() })
       return result
     } finally {
       this.inFlight = false

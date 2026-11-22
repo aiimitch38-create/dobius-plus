@@ -61,7 +61,7 @@ export function isShellProcessName(name: string | null): boolean {
   return SHELL_NAMES.has(base)
 }
 
-// Why (per the Board status table): "done" only when the process ended; a
+// Why (per the Board status table): "done" (shown as "Exited") only when the process ended; a
 // finished agent turn is idle; needs-you only from a permission or question.
 export function consoleCardStatus({
   tabExists,
@@ -97,13 +97,16 @@ export function consoleCardStatus({
   }
 }
 
-/** AgentStateDot state per console status; statuses without a dot render a plain muted dot. */
+/**
+ * AgentStateDot state per console status; statuses without a dot render a plain muted dot.
+ * Why no 'done': AgentStateDot's done reads "Done" in a success color, but here it means the
+ * process exited; the card shows a "Not running" badge with Restart instead.
+ */
 export const CONSOLE_STATUS_DOT: Partial<
   Record<ConsoleCardStatus, 'working' | 'waiting' | 'done' | 'idle'>
 > = {
   working: 'working',
   waiting: 'waiting',
-  done: 'done',
   idle: 'idle'
 }
 
@@ -118,7 +121,7 @@ export function consoleStatusLabel(status: ConsoleCardStatus): string {
     case 'paused':
       return translate('board.console.status.paused', 'Paused')
     case 'done':
-      return translate('board.console.status.done', 'Ended')
+      return translate('board.console.status.done', 'Exited')
     case 'shell':
       return translate('board.console.status.shell', 'At its shell')
     case 'gone':

@@ -71,3 +71,30 @@ describe('watchConsoleForeground', () => {
     off()
   })
 })
+
+describe('useConsoleForeground after a remount', () => {
+  it('reads exited for a tab whose PTY ended under its card, even with a fresh hook', async () => {
+    const { act } = await import('react')
+    const { createRoot } = await import('react-dom/client')
+    const { useConsoleForeground } = await import('./use-console-runtime')
+    const { markBoardConsoleEnded, resetBoardConsoleEndedForTest } = await import(
+      './board-console-exit'
+    )
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    resetBoardConsoleEndedForTest()
+    const seen: unknown[] = []
+    function Probe({ tabId }: { tabId: string }): null {
+      seen.push(useConsoleForeground(tabId))
+      return null
+    }
+    const host = document.createElement('div')
+    const root = createRoot(host)
+    markBoardConsoleEnded('tab-ended')
+    act(() => root.render(<Probe tabId="tab-ended" />))
+    expect(seen.at(-1)).toBe('exited')
+    act(() => root.render(<Probe tabId="tab-starting" />))
+    expect(seen.at(-1)).toBe(null)
+    act(() => root.unmount())
+    resetBoardConsoleEndedForTest()
+  })
+})

@@ -4,6 +4,8 @@ import { dirname } from 'node:path'
 import type { AdamThreadRow } from '../../shared/speech-types'
 
 export const ADAM_THREAD_CHANNEL = 'jarvis:adam-thread'
+/** Sent when main itself could not save a row (a spoken turn); the window tells Carson. */
+export const ADAM_THREAD_UNSAVED_CHANNEL = 'jarvis:adam-thread-unsaved'
 export const ADAM_THREAD_CAP = 200
 const MAX_ROW_CHARS = 32_000
 
@@ -36,6 +38,9 @@ export class AdamThreadStore {
   private rows: AdamThreadRow[] | null = null
   private loading: Promise<AdamThreadRow[]> | null = null
   private saving: Promise<void> = Promise.resolve()
+  /** The newest write, with its failure kept, so a repeated row reports the same outcome. */
+  private lastSave: Promise<void> = Promise.resolve()
+  private unsaved = false
 
   constructor(
     private readonly file: string,
@@ -59,32 +64,50 @@ export class AdamThreadStore {
     return this.loading
   }
 
-  /** Adds a row once (a repeated id is ignored) and tells every window. */
-  async append(row: AdamThreadRow): Promise<void> {
+  /**
+   * Adds a row once (a repeated id is ignored) and tells the window. Rejects
+   * when the thread could not be written to disk; the row stays in memory and
+   * is written again with the next change.
+   */
+  async append(raw: AdamThreadRow): Promise<void> {
+    // Same limits as on load, so a row that is accepted now is still there after a restart.
+    const row = adamThreadRowOf(raw)
+    if (!row) {
+      throw new Error('adam_thread_row_invalid')
+    }
     await this.get()
     // Why read here, with no await before the set: appends that arrive together
     // must each see the other's row.
     const rows = this.rows ?? []
     if (rows.some((existing) => existing.id === row.id)) {
-      return
+      // Already in the thread: it is only "saved" once the write that carries it is.
+      // If that write failed, try again now.
+      return this.unsaved ? this.set(rows) : this.lastSave
     }
-    this.set([...rows, row].slice(-ADAM_THREAD_CAP))
-    await this.saving
+    await this.set([...rows, row].slice(-ADAM_THREAD_CAP))
   }
 
   async clear(): Promise<void> {
     await this.get()
-    this.set([])
-    await this.saving
+    await this.set([])
   }
 
-  private set(rows: AdamThreadRow[]): void {
+  private set(rows: AdamThreadRow[]): Promise<void> {
     this.rows = rows
     this.announce(rows)
-    // One write at a time, each writing the newest rows, so a slow write cannot land last with old ones.
-    this.saving = this.saving.then(() => this.save()).catch((error) => {
-      console.warn('ADAM thread could not be saved:', error)
-    })
+    // One write at a time, each writing the newest rows, so a slow write cannot land
+    // last with old ones. A failed write is the caller's to report; it does not stop later ones.
+    const saved = this.saving.then(() => this.save())
+    this.lastSave = saved
+    this.saving = saved.then(
+      () => {
+        this.unsaved = false
+      },
+      () => {
+        this.unsaved = true
+      }
+    )
+    return saved
   }
 
   private async save(): Promise<void> {

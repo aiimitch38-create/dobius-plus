@@ -3,6 +3,12 @@
  * create dialog and the snooze dropdown. Each preset returns a Unix timestamp
  * (seconds) strictly in the future.
  */
+// Why shared: tab snooze picks use the same local-day math; one copy for both.
+import {
+  daysUntilNextMonday,
+  localDayAtHour,
+} from "../../../../../../../shared/snooze-times";
+
 export type TimePreset = {
   label: string;
   getTimestamp: () => number;
@@ -19,13 +25,11 @@ function nowSeconds(): number {
  */
 function nextDayAt9am(dayOffset: number): number {
   const now = new Date();
-  const target = new Date(now);
-  target.setDate(target.getDate() + dayOffset);
-  target.setHours(9, 0, 0, 0);
-  if (target.getTime() <= now.getTime()) {
-    target.setDate(target.getDate() + 1);
+  let target = localDayAtHour(now, dayOffset, 9);
+  if (target <= now.getTime()) {
+    target = localDayAtHour(now, dayOffset + 1, 9);
   }
-  return Math.floor(target.getTime() / 1_000);
+  return Math.floor(target / 1_000);
 }
 
 export const TIME_PRESETS: TimePreset[] = [
@@ -35,10 +39,7 @@ export const TIME_PRESETS: TimePreset[] = [
   { label: "Tomorrow at 9am", getTimestamp: () => nextDayAt9am(1) },
   {
     label: "Next Monday at 9am",
-    getTimestamp: () => {
-      const daysUntilMonday = (8 - new Date().getDay()) % 7 || 7;
-      return nextDayAt9am(daysUntilMonday);
-    },
+    getTimestamp: () => nextDayAt9am(daysUntilNextMonday(new Date())),
   },
 ];
 

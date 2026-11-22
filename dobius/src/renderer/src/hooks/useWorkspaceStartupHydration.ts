@@ -15,6 +15,8 @@ import {
 } from '@/startup/startup-diagnostics'
 import { translate } from '@/i18n/i18n'
 import type { OnboardingState } from '../../../shared/types'
+import type { SnoozedTabEntry } from '../../../shared/tab-snooze-types'
+import { closeInterruptedSnoozeReturnTabs } from '@/lib/tab-snooze/snooze-return'
 
 type StartupHydrationActions = Pick<
   AppState,
@@ -148,16 +150,31 @@ export function useWorkspaceStartupHydration({
         // Repos were fetched above, so the known runtime hosts are derivable
         // here; merge their slices into the unified session the hydrators
         // expect. An unreadable host partition is skipped (fail-soft).
+        const snoozedTabsPromise: Promise<SnoozedTabEntry[]> = (
+          window.api.tabSnooze?.list() ?? Promise.resolve([])
+        ).catch((err) => {
+          console.warn('[tab-snooze] could not read the snoozed tabs at startup:', err)
+          return []
+        })
         const session = await timeRendererStartupStep('session-get', () =>
           fetchWorkspaceSessionFromHosts(window.api.session, useAppStore.getState().repos)
         )
         await keybindingsPromise
+        const snoozedTabs = await snoozedTabsPromise
         if (!cancelled) {
           timeRendererStartupSyncStep('hydrate-session-stores', () => {
             actions.hydrateWorkspaceSession(session)
             actions.hydrateTabsSession(session)
             actions.hydrateEditorSession(session)
             actions.hydrateBrowserSession(session)
+            // Why in this same step: no terminal has mounted yet, so a tab left
+            // by an unfinished snooze return cannot start as a plain shell.
+            closeInterruptedSnoozeReturnTabs({
+              entries: snoozedTabs,
+              getState: () => useAppStore.getState(),
+              closeTab: (tabId) =>
+                useAppStore.getState().closeTab(tabId, { keepWorktreeActive: true })
+            })
           })
           // Why: prune lastVisitedAtByWorktreeId entries whose worktrees
           // no longer exist. Must run AFTER hydration — before this point,

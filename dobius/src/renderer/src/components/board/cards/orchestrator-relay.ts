@@ -1,23 +1,20 @@
 import type { BoardState } from '@/store/slices/board'
+import { wiredConsoleTabIds as wiredTabIdsOf } from '../../../../../shared/board-orchestrator-relay'
 import type { OrchestratorMessage } from './OrchestratorCard'
 
 // Pure helpers for the orchestrator card's relay over orchestration messaging.
-
-/** The card's own mailbox handle; replies to its messages land here. */
-export function orchestratorHandle(cardId: string): string {
-  return `board-orchestrator:${cardId}`
-}
+// Routing and fan-out live in shared/ so `orchestration send --to board:<id>` matches the card.
+export {
+  orchestratorHandle,
+  orchestratorRelayTargets,
+  relaySubject,
+  relayThreadId,
+  wiredScopedConsoles
+} from '../../../../../shared/board-orchestrator-relay'
 
 /** Tab ids of wired cards that are still consoles on this board. */
 export function wiredConsoleTabIds(board: BoardState, wiredCardIds: readonly string[]): string[] {
-  const wired = new Set(wiredCardIds)
-  return board.cards.flatMap((c) => (c.kind === 'console' && wired.has(c.id) ? [c.tabId] : []))
-}
-
-/** Subject line for the message list: the first line, bounded. */
-export function relaySubject(text: string): string {
-  const first = text.trim().split('\n')[0] ?? ''
-  return first.length > 80 ? `${first.slice(0, 79)}…` : first
+  return wiredTabIdsOf(board.cards, wiredCardIds)
 }
 
 export type InboxRow = { id: string; from_handle: string; body: string; subject: string }

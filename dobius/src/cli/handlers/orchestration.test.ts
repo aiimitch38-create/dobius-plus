@@ -388,3 +388,105 @@ describe('orchestration card:<title> recipients', () => {
     }
   )
 })
+
+describe('orchestration tab:<tabId> and card: addresses on every handle flag', () => {
+  beforeEach(() => {
+    callMock.mockReset().mockResolvedValue({
+      result: { messages: [], count: 0, answer: null, messageId: null, threadId: 't', timedOut: true }
+    })
+    resolveTerminalAddressMock.mockImplementation(async (address: string) =>
+      address.startsWith('tab:') ? 'term_from_tab' : address
+    )
+  })
+
+  const run = (command: string, flags: [string, string | boolean][]) =>
+    ORCHESTRATION_HANDLERS[command]({
+      flags: new Map<string, string | boolean>(flags),
+      client: { call: callMock },
+      cwd: '/repo',
+      json: true
+    } as never)
+
+  it('check --terminal tab:<tabId> reads that tab\'s inbox', async () => {
+    await run('orchestration check', [['terminal', 'tab:t1']])
+    expect(callMock).toHaveBeenCalledWith(
+      'orchestration.check',
+      expect.objectContaining({ terminal: 'term_from_tab' })
+    )
+  })
+
+  it('inbox --terminal tab:<tabId> is resolved', async () => {
+    await run('orchestration inbox', [['terminal', 'tab:t1']])
+    expect(callMock).toHaveBeenCalledWith(
+      'orchestration.inbox',
+      expect.objectContaining({ terminal: 'term_from_tab' })
+    )
+  })
+
+  it('send --from tab:<tabId> is resolved', async () => {
+    await run('orchestration send', [
+      ['to', 'term_x'],
+      ['from', 'tab:t1'],
+      ['subject', 'hi']
+    ])
+    expect(callMock).toHaveBeenCalledWith(
+      'orchestration.send',
+      expect.objectContaining({ from: 'term_from_tab', to: 'term_x' })
+    )
+  })
+
+  it('ask --to tab:<tabId> is resolved', async () => {
+    await run('orchestration ask', [
+      ['to', 'tab:t1'],
+      ['from', 'term_me'],
+      ['question', 'ok?'],
+      ['timeout-ms', '1000']
+    ])
+    expect(callMock).toHaveBeenCalledWith(
+      'orchestration.ask',
+      expect.objectContaining({ to: 'term_from_tab' }),
+      expect.anything()
+    )
+  })
+})
+
+describe('orchestration send --to board:<orchestratorCardId>', () => {
+  beforeEach(() => {
+    callMock.mockReset().mockResolvedValue({ result: { messages: [{ id: 'm1' }], recipients: 1 } })
+    delete process.env.DOBIUS_TERMINAL_HANDLE
+    getTerminalHandleMock.mockRejectedValue(new Error('no_active_terminal'))
+  })
+
+  const run = (flags: [string, string][]) =>
+    ORCHESTRATION_HANDLERS['orchestration send']({
+      flags: new Map<string, string | boolean>(flags),
+      client: { call: callMock },
+      cwd: '/repo',
+      json: true
+    } as never)
+
+  it('hands board: to the runtime relay as-is, with no sender terminal lookup', async () => {
+    await run([
+      ['to', 'board:orch-1'],
+      ['subject', 'hi'],
+      ['body', 'run the tests']
+    ])
+    expect(resolveTerminalAddressMock).not.toHaveBeenCalled()
+    expect(getTerminalHandleMock).not.toHaveBeenCalled()
+    expect(callMock).toHaveBeenCalledWith(
+      'orchestration.send',
+      expect.objectContaining({ to: 'board:orch-1', from: undefined, body: 'run the tests' })
+    )
+  })
+
+  it.each(['worker_done', 'heartbeat'] as const)('rejects %s to a board orchestrator', async (type) => {
+    await expect(
+      run([
+        ['to', 'board:orch-1'],
+        ['subject', 'x'],
+        ['type', type]
+      ])
+    ).rejects.toThrow('concrete coordinator terminal handle')
+    expect(callMock).not.toHaveBeenCalled()
+  })
+})

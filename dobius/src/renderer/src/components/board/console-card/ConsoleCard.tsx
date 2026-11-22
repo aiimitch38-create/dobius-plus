@@ -16,6 +16,7 @@ import {
 } from './console-card-status'
 import { useConsoleCardStatus } from './use-console-card-status'
 import { ConsoleAccountBadge } from './ConsoleAccountBadge'
+import { ConsoleNotRunningBadge } from './ConsoleNotRunningBadge'
 import { ConsoleBrowserLinkButton } from '../board-browser-link/BrowserLinkControls'
 
 type ConsoleCardProps = { worktreeId: string; card: BoardCardOf<'console'> }
@@ -114,6 +115,7 @@ export function ConsoleCardTitleAccessory({
           </span>
         </>
       )}
+      <ConsoleNotRunningBadge worktreeId={worktreeId} card={card} status={status} />
       <ConsoleBrowserLinkButton worktreeId={worktreeId} card={card} />
       <ConsoleAccountBadge worktreeId={worktreeId} card={card} />
       {card.yolo && (

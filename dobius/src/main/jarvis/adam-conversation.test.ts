@@ -3,7 +3,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdamTurnEvent } from '../../shared/speech-types'
-import { ADAM_BUSY_TEXT, AdamConversation, lookingAtOf, voiceMessage } from './adam-conversation'
+import { adamThreadRowOf } from './adam-thread-store'
+import {
+  ADAM_BUSY_TEXT,
+  AdamConversation,
+  lookingAtOf,
+  voiceMessage,
+  voiceTurnRow
+} from './adam-conversation'
 import { AdamHermesVoice } from './adam-hermes-voice'
 import type { HermesDesktopEvent, HermesRpc } from './hermes-desktop-rpc'
 
@@ -38,7 +45,7 @@ beforeEach(async () => {
     }
   })
   events = []
-  adam = new AdamConversation(brain, (event) => events.push(event))
+  adam = new AdamConversation(brain, (event) => void events.push(event))
 })
 afterEach(async () => {
   await brain.close()
@@ -90,7 +97,7 @@ describe('AdamConversation: voice and the thread are one conversation', () => {
   it('announces a failed turn and frees ADAM for the next one', async () => {
     const failing = new AdamConversation(
       { ask: vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ kind: 'answer', text: 'ok' }) },
-      (event) => events.push(event)
+      (event) => void events.push(event)
     )
     await expect(failing.ask('one', { source: 'voice' })).resolves.toMatchObject({ kind: 'error' })
     await expect(failing.ask('two', { source: 'voice' })).resolves.toEqual({ kind: 'answer', text: 'ok' })
@@ -126,5 +133,60 @@ describe('what Carson was looking at, for a voice turn', () => {
       JSON.parse(message.split('<untrusted_context>\n')[1].split('\n</untrusted_context>')[0])
         .carson_is_looking_at.folder
     ).toBe('/code/pc')
+  })
+})
+
+describe('voice turns become thread rows in main', () => {
+  const at = 1
+  it('writes the words and the reply with ids from the turn, marked as spoken', () => {
+    expect(voiceTurnRow({ turnId: 't1', source: 'voice', phase: 'asked', text: 'status?', at })).toEqual({
+      id: 't1:asked',
+      role: 'user',
+      text: 'status?',
+      voice: true
+    })
+    expect(
+      voiceTurnRow({
+        turnId: 't1',
+        source: 'voice',
+        phase: 'answered',
+        result: { kind: 'answer', text: ' All quiet. ' },
+        at
+      })
+    ).toEqual({ id: 't1:answered', role: 'assistant', text: 'All quiet.', voice: true })
+  })
+
+  it('clips a very long reply so the thread keeps it across a restart', () => {
+    const long = voiceTurnRow({
+      turnId: 't5',
+      source: 'voice',
+      phase: 'answered',
+      result: { kind: 'answer', text: 'x'.repeat(50_000) },
+      at
+    })
+    expect(long?.text.length).toBe(20_001)
+    expect(adamThreadRowOf(long)).not.toBeNull()
+  })
+
+  it('shows a failed or stopped turn in plain words, and leaves typed turns to the thread itself', () => {
+    const failed = voiceTurnRow({
+      turnId: 't2',
+      source: 'voice',
+      phase: 'answered',
+      result: { kind: 'error', text: ADAM_BUSY_TEXT },
+      at
+    })
+    expect(failed).toMatchObject({ role: 'system', tone: 'error', voice: true })
+    expect(failed?.text).toContain(ADAM_BUSY_TEXT)
+    expect(
+      voiceTurnRow({
+        turnId: 't3',
+        source: 'voice',
+        phase: 'answered',
+        result: { kind: 'cancelled', text: '' },
+        at
+      })
+    ).toMatchObject({ role: 'system', text: expect.stringContaining('stopped before it finished') })
+    expect(voiceTurnRow({ turnId: 't4', source: 'thread', phase: 'asked', text: 'typed', at })).toBeNull()
   })
 })

@@ -2,7 +2,12 @@ import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { AdamLookingAt, JarvisAskResult, VoiceSettings } from '../../shared/speech-types'
-import { ADAM_THREAD_CHANNEL, AdamThreadStore, adamThreadRowOf } from './adam-thread-store'
+import {
+  ADAM_THREAD_CHANNEL,
+  ADAM_THREAD_UNSAVED_CHANNEL,
+  AdamThreadStore,
+  adamThreadRowOf
+} from './adam-thread-store'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { adamProjectDirectory } from '../adam-connection'
@@ -11,6 +16,7 @@ import {
   AdamConversation,
   lookingAtOf,
   voiceMessage,
+  voiceTurnRow,
   type AdamAskOptions
 } from './adam-conversation'
 import { AdamHermesVoice } from './adam-hermes-voice'
@@ -64,11 +70,12 @@ let lastLookingAt: AdamLookingAt | null = null
 let adamThread: AdamThreadStore | null = null
 
 function getAdamThread(): AdamThreadStore {
+  // Why only the main window: the thread holds Carson's conversation, so it is never
+  // sent to a web tile, a preview or any other window this app happens to have open.
   adamThread ??= new AdamThreadStore(join(getUserDataRoot(), 'adam-thread.json'), (rows) => {
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (!window.isDestroyed()) {
-        window.webContents.send(ADAM_THREAD_CHANNEL, rows)
-      }
+    const host = jarvisHostWindow
+    if (host && !host.isDestroyed()) {
+      host.webContents.send(ADAM_THREAD_CHANNEL, rows)
     }
   })
   return adamThread
@@ -111,7 +118,23 @@ export function askAdam(text: string, options: AdamAskOptions): ReturnType<AdamC
     const broadcast = createBroadcastPort()
     adamConversation = new AdamConversation(
       { ask: (prompt) => getAdamVoice().ask(prompt) },
-      (event) => broadcast(ADAM_TURN_CHANNEL, event)
+      async (event) => {
+        // Spoken turns are in the thread before any window hears of the turn.
+        const row = voiceTurnRow(event)
+        if (row) {
+          await getAdamThread()
+            .append(row)
+            .catch((error) => {
+              console.warn('ADAM voice turn could not be saved:', error)
+              // No window asked for this write, so main tells the window itself.
+              const host = jarvisHostWindow
+              if (host && !host.isDestroyed()) {
+                host.webContents.send(ADAM_THREAD_UNSAVED_CHANNEL)
+              }
+            })
+        }
+        broadcast(ADAM_TURN_CHANNEL, event)
+      }
     )
   }
   return adamConversation.ask(text, options)
@@ -177,6 +200,17 @@ function trustedLiveSender(event: Electron.IpcMainInvokeEvent): Electron.WebCont
 }
 
 
+/** `not-saved`: the change is shown and kept in memory, but could not be written to disk. */
+async function saved(change: Promise<void>): Promise<{ ok: boolean; error?: 'not-saved' }> {
+  try {
+    await change
+    return { ok: true }
+  } catch (error) {
+    console.warn('ADAM thread could not be saved:', error)
+    return { ok: false, error: 'not-saved' }
+  }
+}
+
 // Why: a turn with ADAM can run commands and is written into Carson's thread,
 // so only the main window's top frame may start one (never a web tile or embedded page).
 const ADAM_UNTRUSTED_SENDER: JarvisAskResult = {
@@ -204,22 +238,23 @@ function registerHandlers(store: Store, service: JarvisService): void {
 
   // ADAM's thread lives in main so every window shows the same rows and none can overwrite another's.
   ipcMain.removeHandler('jarvis:adamThreadGet')
-  ipcMain.handle('jarvis:adamThreadGet', () => getAdamThread().get())
+  ipcMain.handle('jarvis:adamThreadGet', (event) =>
+    trustedLiveSender(event) ? getAdamThread().get() : []
+  )
   ipcMain.removeHandler('jarvis:adamThreadAppend')
   ipcMain.handle('jarvis:adamThreadAppend', async (event, raw: unknown) => {
     const row = trustedLiveSender(event) ? adamThreadRowOf(raw) : null
-    if (row) {
-      await getAdamThread().append(row)
+    if (!row) {
+      return { ok: false }
     }
-    return { ok: row !== null }
+    return saved(getAdamThread().append(row))
   })
   ipcMain.removeHandler('jarvis:adamThreadClear')
   ipcMain.handle('jarvis:adamThreadClear', async (event) => {
     if (!trustedLiveSender(event)) {
       return { ok: false }
     }
-    await getAdamThread().clear()
-    return { ok: true }
+    return saved(getAdamThread().clear())
   })
   ipcMain.removeHandler('jarvis:lookingAt')
   ipcMain.handle('jarvis:lookingAt', (event, raw: unknown) => {
@@ -229,8 +264,11 @@ function registerHandlers(store: Store, service: JarvisService): void {
   })
 
   ipcMain.removeHandler('jarvis:cancelAsk')
-  ipcMain.handle('jarvis:cancelAsk', () => {
-    service.cancelAsk()
+  ipcMain.handle('jarvis:cancelAsk', (event) => {
+    // Why: stopping ADAM mid-turn is the main window's call, never an embedded page's.
+    if (trustedLiveSender(event)) {
+      service.cancelAsk()
+    }
     return { ok: true }
   })
 

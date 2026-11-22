@@ -318,6 +318,50 @@ describe('terminal send RPC', () => {
     })
   })
 
+  it('reports the bytes typed when the input floor is lost part-way through a long text', async () => {
+    const text = 'a'.repeat(16 * 1024 + 10)
+    let driver = { kind: 'desktop' } as ReturnType<DobiusRuntimeService['getDriver']>
+    const written: string[] = []
+    const runtime = stubRuntime({
+      resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
+      getDriver: vi.fn(() => driver),
+      getTerminalAgentStatus: vi
+        .fn()
+        .mockResolvedValue({ handle: 'terminal-1', isRunningAgent: true, status: 'working' }),
+      // As the real runtime does: the guard runs before every chunk, then the chunk is written.
+      sendTerminal: vi.fn(
+        async (
+          _handle: string,
+          _action: unknown,
+          options: { beforeWrite?: (ptyId: string) => Promise<void> }
+        ) => {
+          await options.beforeWrite?.('pty-1')
+          written.push('chunk 1')
+          // A phone takes the terminal between the two chunks.
+          driver = { kind: 'mobile', clientId: 'phone-1' } as typeof driver
+          await options.beforeWrite?.('pty-1')
+          written.push('chunk 2')
+          return { handle: 'terminal-1', accepted: true, bytesWritten: text.length }
+        }
+      )
+    })
+    const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('terminal.send', {
+        terminal: 'terminal-1',
+        text,
+        requireAgentStatus: 'sendable',
+        client: { id: 'desktop-1', type: 'desktop' }
+      })
+    )
+
+    expect(response.ok && response.result).toEqual({
+      send: { handle: 'terminal-1', accepted: false, bytesWritten: 16 * 1024 }
+    })
+    expect(written).toEqual(['chunk 1'])
+  })
+
   it('allows guarded terminal sends when the agent is sendable', async () => {
     const runtime = stubRuntime({
       resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),

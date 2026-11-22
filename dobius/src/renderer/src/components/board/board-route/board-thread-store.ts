@@ -1,3 +1,5 @@
+import { toast } from 'sonner'
+import { translate } from '@/i18n/i18n'
 import type { AdamThreadRow } from '../../../../../shared/speech-types'
 import type { BoardThreadMessage } from '../board-command-bar/BoardThread'
 import { deserializeBoardThread } from './board-thread-persistence'
@@ -20,7 +22,26 @@ export function appendToBoardThread(
   // Only what can be saved crosses to main (no buttons, no waiting rows).
   const { role, text, tone, report, voice } = message
   const row = JSON.parse(JSON.stringify({ id, role, text, tone, report, voice })) as AdamThreadRow
-  void window.api.jarvis.adamThreadAppend(row).catch((error: unknown) => {
-    console.warn('ADAM thread row could not be saved:', error)
-  })
+  void reportUnsaved(window.api.jarvis.adamThreadAppend(row))
+}
+
+/** Tells Carson when main could not write the thread to disk; it is still shown and is saved with the next change. */
+export async function reportUnsaved(
+  change: Promise<{ ok: boolean; error?: 'not-saved' }>
+): Promise<void> {
+  const unsaved = await change.then(
+    (result) => result.error === 'not-saved',
+    (error: unknown) => {
+      console.warn('ADAM thread change did not reach the app:', error)
+      return true
+    }
+  )
+  if (unsaved) {
+    toast.error(
+      translate(
+        'board.adam.threadNotSaved',
+        'ADAM’s thread could not be saved to disk. It is still shown here, and Dobius+ will try again with the next message. If this keeps happening, check free disk space.'
+      )
+    )
+  }
 }

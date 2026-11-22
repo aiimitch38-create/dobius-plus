@@ -2936,6 +2936,21 @@ const api = {
     }
   } satisfies PreloadApi['updater'],
 
+  tabSnooze: {
+    add: (request) => ipcRenderer.invoke('tabSnooze:add', request),
+    list: () => ipcRenderer.invoke('tabSnooze:list'),
+    take: (ref, options) => ipcRenderer.invoke('tabSnooze:take', ref, options),
+    settle: (ref) => ipcRenderer.invoke('tabSnooze:settle', ref),
+    putBack: (ref) => ipcRenderer.invoke('tabSnooze:putBack', ref),
+    setTime: (ref, until) => ipcRenderer.invoke('tabSnooze:setTime', ref, until),
+    discard: (ref) => ipcRenderer.invoke('tabSnooze:discard', ref),
+    onChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent) => callback()
+      ipcRenderer.on('tabSnooze:changed', listener)
+      return () => ipcRenderer.removeListener('tabSnooze:changed', listener)
+    }
+  } satisfies PreloadApi['tabSnooze'],
+
   whatsNew: {
     getPending: () => ipcRenderer.invoke('whatsNew:getPending'),
     dismiss: () => ipcRenderer.invoke('whatsNew:dismiss'),
@@ -4671,14 +4686,19 @@ const api = {
     askAdamText: (utterance: string, source?: AdamTurnSource): Promise<JarvisAskResult> =>
       ipcRenderer.invoke('jarvis:askAdamText', utterance, source),
     adamThreadGet: (): Promise<AdamThreadRow[]> => ipcRenderer.invoke('jarvis:adamThreadGet'),
-    adamThreadAppend: (row: AdamThreadRow): Promise<{ ok: boolean }> =>
+    adamThreadAppend: (row: AdamThreadRow): Promise<{ ok: boolean; error?: 'not-saved' }> =>
       ipcRenderer.invoke('jarvis:adamThreadAppend', row),
-    adamThreadClear: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('jarvis:adamThreadClear'),
+    adamThreadClear: (): Promise<{ ok: boolean; error?: 'not-saved' }> => ipcRenderer.invoke('jarvis:adamThreadClear'),
     onAdamThread: (callback: (rows: AdamThreadRow[]) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, rows: AdamThreadRow[]): void =>
         callback(rows)
       ipcRenderer.on('jarvis:adam-thread', listener)
       return () => ipcRenderer.removeListener('jarvis:adam-thread', listener)
+    },
+    onAdamThreadUnsaved: (callback: () => void): (() => void) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('jarvis:adam-thread-unsaved', listener)
+      return () => ipcRenderer.removeListener('jarvis:adam-thread-unsaved', listener)
     },
     reportLookingAt: (lookingAt: AdamLookingAt | null): Promise<void> =>
       ipcRenderer.invoke('jarvis:lookingAt', lookingAt),
