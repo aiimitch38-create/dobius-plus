@@ -138,3 +138,25 @@ describe('live voice normalizers', () => {
     expect(normalizeLiveVoiceIdleTimeoutSec(undefined)).toBe(30)
   })
 })
+
+describe('malformed saved settings', () => {
+  const damaged = [
+    { preferNativeAdamVoice: false, elevenlabsAgentId: 42 },
+    { preferNativeAdamVoice: false, elevenlabsAgentId: { id: 'agent_1' } },
+    { liveVoiceEngine: 'elevenlabs', elevenlabsAgentId: ['agent_1'] },
+    { liveVoiceEngine: 7, openAiLiveVoice: {}, liveVoiceMicMode: [], liveVoiceDailyCapUsd: 'x' },
+    'not an object',
+    null
+  ] as unknown as VoiceSettings[]
+
+  it.each(damaged.map((value) => [value]))('never throws on %j', (value) => {
+    expect(() => resolveLiveVoiceSettings(value)).not.toThrow()
+    expect(() => resolveActiveVoiceEngine(value)).not.toThrow()
+    expect(() => resolveActiveVoiceEngine(value, true)).not.toThrow()
+  })
+
+  it('treats a non-string agent id as no agent id', () => {
+    expect(resolveLiveVoiceEngine(damaged[0])).toBe('openai-live')
+    expect(resolveActiveVoiceEngine(damaged[2], true)).toBe('hermes')
+  })
+})

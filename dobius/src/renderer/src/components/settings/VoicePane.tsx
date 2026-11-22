@@ -34,6 +34,7 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
   const [openAiDialogOpen, setOpenAiDialogOpen] = useState(false)
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState('')
   const [openAiKeyPending, setOpenAiKeyPending] = useState(false)
+  const [openAiKeyRevision, setOpenAiKeyRevision] = useState(0)
   const [pendingCloudModelId, setPendingCloudModelId] = useState<string | null>(null)
   const mountedRef = useRef(true)
 
@@ -188,6 +189,7 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
     setOpenAiKeyPending(true)
     try {
       await window.api.speech.saveOpenAiApiKey(openAiApiKeyDraft)
+      setOpenAiKeyRevision((revision) => revision + 1)
       updateVoiceSettings({
         openAiApiKeyConfigured: true,
         sttModel: pendingCloudModelId ?? voiceSettings.sttModel
@@ -219,6 +221,7 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
     setOpenAiKeyPending(true)
     try {
       await window.api.speech.clearOpenAiApiKey()
+      setOpenAiKeyRevision((revision) => revision + 1)
       updateVoiceSettings({
         openAiApiKeyConfigured: false,
         sttModel: selectedModel?.provider === 'openai' ? '' : voiceSettings.sttModel
@@ -266,6 +269,7 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
         onToggleJarvis={() => void toggleJarvis()}
         onUpdateVoiceSettings={updateVoiceSettings}
         onOpenOpenAiDialog={() => openOpenAiDialog(null)}
+        openAiKeyRevision={openAiKeyRevision}
       />
 
       <VoiceSpeechModelSection

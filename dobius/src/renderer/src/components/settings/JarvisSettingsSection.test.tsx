@@ -52,6 +52,7 @@ async function render(
         onToggleJarvis={vi.fn()}
         onUpdateVoiceSettings={onUpdateVoiceSettings}
         onOpenOpenAiDialog={vi.fn()}
+        openAiKeyRevision={0}
       />
     )
   })

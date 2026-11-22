@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import type { BrowserWindow } from 'electron'
+import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Store } from '../persistence'
 
@@ -59,13 +60,24 @@ vi.mock('electron', () => ({
 }))
 
 const live = vi.hoisted(() => ({
+  ready: true,
   create: vi.fn(async (..._args: unknown[]) => ({ ok: true, answerSdp: 'v=0', sessionId: 's1' })),
   test: vi.fn(async (..._args: unknown[]) => ({ ok: true, message: 'Connected.' }))
 }))
 vi.mock('./openai-live-session', () => ({
   createOpenAiLiveSession: live.create,
-  testOpenAiLiveConnection: live.test
+  testOpenAiLiveConnection: live.test,
+  liveVoiceFailure: (kind: string) => ({ ok: false, kind, error: kind })
 }))
+vi.mock('../../shared/live-voice-settings', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../shared/live-voice-settings')>()
+  return {
+    ...actual,
+    get OPENAI_LIVE_CALL_READY() {
+      return live.ready
+    }
+  }
+})
 
 vi.mock('../speech/speech-runtime-service', () => ({
   getSpeechSttService: () => ({ startDictation: async () => undefined })
@@ -209,38 +221,146 @@ describe('OpenAI Live session IPC', () => {
     return { getSettings: () => ({ voice }), updateSettings: vi.fn() } as unknown as Store
   }
 
-  it('passes only the offer from the window; voice and idle timeout come from saved settings', async () => {
-    await register(
-      liveStore({ openAiLiveVoice: 'cedar', liveVoiceIdleTimeoutSec: 45 }),
-      fakeWindow()
-    )
-    const connect = electron.handlers.get('jarvis:liveSessionConnect')
+  type LiveContents = EventEmitter & {
+    id: number
+    send: ReturnType<typeof vi.fn>
+    isDestroyed: () => boolean
+    mainFrame: object
+  }
 
-    const result = await connect?.({}, { offerSdp: 'v=0 offer', voice: 'evil', apiKey: 'x' })
+  function liveWindow(id = 7): { window: FakeWindow; contents: LiveContents } {
+    const contents = Object.assign(new EventEmitter(), {
+      id,
+      send: vi.fn(),
+      isDestroyed: () => false,
+      mainFrame: { name: 'main' }
+    }) as LiveContents
+    return {
+      window: { isDestroyed: () => false, webContents: contents } as unknown as FakeWindow,
+      contents
+    }
+  }
+
+  // An IPC event as the main window's top frame sends it.
+  function from(contents: LiveContents): { sender: LiveContents; senderFrame: object } {
+    return { sender: contents, senderFrame: contents.mainFrame }
+  }
+
+  function handler(channel: string): Handler {
+    const found = electron.handlers.get(channel)
+    if (!found) {
+      throw new Error(`${channel} is not registered`)
+    }
+    return found
+  }
+
+  beforeEach(() => {
+    live.ready = true
+    vi.useFakeTimers({ toFake: ['Date'] })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('passes only the offer from the window; voice and idle timeout come from saved settings', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({ openAiLiveVoice: 'cedar', liveVoiceIdleTimeoutSec: 45 }), window)
+
+    const result = await handler('jarvis:liveSessionConnect')(from(contents), {
+      offerSdp: 'v=0 offer',
+      voice: 'evil',
+      apiKey: 'x'
+    })
 
     expect(result).toEqual({ ok: true, answerSdp: 'v=0', sessionId: 's1' })
-    expect(live.create).toHaveBeenCalledWith('v=0 offer', { voice: 'cedar', idleTimeoutSec: 45 })
+    expect(live.create).toHaveBeenCalledWith(
+      'v=0 offer',
+      { voice: 'cedar', idleTimeoutSec: 45 },
+      { signal: expect.any(AbortSignal) }
+    )
   })
 
   it('normalizes bad saved settings and malformed payloads before the session module sees them', async () => {
+    const { window, contents } = liveWindow()
     await register(
       liveStore({ openAiLiveVoice: 'BAD VOICE!', liveVoiceIdleTimeoutSec: 9000 }),
-      fakeWindow()
+      window
     )
-    const connect = electron.handlers.get('jarvis:liveSessionConnect')
+    const connect = handler('jarvis:liveSessionConnect')
 
-    await connect?.({}, 'just a string')
-    await connect?.({}, null)
-    await connect?.({}, ['v=0'])
+    await connect(from(contents), 'just a string')
+    await connect(from(contents), null)
+    await connect(from(contents), ['v=0'])
 
-    for (const call of live.create.mock.calls) {
-      expect(call).toEqual([undefined, { voice: 'marin', idleTimeoutSec: 60 }])
-    }
     expect(live.create).toHaveBeenCalledTimes(3)
+    for (const call of live.create.mock.calls) {
+      expect(call.slice(0, 2)).toEqual([undefined, { voice: 'marin', idleTimeoutSec: 60 }])
+    }
+  })
+
+  it('refuses both handlers for any sender but the main window top frame', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    const other = liveWindow(99).contents
+    const strangers = [
+      {},
+      { sender: other, senderFrame: other.mainFrame },
+      { sender: contents, senderFrame: { name: 'embedded frame' } },
+      { sender: contents, senderFrame: null }
+    ]
+
+    for (const event of strangers) {
+      expect(
+        await handler('jarvis:liveSessionConnect')(event, { offerSdp: 'v=0 offer' })
+      ).toMatchObject({ ok: false, kind: 'not-allowed' })
+      expect(await handler('jarvis:liveSessionTest')(event)).toMatchObject({
+        ok: false,
+        kind: 'not-allowed'
+      })
+    }
+    expect(live.create).not.toHaveBeenCalled()
+    expect(live.test).not.toHaveBeenCalled()
+  })
+
+  it('refuses connect unless OpenAI Live is the chosen engine and the live call is ready', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({ liveVoiceEngine: 'hermes' }), window)
+    expect(
+      await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    ).toMatchObject({ ok: false, kind: 'not-ready' })
+    // The test may run whatever the engine.
+    expect(await handler('jarvis:liveSessionTest')(from(contents))).toMatchObject({ ok: true })
+
+    live.ready = false
+    await register(liveStore({ liveVoiceEngine: 'openai-live' }), window)
+    expect(
+      await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    ).toMatchObject({ ok: false, kind: 'not-ready' })
+    expect(live.create).not.toHaveBeenCalled()
+  })
+
+  it('allows one connection test every 10 seconds', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    const test = handler('jarvis:liveSessionTest')
+
+    expect(await test(from(contents))).toEqual({ ok: true, message: 'Connected.' })
+    expect(live.test).toHaveBeenCalledWith(
+      { voice: 'marin', idleTimeoutSec: 30 },
+      { signal: expect.any(AbortSignal) }
+    )
+    vi.advanceTimersByTime(9_000)
+    expect(await test(from(contents))).toMatchObject({ ok: false, kind: 'too-soon' })
+    expect(live.test).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1_000)
+    expect(await test(from(contents))).toMatchObject({ ok: true })
+    expect(live.test).toHaveBeenCalledTimes(2)
   })
 
   it('refuses a second session while one is still being created', async () => {
-    await register(liveStore({}), fakeWindow())
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
     let finish: (value: { ok: true; answerSdp: string; sessionId: string }) => void = () =>
       undefined
     live.create.mockImplementationOnce(
@@ -249,19 +369,55 @@ describe('OpenAI Live session IPC', () => {
           finish = resolve
         })
     )
-    const connect = electron.handlers.get('jarvis:liveSessionConnect')
-    const test = electron.handlers.get('jarvis:liveSessionTest')
+    const connect = handler('jarvis:liveSessionConnect')
 
-    const first = connect?.({}, { offerSdp: 'v=0 offer' })
-    expect(await connect?.({}, { offerSdp: 'v=0 offer' })).toMatchObject({
+    const first = connect(from(contents), { offerSdp: 'v=0 offer' })
+    expect(await connect(from(contents), { offerSdp: 'v=0 offer' })).toMatchObject({
       ok: false,
       kind: 'busy'
     })
-    expect(await test?.({})).toMatchObject({ ok: false, kind: 'busy' })
+    expect(await handler('jarvis:liveSessionTest')(from(contents))).toMatchObject({
+      ok: false,
+      kind: 'busy'
+    })
     finish({ ok: true, answerSdp: 'v=0', sessionId: 's2' })
     expect(await first).toMatchObject({ ok: true, sessionId: 's2' })
+    // A busy refusal must not use up the test allowance.
+    expect(await handler('jarvis:liveSessionTest')(from(contents))).toMatchObject({ ok: true })
+  })
 
-    expect(await test?.({})).toEqual({ ok: true, message: 'Connected.' })
-    expect(live.test).toHaveBeenCalledWith({ voice: 'marin', idleTimeoutSec: 30 })
+  it('aborts an in-flight create when the requesting window closes', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    let seenSignal: AbortSignal | undefined
+    live.create.mockImplementationOnce((_offer, _options, deps) => {
+      seenSignal = (deps as { signal: AbortSignal }).signal
+      return new Promise((resolve) => {
+        seenSignal?.addEventListener('abort', () =>
+          resolve({ ok: false, kind: 'cancelled', error: 'cancelled' } as never)
+        )
+      })
+    })
+
+    const pending = handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    expect(seenSignal?.aborted).toBe(false)
+    contents.emit('destroyed')
+
+    expect(await pending).toMatchObject({ ok: false, kind: 'cancelled' })
+    expect(seenSignal?.aborted).toBe(true)
+    expect(contents.listenerCount('destroyed')).toBe(0)
+  })
+
+  it('records which window owns the live session and forgets it when that window closes', async () => {
+    const { window, contents } = liveWindow(7)
+    await register(liveStore({}), window)
+    const { getActiveLiveSessionForTest } = await import('./jarvis-ipc')
+    expect(getActiveLiveSessionForTest()).toBeNull()
+
+    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    expect(getActiveLiveSessionForTest()).toEqual({ ownerId: 7, sessionId: 's1' })
+
+    contents.emit('destroyed')
+    expect(getActiveLiveSessionForTest()).toBeNull()
   })
 })

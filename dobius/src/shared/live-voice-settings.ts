@@ -30,6 +30,13 @@ export type LiveVoiceSettings = {
  */
 export const OPENAI_LIVE_CALL_READY = false
 
+// Why typeof: saved settings can be hand-edited or damaged, and loading them
+// must never throw on a non-string agent id.
+function hasElevenLabsAgentId(voice: VoiceSettings | undefined): boolean {
+  const agentId: unknown = voice?.elevenlabsAgentId
+  return typeof agentId === 'string' && agentId.trim() !== ''
+}
+
 /**
  * The engine used before OpenAI Live existed, and the one the orb falls back
  * to when OpenAI Live cannot run: ElevenLabs live only with an agent id saved
@@ -38,8 +45,7 @@ export const OPENAI_LIVE_CALL_READY = false
 export function resolveFallbackVoiceEngine(
   voice: VoiceSettings | undefined
 ): Exclude<LiveVoiceEngine, 'openai-live'> {
-  const elevenLabsLive =
-    voice?.preferNativeAdamVoice === false && Boolean(voice.elevenlabsAgentId?.trim())
+  const elevenLabsLive = voice?.preferNativeAdamVoice === false && hasElevenLabsAgentId(voice)
   return elevenLabsLive ? 'elevenlabs' : 'hermes'
 }
 
@@ -71,7 +77,7 @@ export function resolveActiveVoiceEngine(
   if (chosen === 'openai-live') {
     return openAiLiveAvailable ? 'openai-live' : resolveFallbackVoiceEngine(voice)
   }
-  if (chosen === 'elevenlabs' && !voice?.elevenlabsAgentId?.trim()) {
+  if (chosen === 'elevenlabs' && !hasElevenLabsAgentId(voice)) {
     return 'hermes'
   }
   return chosen

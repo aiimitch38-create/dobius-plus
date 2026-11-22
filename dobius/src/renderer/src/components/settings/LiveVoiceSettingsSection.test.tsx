@@ -13,6 +13,24 @@ const liveSessionTest = vi.fn(
 
 let root: Root | null = null
 
+async function rerender(
+  voice: Partial<VoiceSettings>,
+  onUpdate: (updates: Partial<VoiceSettings>) => void = vi.fn(),
+  onOpenDialog: () => void = vi.fn(),
+  keyRevision = 0
+): Promise<void> {
+  await act(async () => {
+    root?.render(
+      <LiveVoiceSettingsSection
+        voiceSettings={{ ...getDefaultVoiceSettings(), ...voice }}
+        onUpdateVoiceSettings={onUpdate}
+        onOpenOpenAiDialog={onOpenDialog}
+        openAiKeyRevision={keyRevision}
+      />
+    )
+  })
+}
+
 async function render(
   voice: Partial<VoiceSettings>,
   onUpdate: (updates: Partial<VoiceSettings>) => void = vi.fn(),
@@ -22,15 +40,7 @@ async function render(
   const container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
-  await act(async () => {
-    root?.render(
-      <LiveVoiceSettingsSection
-        voiceSettings={{ ...getDefaultVoiceSettings(), ...voice }}
-        onUpdateVoiceSettings={onUpdate}
-        onOpenOpenAiDialog={onOpenDialog}
-      />
-    )
-  })
+  await rerender(voice, onUpdate, onOpenDialog)
   return container
 }
 
@@ -167,5 +177,49 @@ describe('LiveVoiceSettingsSection', () => {
     })
     await click(buttonNamed(container, 'Test connection'))
     expect(container.textContent).toContain('OpenAI did not accept the saved API key.')
+  })
+
+  it('says the spending cap is not enforced yet', async () => {
+    const container = await render({})
+    expect(container.textContent).toContain(
+      'Not enforced yet: the spending meter comes before live calls are turned on.'
+    )
+  })
+
+  it('clears the test result when the key is replaced or removed', async () => {
+    const container = await render({ openAiApiKeyConfigured: true })
+    await click(buttonNamed(container, 'Test connection'))
+    expect(container.textContent).toContain('Connected.')
+
+    // Replaced: still configured, only the revision moves.
+    await rerender({ openAiApiKeyConfigured: true }, vi.fn(), vi.fn(), 1)
+    expect(container.textContent).not.toContain('Connected.')
+
+    await click(buttonNamed(container, 'Test connection'))
+    expect(container.textContent).toContain('Connected.')
+    await rerender({ openAiApiKeyConfigured: false }, vi.fn(), vi.fn(), 2)
+    expect(container.textContent).not.toContain('Connected.')
+  })
+
+  it('ignores a test that finishes after the key changed', async () => {
+    let finish: (result: OpenAiLiveTestResult) => void = () => undefined
+    liveSessionTest.mockImplementationOnce(
+      () =>
+        new Promise<OpenAiLiveTestResult>((resolve) => {
+          finish = resolve
+        })
+    )
+    const container = await render({ openAiApiKeyConfigured: true })
+    await click(buttonNamed(container, 'Test connection'))
+    expect(buttonNamed(container, 'Testing').disabled).toBe(true)
+
+    await rerender({ openAiApiKeyConfigured: true }, vi.fn(), vi.fn(), 1)
+    expect(buttonNamed(container, 'Test connection').disabled).toBe(false)
+
+    await act(async () => {
+      finish({ ok: true, message: 'Connected with the old key.' })
+      await Promise.resolve()
+    })
+    expect(container.textContent).not.toContain('Connected with the old key.')
   })
 })

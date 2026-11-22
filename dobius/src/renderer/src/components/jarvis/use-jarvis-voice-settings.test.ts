@@ -31,6 +31,16 @@ describe('toJarvisVoiceFlags', () => {
     expect(flags.preferNativeAdamVoice).toBe(true)
   })
 
+  it('does not throw on a non-string agent id', () => {
+    const flags = toJarvisVoiceFlags({
+      ...getDefaultVoiceSettings(),
+      preferNativeAdamVoice: false,
+      elevenlabsAgentId: 42 as unknown as string
+    })
+    expect(flags.agentId).toBe('')
+    expect(flags.activeVoiceEngine).toBe('hermes')
+  })
+
   it('has safe values before settings load', () => {
     expect(toJarvisVoiceFlags(undefined)).toMatchObject({
       jarvisEnabled: false,

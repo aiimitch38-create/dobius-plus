@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   LIVE_VOICE_DAILY_CAP_MAX_USD,
   LIVE_VOICE_DAILY_CAP_MIN_USD,
@@ -26,6 +26,8 @@ type LiveVoiceSettingsSectionProps = {
   onUpdateVoiceSettings: (updates: Partial<VoiceSettings>) => void
   /** Opens the shared OpenAI key dialog owned by the Voice pane. */
   onOpenOpenAiDialog: () => void
+  /** Bumped by the Voice pane each time the OpenAI key is saved or removed. */
+  openAiKeyRevision: number
 }
 
 const ENGINES: { id: LiveVoiceEngine; label: string; hint: string }[] = [
@@ -65,7 +67,8 @@ const CHOICE_CLASS =
 export function LiveVoiceSettingsSection({
   voiceSettings,
   onUpdateVoiceSettings,
-  onOpenOpenAiDialog
+  onOpenOpenAiDialog,
+  openAiKeyRevision
 }: LiveVoiceSettingsSectionProps): React.JSX.Element {
   const live = resolveLiveVoiceSettings(voiceSettings)
   const activeEngine = resolveActiveVoiceEngine(voiceSettings)
@@ -84,10 +87,15 @@ export function LiveVoiceSettingsSection({
     setIdleDraft(String(live.idleTimeoutSec))
   }, [live.voice, live.dailyCapUsd, live.idleTimeoutSec])
 
-  // A result from the old key says nothing about a new or removed one.
+  // Why a run id: a result from the old key says nothing about a new or
+  // removed one, so a key change drops the shown result and makes any test
+  // still in flight land nowhere.
+  const testRunRef = useRef(0)
   useEffect(() => {
+    testRunRef.current += 1
     setTestResult(null)
-  }, [keySaved])
+    setTesting(false)
+  }, [keySaved, openAiKeyRevision])
 
   const chooseEngine = (engine: LiveVoiceEngine): void => {
     if (engine === 'openai-live') {
@@ -131,19 +139,24 @@ export function LiveVoiceSettingsSection({
   }
 
   const testConnection = async (): Promise<void> => {
+    const run = (testRunRef.current += 1)
     setTesting(true)
     setTestResult(null)
+    let result: OpenAiLiveTestResult
     try {
-      setTestResult(await window.api.jarvis.liveSessionTest())
+      result = await window.api.jarvis.liveSessionTest()
     } catch {
-      setTestResult({
+      result = {
         ok: false,
         kind: 'bad-response',
         error: 'The connection test could not run. Try again.'
-      })
-    } finally {
-      setTesting(false)
+      }
     }
+    if (run !== testRunRef.current) {
+      return
+    }
+    setTestResult(result)
+    setTesting(false)
   }
 
   const fallbackNote = ((): string | null => {
@@ -281,7 +294,7 @@ export function LiveVoiceSettingsSection({
             onBlur={commitCap}
           />
           <p className="text-xs text-muted-foreground">
-            Live voice stops for the day once it has cost this much.
+            Not enforced yet: the spending meter comes before live calls are turned on.
           </p>
         </div>
 

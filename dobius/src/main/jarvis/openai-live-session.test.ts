@@ -218,6 +218,30 @@ describe('createOpenAiLiveSession', () => {
     expect(result).toMatchObject({ ok: false, kind: 'timeout' })
   })
 
+  it('cancels an in-flight create when the caller aborts, and never starts one already aborted', async () => {
+    const controller = new AbortController()
+    const fetchImpl = vi.fn<typeof fetch>(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+        })
+    )
+    const pending = createOpenAiLiveSession(OFFER, OPTIONS, {
+      ...deps(fetchImpl),
+      signal: controller.signal
+    })
+    await Promise.resolve()
+    controller.abort()
+    expect(await pending).toMatchObject({ ok: false, kind: 'cancelled' })
+
+    const again = await createOpenAiLiveSession(OFFER, OPTIONS, {
+      ...deps(fetchImpl),
+      signal: controller.signal
+    })
+    expect(again).toMatchObject({ ok: false, kind: 'cancelled' })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
   it('reports a network failure without leaking the thrown text', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => {
       throw new TypeError(`fetch failed for Bearer ${KEY}`)

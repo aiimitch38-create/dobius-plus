@@ -11,10 +11,14 @@ import { SelfEditStore, selfEditRoots } from './self-edit'
 import { resolveSelfEditRepoRoot } from './self-edit-repo-root'
 import { closeSelfEditWindow, showSelfEditProposal } from '../window/self-edit-window'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
-import { createOpenAiLiveSession, testOpenAiLiveConnection } from './openai-live-session'
+import {
+  createOpenAiLiveSession,
+  liveVoiceFailure,
+  testOpenAiLiveConnection
+} from './openai-live-session'
 import type { OpenAiLiveSessionOptions } from './openai-live-session'
-import { resolveLiveVoiceSettings } from '../../shared/live-voice-settings'
-import type { OpenAiLiveSessionResult } from '../../shared/speech-types'
+import { OPENAI_LIVE_CALL_READY, resolveLiveVoiceSettings } from '../../shared/live-voice-settings'
+import type { OpenAiLiveFailure } from '../../shared/speech-types'
 import {
   clearElevenLabsApiKey,
   dropLegacyElevenLabsKeyFromSettings,
@@ -160,40 +164,109 @@ function liveSessionOptions(store: Store): OpenAiLiveSessionOptions {
 // Why one at a time: every created session starts billing, so a double click
 // or a retry loop in the window must not open several at once.
 let liveSessionInFlight = false
+let lastLiveSessionTestAt: number | null = null
+
+// Why spaced out: a test that OpenAI accepts opens a real, billed session and
+// there is no documented call to close it (see testOpenAiLiveConnection).
+export const LIVE_SESSION_TEST_MIN_INTERVAL_MS = 10_000
+
+/** The live session a window currently owns; dropped when that window goes away. */
+let activeLiveSession: { ownerId: number; sessionId: string | null } | null = null
+
+export function getActiveLiveSessionForTest(): typeof activeLiveSession {
+  return activeLiveSession
+}
+
+type LiveSender = Electron.WebContents
+
+// Why checked in main: any frame that can reach ipcRenderer could otherwise
+// start a billed call. Only the main window's top frame may.
+function trustedLiveSender(event: Electron.IpcMainInvokeEvent): LiveSender | null {
+  const host = jarvisHostWindow
+  if (!host || host.isDestroyed()) {
+    return null
+  }
+  const sender = event?.sender
+  if (!sender || sender !== host.webContents || sender.isDestroyed()) {
+    return null
+  }
+  return event.senderFrame && event.senderFrame === sender.mainFrame ? sender : null
+}
 
 async function runLiveSessionOnce<T>(
-  run: () => Promise<T>
-): Promise<T | Extract<OpenAiLiveSessionResult, { ok: false }>> {
+  sender: LiveSender,
+  run: (signal: AbortSignal) => Promise<T>
+): Promise<T | OpenAiLiveFailure> {
   if (liveSessionInFlight) {
-    return {
-      ok: false,
-      kind: 'busy',
-      error: 'A live voice connection is already being set up. Wait a moment and try again.'
-    }
+    return liveVoiceFailure('busy')
   }
   liveSessionInFlight = true
+  // Why: a create still in flight when its window closes would open a session
+  // nobody can use or hang up, so the request is aborted with the window.
+  const controller = new AbortController()
+  const abort = (): void => controller.abort()
+  sender.once('destroyed', abort)
   try {
-    return await run()
+    return await run(controller.signal)
   } finally {
+    sender.removeListener('destroyed', abort)
     liveSessionInFlight = false
   }
 }
 
 function registerLiveSessionHandlers(store: Store): void {
+  activeLiveSession = null
   ipcMain.removeHandler('jarvis:liveSessionConnect')
-  ipcMain.handle('jarvis:liveSessionConnect', (_event, payload: unknown) => {
+  ipcMain.handle('jarvis:liveSessionConnect', async (event, payload: unknown) => {
+    const sender = trustedLiveSender(event)
+    if (!sender) {
+      return liveVoiceFailure('not-allowed')
+    }
+    const live = resolveLiveVoiceSettings(store.getSettings().voice)
+    if (live.engine !== 'openai-live' || !OPENAI_LIVE_CALL_READY) {
+      return liveVoiceFailure('not-ready')
+    }
     const offerSdp =
       payload && typeof payload === 'object' && !Array.isArray(payload)
         ? (payload as { offerSdp?: unknown }).offerSdp
         : undefined
     // createOpenAiLiveSession validates the offer itself and reads the key.
-    return runLiveSessionOnce(() => createOpenAiLiveSession(offerSdp, liveSessionOptions(store)))
+    const result = await runLiveSessionOnce(sender, (signal) =>
+      createOpenAiLiveSession(offerSdp, liveSessionOptions(store), { signal })
+    )
+    if (result.ok && !sender.isDestroyed()) {
+      const ownerId = sender.id
+      activeLiveSession = { ownerId, sessionId: result.sessionId }
+      sender.once('destroyed', () => {
+        if (activeLiveSession?.ownerId === ownerId) {
+          activeLiveSession = null
+        }
+      })
+    }
+    return result
   })
 
   ipcMain.removeHandler('jarvis:liveSessionTest')
-  ipcMain.handle('jarvis:liveSessionTest', () =>
-    runLiveSessionOnce(() => testOpenAiLiveConnection(liveSessionOptions(store)))
-  )
+  ipcMain.handle('jarvis:liveSessionTest', async (event) => {
+    const sender = trustedLiveSender(event)
+    if (!sender) {
+      return liveVoiceFailure('not-allowed')
+    }
+    if (liveSessionInFlight) {
+      return liveVoiceFailure('busy')
+    }
+    const now = Date.now()
+    if (
+      lastLiveSessionTestAt !== null &&
+      now - lastLiveSessionTestAt < LIVE_SESSION_TEST_MIN_INTERVAL_MS
+    ) {
+      return liveVoiceFailure('too-soon')
+    }
+    lastLiveSessionTestAt = now
+    return runLiveSessionOnce(sender, (signal) =>
+      testOpenAiLiveConnection(liveSessionOptions(store), { signal })
+    )
+  })
 }
 
 function registerHandlers(store: Store, service: JarvisService): void {

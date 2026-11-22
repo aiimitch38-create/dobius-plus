@@ -29,7 +29,7 @@ export function toJarvisVoiceFlags(next: VoiceSettings | undefined): JarvisVoice
     jarvisEnabled: next?.jarvisEnabled === true,
     sttModel: next?.sttModel ?? '',
     jarvisWakeWord: next?.jarvisWakeWord === true,
-    agentId: next?.elevenlabsAgentId?.trim() ?? '',
+    agentId: typeof next?.elevenlabsAgentId === 'string' ? next.elevenlabsAgentId.trim() : '',
     preferNativeAdamVoice: activeVoiceEngine !== 'elevenlabs',
     liveVoice: resolveLiveVoiceSettings(next),
     activeVoiceEngine

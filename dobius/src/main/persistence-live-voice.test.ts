@@ -62,6 +62,15 @@ describe('Store live voice engine migration', () => {
     expect(voice?.liveVoiceEngine).toBe('elevenlabs')
   })
 
+  it('loads a damaged voice object without throwing', async () => {
+    const voice = await loadVoice({
+      preferNativeAdamVoice: false,
+      elevenlabsAgentId: 42,
+      liveVoiceEngine: { nope: true }
+    })
+    expect(voice?.liveVoiceEngine).toBe('openai-live')
+  })
+
   it('keeps an engine the user picked', async () => {
     expect((await loadVoice({ liveVoiceEngine: 'hermes' }))?.liveVoiceEngine).toBe('hermes')
   })

@@ -65,11 +65,18 @@ export type OpenAiLiveSessionDeps = {
   readKey?: () => string
   fetchImpl?: typeof fetch
   timeoutMs?: number
+  /** Aborts an in-flight create, for example when the requesting window closes. */
+  signal?: AbortSignal
 }
 
 const ERROR_TEXT: Record<OpenAiLiveErrorKind, string> = {
   'invalid-offer': 'The app sent a call setup request that is not valid. Try again.',
   busy: 'A live voice connection is already being set up. Wait a moment and try again.',
+  'not-allowed': 'Live voice can only be started from the main Dobius+ window.',
+  'not-ready':
+    'OpenAI Live is not switched on. Choose OpenAI Live as the voice engine in Settings, Voice.',
+  'too-soon': 'The connection was tested a moment ago. Wait a few seconds and try again.',
+  cancelled: 'The live voice connection was cancelled because its window closed.',
   'no-key': 'No OpenAI API key is saved yet. Add one in Settings, Voice.',
   'key-unreadable':
     'The saved OpenAI API key could not be read on this Mac. Save the key again in Settings, Voice.',
@@ -85,6 +92,10 @@ const ERROR_TEXT: Record<OpenAiLiveErrorKind, string> = {
   server: 'OpenAI had a problem on its side. Try again in a few minutes.',
   rejected: 'OpenAI turned the request down.',
   'bad-response': 'OpenAI answered in a way this app did not understand.'
+}
+
+export function liveVoiceFailure(kind: OpenAiLiveErrorKind): OpenAiLiveFailure {
+  return fail(kind)
 }
 
 function fail(kind: OpenAiLiveErrorKind, detail = ''): OpenAiLiveFailure {
@@ -245,6 +256,10 @@ export async function createOpenAiLiveSession(
   body.set(OPENAI_LIVE_API.offerField, offerSdp)
   body.set(OPENAI_LIVE_API.sessionField, JSON.stringify(buildSessionConfig(options)))
 
+  if (deps.signal?.aborted) {
+    return fail('cancelled')
+  }
+  const timeoutSignal = AbortSignal.timeout(deps.timeoutMs ?? OPENAI_LIVE_REQUEST_TIMEOUT_MS)
   let response: Response
   let raw: string
   try {
@@ -252,12 +267,13 @@ export async function createOpenAiLiveSession(
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}` },
       body,
-      signal: AbortSignal.timeout(deps.timeoutMs ?? OPENAI_LIVE_REQUEST_TIMEOUT_MS)
+      signal: deps.signal ? AbortSignal.any([timeoutSignal, deps.signal]) : timeoutSignal
     })
     raw = await response.text()
   } catch (error) {
     const name = error instanceof Error ? error.name : ''
-    const kind = name === 'TimeoutError' || name === 'AbortError' ? 'timeout' : 'network'
+    const timedOut = name === 'TimeoutError' || name === 'AbortError'
+    const kind = deps.signal?.aborted ? 'cancelled' : timedOut ? 'timeout' : 'network'
     logFailure(kind)
     return fail(kind)
   }
@@ -301,6 +317,9 @@ export async function testOpenAiLiveConnection(
 ): Promise<OpenAiLiveTestResult> {
   const result = await createOpenAiLiveSession(TEST_OFFER_SDP, options, deps)
   if (result.ok) {
+    // UNVERIFIED: the design doc documents no call to close or terminate a
+    // Live session, so a session this test opens is left to end on its own
+    // (no audio ever connects). The caller rate-limits tests for that reason.
     return {
       ok: true,
       message: 'Connected. OpenAI accepted the key and opened a live voice session.'
