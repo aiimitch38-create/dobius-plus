@@ -1,4 +1,5 @@
 /* eslint-disable max-lines */
+import type { WhatsNewState } from './whats-new'
 import type { ExecutionHostId } from './execution-host'
 import type { SshRemotePtyLease, SshTarget } from './ssh-types'
 import type { Automation, AutomationExecutionTargetType, AutomationRun } from './automations-types'
@@ -3574,6 +3575,8 @@ export type PersistedState = {
   onboarding: OnboardingState
   /** Main-owned telemetry de-dupe marker; never exposed through PersistedUIState. */
   featureInteractionTelemetryBuckets?: FeatureInteractionTelemetryBucketState
+  /** Main-owned: the last version whose What's new notes were shown. */
+  whatsNew?: WhatsNewState
 }
 
 // ─── Filesystem ─────────────────────────────────────────────

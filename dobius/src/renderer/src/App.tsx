@@ -26,6 +26,7 @@ import { useSystemPrefersDark } from './components/terminal-pane/use-system-pref
 import { useFloatingTerminalOpenState } from './hooks/useFloatingTerminalOpenState'
 import { WorkspacePortScanner } from './components/ports/WorkspacePortScanner'
 import { ConfirmationDialogProvider } from './components/confirmation-dialog'
+import { WhatsNewDialog } from './components/WhatsNewDialog'
 import { LinkRoutingPreferenceDialogProvider } from './components/link-routing-preference-dialog'
 import { useGitStatusPolling } from './components/right-sidebar/useGitStatusPolling'
 import { useEditorExternalWatch } from './hooks/useEditorExternalWatch'
@@ -514,6 +515,9 @@ function App(): React.JSX.Element {
               beginOnboardingSettingsDetour={beginOnboardingSettingsDetour}
               shouldMountDictationController={shouldMountDictationController}
             />
+            {/* Why gated: the one-time What's new popup waits for the session
+            to restore and stays out of the way of first-run onboarding. */}
+            <WhatsNewDialog enabled={workspaceSessionReady && !shouldRenderOnboarding} />
             {/* Why: the Board/Home layers sit over the Classic shell; an opaque
             Board-colored cover (not null) fills their Suspense gap and the
             startup window before the session hydrates, so Classic never paints. */}

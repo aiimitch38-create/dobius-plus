@@ -1,3 +1,4 @@
+import type { WhatsNewPayload, WhatsNewSection } from '../shared/whats-new'
 import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
 import type {
   RuntimeBoardOpenWebTileEvent,
@@ -2490,6 +2491,14 @@ export type PreloadApi = {
     dismissNudge: () => Promise<void>
     onStatus: (callback: (status: UpdateStatus) => void) => () => void
     onClearDismissal: (callback: () => void) => () => void
+  }
+  whatsNew: {
+    /** Notes to show once after an update, newest version first, or null. */
+    getPending: () => Promise<WhatsNewPayload | null>
+    /** Marks the running version's notes as read so they never show again. */
+    dismiss: () => Promise<void>
+    /** The running version's notes for the Updates settings page, or null. */
+    getCurrent: () => Promise<WhatsNewSection | null>
   }
   notebook: {
     runPythonCell: (args: {
