@@ -28,6 +28,7 @@ import {
   type AgentResumeOwner
 } from '../../shared/agent-resume-owner'
 import { mainProcessAgentResumeClaims } from '../pty/agent-resume-claims'
+import { isSnoozedTabResumeOwner } from '../tab-snooze'
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
 import {
   isWslShellName,
@@ -1386,6 +1387,11 @@ export function registerPtyHandlers(
     owner: AgentResumeOwner,
     allowClaimedOwnerAfterRecordClear = false
   ): boolean => {
+    // Why: a snoozed tab's layout and sleeping record left the session when it
+    // closed; main's snooze list is the persisted owner for its return.
+    if (isSnoozedTabResumeOwner(owner)) {
+      return true
+    }
     const session = store?.getWorkspaceSession()
     const saved = session?.sleepingAgentSessionsByPaneKey?.[owner.paneKey]
     const layoutPtyId =
@@ -3877,16 +3883,13 @@ export function registerPtyHandlers(
     }
   })
 
-  ipcMain.handle(
-    'pty:hasChildProcesses',
-    async (event, args: { id: string }): Promise<boolean> => {
-      assertTrustedPtySender(event)
-      if (!hasPtyProviderForInspection(args.id)) {
-        return false
-      }
-      return getProviderForPty(args.id).hasChildProcesses(args.id)
+  ipcMain.handle('pty:hasChildProcesses', async (event, args: { id: string }): Promise<boolean> => {
+    assertTrustedPtySender(event)
+    if (!hasPtyProviderForInspection(args.id)) {
+      return false
     }
-  )
+    return getProviderForPty(args.id).hasChildProcesses(args.id)
+  })
 
   ipcMain.handle(
     'pty:getForegroundProcess',

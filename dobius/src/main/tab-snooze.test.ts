@@ -308,6 +308,8 @@ describe('tab snooze service', () => {
     const [entry] = h.service.list()
     expect(entry).toMatchObject({ ready: true, returnTabId: 'tab-new' })
     expect(entry.returning).toBeUndefined()
+    // The retry reuses the tab the first attempt made.
+    expect(h.service.take(ref, { returnTabId: 'tab-other' })?.entry.returnTabId).toBe('tab-new')
     h.service.stop()
   })
 

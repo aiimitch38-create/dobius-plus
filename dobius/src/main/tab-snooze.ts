@@ -174,7 +174,9 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
       const taken = cleanSnoozedTabEntry({
         ...entry,
         returning: true,
-        returnTabId: options.returnTabId ?? entry.returnTabId
+        // Why the saved id first: a retry after a quit reuses the tab the
+        // first attempt already made.
+        returnTabId: entry.returnTabId ?? options.returnTabId
       })
       if (!taken) {
         return null

@@ -128,4 +128,27 @@ describe('main-process agent resume claims', () => {
     expect(claims.finishSpawn(claim.token, true)).toBe(true)
     expect(claims.claim(duplicateOwner)).toEqual({ ok: false })
   })
+
+  it('lets a snoozed tab claim its session again after its return was resumed once', () => {
+    const claims = createAgentResumeClaims()
+    const first = claims.claim(owner)
+    expect(first.ok).toBe(true)
+    if (!first.ok) {
+      return
+    }
+    // In flight (reserved, then spawning): snoozing cannot free it.
+    expect(claims.forgetStarted(owner)).toBe(false)
+    expect(claims.beginSpawn(first.token, owner, first.target)).toBe(true)
+    expect(claims.forgetStarted(owner)).toBe(false)
+    expect(claims.finishSpawn(first.token, true)).toBe(true)
+
+    // Started: a second resume of the same session is refused...
+    const returnedOwner = { ...owner, ptyId: 'pty-returned', launchToken: 'launch-returned' }
+    expect(claims.claim(returnedOwner)).toEqual({ ok: false })
+    // ...until the tab that runs it is snoozed, which stops its terminal.
+    expect(claims.forgetStarted(returnedOwner)).toBe(true)
+    expect(claims.claim(returnedOwner).ok).toBe(true)
+    // Still one consumer at a time.
+    expect(claims.claim(duplicateOwner)).toEqual({ ok: false })
+  })
 })

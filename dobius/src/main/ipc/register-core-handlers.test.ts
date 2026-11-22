@@ -358,6 +358,8 @@ vi.mock('./minimax-credentials', () => ({
   registerMiniMaxCredentialsHandlers: registerMiniMaxCredentialsHandlersMock
 }))
 
+vi.mock('./tab-snooze', () => ({ registerTabSnoozeHandlers: vi.fn() }))
+
 vi.mock('../window/attach-main-window-services', () => ({
   registerUpdaterHandlers: registerUpdaterHandlersMock
 }))

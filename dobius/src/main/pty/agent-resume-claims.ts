@@ -118,6 +118,23 @@ export function createAgentResumeClaims(createToken: () => string = randomUUID) 
       return true
     },
 
+    /**
+     * A snoozed tab gave its conversation up: its terminal is closing, so a
+     * finished claim for that session no longer describes anything running
+     * and the tab's return may claim it again. In-flight claims are untouched.
+     */
+    forgetStarted(owner: AgentResumeOwner): boolean {
+      const validatedOwner = parseAgentResumeOwner(owner)
+      if (!validatedOwner) {
+        return false
+      }
+      const key = getAgentResumeClaimKey(validatedOwner)
+      if (claimsBySession.get(key)?.state !== 'started') {
+        return false
+      }
+      return claimsBySession.delete(key)
+    },
+
     size(): number {
       return claimsBySession.size
     }
