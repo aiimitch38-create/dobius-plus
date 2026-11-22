@@ -14,16 +14,17 @@ export const PREFLIGHT_GATHER_MS = 1000
 
 const MAX_LESSONS = 5
 const LESSON_HEAD_CHARS = 80
-const LESSON_LINE_CHARS = 160
 const LESSONS_SECTION_CHARS = 1200
 const LESSONS_FILE_MAX_BYTES = 1024 * 1024
 const MAX_MCP_NAMES = 20
 const MCP_JSON_MAX_BYTES = 1024 * 1024
 const CLAUDE_JSON_MAX_BYTES = 8 * 1024 * 1024
 
+// Headings only. Why: CLAUDE.local.md is loaded into every session here
+// automatically, so lesson bodies (free text, possibly instructions) stay out.
 export type LessonsDigest = {
   count: number
-  latest: { head: string; first: string }[]
+  latest: { head: string }[]
 }
 
 export type McpNames = { names: string[]; more: number }
@@ -84,10 +85,10 @@ const SECRET_PATTERNS: RegExp[] = [
 // without lookaheads so the scan stays linear.
 const OPAQUE_RUN = /[A-Za-z0-9+=_]{32,}/g
 
-// `KEY=value`, `"password": "a b c"`, `export TOKEN='x y'`: the value goes,
-// quoted values whole.
+// `KEY=value`, `"password": "a \"b\" c"`, `export TOKEN='x y'`: the value
+// goes, quoted values whole including escaped quotes inside them.
 const CREDENTIAL_ASSIGNMENT =
-  /["']?\b([A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL)[A-Za-z0-9_]*)\b["']?\s*[=:]\s*(?:"[^"]*"?|'[^']*'?|\S+)/gi
+  /\\?["']?\b([A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL)[A-Za-z0-9_]*)\b\\?["']?\s*[=:]\s*(?:\\?"(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|\S+)/gi
 
 // Text longer than this is cut before any pattern runs, so a huge line can
 // never stall the main thread.
@@ -125,13 +126,8 @@ export function digestLessons(text: string): LessonsDigest {
     .slice(-MAX_LESSONS)
     .reverse()
     .map((entry) => {
-      const [head, ...body] = entry.split('\n')
-      const first =
-        body.map((line) => line.trim()).find((line) => line && !line.startsWith('<!--')) ?? ''
-      return {
-        head: oneLine(redactSecrets(head.replace(/^#+\s*/, '')), LESSON_HEAD_CHARS),
-        first: oneLine(redactSecrets(first.replace(/^[-*]\s*/, '')), LESSON_LINE_CHARS)
-      }
+      const head = entry.slice(0, entry.indexOf('\n') === -1 ? undefined : entry.indexOf('\n'))
+      return { head: oneLine(redactSecrets(head.replace(/^#+\s*/, '')), LESSON_HEAD_CHARS) }
     })
   return { count: entries.length, latest }
 }
@@ -220,7 +216,10 @@ export function createMcpNameReader(homeDir?: string) {
       ...serverNames(claudeJson),
       ...serverNames(projectEntry)
     ])
-    const plain = [...all].filter((name) => SAFE_MCP_NAME.test(name)).sort()
+    // Why: a server named after a key would carry the key; such names are dropped.
+    const plain = [...all]
+      .filter((name) => SAFE_MCP_NAME.test(name) && redactSecrets(name) === name)
+      .sort()
     const names = plain.slice(0, MAX_MCP_NAMES)
     return { names, more: all.size - names.length }
   }
@@ -310,11 +309,11 @@ function lessonsLines(lessons: WorkspacePreflight['lessons']): string[] {
     return ['- Lessons: `LESSONS-LEARNED.md` is too large to digest here; read it before building.']
   }
   const lines = [
-    `- Lessons: \`LESSONS-LEARNED.md\` has ${lessons.count} entr${lessons.count === 1 ? 'y' : 'ies'}; read it before building. Newest first, quoted as data:`
+    `- Lessons: \`LESSONS-LEARNED.md\` has ${lessons.count} entr${lessons.count === 1 ? 'y' : 'ies'}; read it before building. Newest headings, quoted as data:`
   ]
   let used = 0
   for (const lesson of lessons.latest) {
-    const line = `  - ${quoteUntrusted(lesson.head)}${lesson.first ? `: ${quoteUntrusted(lesson.first)}` : ''}`
+    const line = `  - ${quoteUntrusted(lesson.head)}`
     if (used + line.length > LESSONS_SECTION_CHARS) {
       break
     }

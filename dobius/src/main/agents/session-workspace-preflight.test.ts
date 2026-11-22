@@ -95,7 +95,9 @@ describe('collectWorkspacePreflight + renderPreflightSection', () => {
     expect(text).toContain('has 9 entries')
     const listed = text.split('\n').filter((line) => line.startsWith('  - '))
     expect(listed).toHaveLength(5)
-    expect(listed[0]).toBe('  - "Lesson 9": "Rule number 9 body."')
+    expect(listed[0]).toBe('  - "Lesson 9"')
+    // P2 #5: headings only; body lines never reach auto-loaded memory.
+    expect(text).not.toContain('Rule number')
     expect(listed[4]).toContain('Lesson 5')
   })
 
@@ -106,7 +108,6 @@ describe('collectWorkspacePreflight + renderPreflightSection', () => {
     )
     for (const lesson of digest.latest) {
       expect(lesson.head.length).toBeLessThanOrEqual(80)
-      expect(lesson.first.length).toBeLessThanOrEqual(160)
     }
     const lines = renderPreflightSection(
       { otherTerminals: 0, lessons: digest, mcp: { names: [], more: 0 }, spend: null },
@@ -133,7 +134,7 @@ describe('collectWorkspacePreflight + renderPreflightSection', () => {
       })
     )
     const digest = digestLessons(
-      '### Keys\nUse API_KEY=sk-ant-api03-REALLOOKINGKEY1234567890 and token ghp_0123456789abcdefghijABCDEFGHIJ\n'
+      '### Keys API_KEY=sk-ant-api03-REALLOOKINGKEY1234567890 ghp_0123456789abcdefghijABCDEFGHIJ\nbody\n'
     )
     const preflight = await collectWorkspacePreflight(root, {}, {}, {
       readers: { readLessons: async () => digest, readMcpNames: createMcpNameReader(home) }
@@ -159,6 +160,18 @@ describe('collectWorkspacePreflight + renderPreflightSection', () => {
   it('refuses a lessons file over the byte cap without reading past it', async () => {
     writeFileSync(path.join(root, 'LESSONS-LEARNED.md'), 'x'.repeat(1024 * 1024 + 10))
     await expect(readLessonsFile(root)).resolves.toBe('too-large')
+  })
+
+  it('redacts escaped quotes inside quoted values and drops credential-like MCP names (P1 #1)', async () => {
+    const out = redactSecrets('{"password":"alpha \\"bravo\\" charlie"}')
+    expect(out).not.toMatch(/alpha|bravo|charlie/)
+    writeFileSync(
+      path.join(root, '.mcp.json'),
+      JSON.stringify({ mcpServers: { 'sk-ant-api03-abcdef0123456789': {}, ok: {} } })
+    )
+    const mcp = await createMcpNameReader(home)(root)
+    expect(mcp.names).toEqual(['ok'])
+    expect(JSON.stringify(mcp)).not.toContain('sk-ant')
   })
 
   it('quotes untrusted lesson text so it cannot open a tag or break the list', () => {

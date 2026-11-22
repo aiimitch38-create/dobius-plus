@@ -1,6 +1,7 @@
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import {
   existsSync,
+  renameSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -20,6 +21,23 @@ const control = vi.hoisted(() => ({
     detail: null as string | null
   }
 }))
+
+// Passthrough spies: lets tests prove the brief path does no sync I/O on the
+// brief file and no git work for a fresh brief.
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...actual,
+    default: actual,
+    readFileSync: vi.fn(actual.readFileSync),
+    writeFileSync: vi.fn(actual.writeFileSync),
+    renameSync: vi.fn(actual.renameSync)
+  }
+})
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>()
+  return { ...actual, default: actual, execFile: vi.fn(actual.execFile) }
+})
 
 vi.mock('./agents-config-store', () => ({
   getAgentsControlState: () => ({ ...control.state, filePath: '/data/agents-config.json' })
@@ -459,7 +477,8 @@ describe('primeTerminalWorkspaceBrief (agent pre-flight primer)', () => {
     expect(text).toContain('Upstream as of 2026-09-25T12:00:00.000Z: none (this branch tracks no remote branch)')
     expect(text).toContain('## Pre-flight')
     expect(text).toContain('Other Dobius+ terminals in this worktree: 2 when this brief was written.')
-    expect(text).toContain('  - "Never trim porcelain": "The first column is the index."')
+    expect(text).toContain('  - "Never trim porcelain"')
+    expect(text).not.toContain('The first column is the index.')
     expect(text).toContain('(names only): `playwright`.')
     expect(text).toContain('about $1.50 over 3 session(s)')
     expect(text).not.toContain('sk-live')
@@ -554,5 +573,58 @@ describe('primeTerminalWorkspaceBrief (agent pre-flight primer)', () => {
       primeTerminalWorkspaceBrief(plain, 'w', { ...LONG_WAIT, deps })
     ).resolves.toEqual({ status: 'skipped', reason: 'not-a-git-worktree' })
     expect(existsSync(path.join(plain, 'CLAUDE.local.md'))).toBe(false)
+  })
+})
+
+describe('workspace brief Codex round 2', () => {
+  it('never reads or publishes the brief with synchronous fs calls (P2 #2)', async () => {
+    const repo = makeRepo()
+    await refreshSessionWorkspaceBrief(repo, noAdam)
+    const brief = briefPath(repo)
+    vi.mocked(readFileSync).mockClear()
+    vi.mocked(writeFileSync).mockClear()
+    vi.mocked(renameSync).mockClear()
+
+    await expect(refreshSessionWorkspaceBrief(repo, noAdam)).resolves.toMatchObject({
+      status: 'written'
+    })
+
+    const touchesBrief = (call: unknown[]) => String(call[0]).startsWith(brief) || String(call[1]).startsWith(brief)
+    expect(vi.mocked(readFileSync).mock.calls.filter(touchesBrief)).toEqual([])
+    expect(vi.mocked(writeFileSync).mock.calls.filter((c) => String(c[0]).startsWith(path.dirname(brief) + path.sep + 'CLAUDE.local.md'))).toEqual([])
+    expect(vi.mocked(renameSync).mock.calls.filter(touchesBrief)).toEqual([])
+  })
+
+  it('rechecks tracked/ignored right before writing (P2 #3)', async () => {
+    const repo = makeRepo()
+    await refreshSessionWorkspaceBrief(repo, noAdam)
+    const before = readFileSync(briefPath(repo), 'utf-8')
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const deps: SessionWorkspaceBriefDeps = {
+      contextPack: async () => {
+        // Someone starts tracking the brief while facts are collected.
+        git(repo, 'add', '-f', 'CLAUDE.local.md')
+        return null
+      },
+      now: () => new Date(FIXED_NOW.getTime() + 1000)
+    }
+
+    await expect(refreshSessionWorkspaceBrief(repo, deps)).resolves.toMatchObject({
+      status: 'skipped',
+      reason: 'not-ignorable'
+    })
+    expect(readFileSync(briefPath(repo), 'utf-8')).toBe(before)
+  })
+
+  it('costs no git at all for a brief still inside its TTL (P2 #4)', async () => {
+    const repo = makeRepo()
+    await scheduleSessionWorkspaceBriefRefresh(repo, noAdam)
+    vi.mocked(execFile).mockClear()
+
+    await expect(scheduleSessionWorkspaceBriefRefresh(repo, noAdam)).resolves.toEqual({
+      status: 'skipped',
+      reason: 'recently-refreshed'
+    })
+    expect(vi.mocked(execFile)).not.toHaveBeenCalled()
   })
 })
