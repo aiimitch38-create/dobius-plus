@@ -27,6 +27,11 @@ export const AGENT_RPC_METHOD_ALLOWLIST: ReadonlySet<string> = new Set([
   'board.listConsoles',
   'board.resolveConsole',
   'board.agentState',
+  // `dobius board list`: read-only card list. Card actions stay full-key only.
+  'board.listCards',
+  // `dobius board snapshots list|read`: read-only. Capture writes a file, so it is full-key only.
+  'board.snapshotList',
+  'board.snapshotRead',
   // Crew: only whether it is paused. Decisions and drafts hold tool inputs and
   // Asana text; every crew change stays full-key only.
   'crew.state',
@@ -62,7 +67,15 @@ export const AGENT_RPC_METHOD_ALLOWLIST: ReadonlySet<string> = new Set([
   'worktree.show',
   'worktree.ps',
   'repo.list',
-  'project.list'
+  'project.list',
+  // App facts with no secrets (`dobius version`, `update status`, `imessage
+  // status`, `usage`, `limits`). imessage.status hides Carson's own handle
+  // from this key, and usage.rateLimits may not force a provider refresh.
+  'app.version',
+  'app.updateStatus',
+  'imessage.status',
+  'usage.summary',
+  'usage.rateLimits'
 ])
 
 const OUTSIDE_DOBIUS_HINT =
@@ -81,6 +94,11 @@ export function agentRpcDenial(method: string, params: unknown): string | null {
   // Why: --inject types the preamble plus Enter in one write after a one-time
   // agent check, so a terminal whose agent just exited would run it as shell
   // input. Agents dispatch without --inject; the worker picks the task up.
+  // Why: a refresh calls every provider's usage endpoint; a looping agent must
+  // not be able to hammer them (or get Carson's accounts rate-limited).
+  if (method === 'usage.rateLimits' && isSet(params, 'refresh')) {
+    return `'usage.rateLimits --refresh' is not allowed with the agent key; read the cached limits instead.`
+  }
   if (method === 'orchestration.dispatch' && isSet(params, 'inject')) {
     return `'orchestration.dispatch --inject' is not allowed with the agent key; dispatch without --inject.`
   }

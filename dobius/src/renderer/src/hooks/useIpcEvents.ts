@@ -3,6 +3,8 @@ import { openMobileResourceInStore } from './mobile-resource-open'
 import { BOARD_ZOOM_EVENT } from '@/components/board/board-zoom-event'
 import { handleBoardSpawnConsoleEvent } from '@/components/board/board-links/board-spawn-console-event'
 import { handleBoardOpenWebTileEvent } from '@/components/board/board-links/board-open-web-tile-event'
+import { handleBoardCardActionEvent } from '@/components/board/board-links/board-card-action-event'
+import { handleTabSnoozeCliEvent } from '@/lib/tab-snooze/snooze-tab-cli-event'
 import { handleAgentCursorEvent } from '@/components/board/agent-presence/agent-cursor-inbox'
 import { useEffect } from 'react'
 import { toast } from 'sonner'
@@ -1390,6 +1392,18 @@ export function useIpcEvents(): void {
             ? { requestId: event.requestId, cardId: result.cardId }
             : { requestId: event.requestId, error: `open-tile ${result.outcome}` }
         )
+      })
+    )
+
+    // `dobius board restart|rename|note|close` and `dobius tabs snooze`: act, then answer once.
+    unsubs.push(
+      window.api.ui.onBoardCardAction((event) => {
+        void handleBoardCardActionEvent(event).then(window.api.ui.replyBoardCardAction)
+      })
+    )
+    unsubs.push(
+      window.api.ui.onTabSnoozeRequest((event) => {
+        void handleTabSnoozeCliEvent(event).then(window.api.ui.replyTabSnoozeRequest)
       })
     )
 

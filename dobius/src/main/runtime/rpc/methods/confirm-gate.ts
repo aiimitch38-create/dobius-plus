@@ -99,6 +99,22 @@ export function createConfirmationGate(
   }
 }
 
+/**
+ * True when text holds a character the dialog would not show (control,
+ * format, bidi, zero-width, tag, line/paragraph separator), apart from
+ * newline and tab. Why: the dialog strips them, so text that acts with them
+ * would differ from what the human approved; such text is refused instead.
+ */
+export function hasHiddenCharacters(value: string): boolean {
+  return Array.from(value).some(
+    (character) =>
+      character !== '\n' && character !== '\t' && /[\p{Cc}\p{Cf}\u2028\u2029]/u.test(character)
+  )
+}
+
+export const HIDDEN_CHARACTERS_MESSAGE =
+  'Text has hidden or control characters; remove them and send it again'
+
 // Collapses whitespace and removes control characters so the dialog shows
 // what will run. Refuses text too long to show in full.
 export function confirmText(value: string, what: string): string {

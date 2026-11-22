@@ -183,4 +183,20 @@ describe('runTabSnooze', () => {
     await runTabSnooze(h.deps, 'tab-1', null)
     expect(h.requests[0].agentSession).toBeNull()
   })
+
+  it('a second snooze of the same tab while the first is saving is refused, so the saved entry is never discarded', async () => {
+    let release: () => void = () => {}
+    const h = harness({ onAdd: () => undefined })
+    const add = h.deps.api!.add
+    h.deps.api!.add = async (request) => {
+      await new Promise<void>((resolve) => (release = resolve))
+      return add(request)
+    }
+    const first = runTabSnooze(h.deps, 'tab-1', null)
+    expect(await runTabSnooze(h.deps, 'tab-1', null)).toBe('in-progress')
+    release()
+    expect(await first).toBe('snoozed')
+    expect(h.discard).not.toHaveBeenCalled()
+    expect(h.requests).toHaveLength(1)
+  })
 })

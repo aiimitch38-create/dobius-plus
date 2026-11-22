@@ -102,3 +102,19 @@ export function shouldRecoverRendererAfterProcessGone({
   }
   return !(reason === 'killed' && expectedTeardown === 'renderer-reload')
 }
+
+/**
+ * Why: a GPU process that dies takes every window's drawing with it until
+ * Chromium starts a new one, and a window can stay blank after that (Line A
+ * #27). A repaint of each window is cheap and reloads nothing, so running work
+ * is never interrupted on a guess. A clean exit is Chromium shutting down.
+ */
+export function shouldRepaintWindowsAfterGpuGone({
+  processType,
+  reason
+}: {
+  processType?: string
+  reason: string
+}): boolean {
+  return processType?.toLowerCase() === 'gpu' && reason !== 'clean-exit'
+}

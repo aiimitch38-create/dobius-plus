@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- Why: this file is the central main-window IPC wiring point; splitting it during the mobile release compatibility rebase would increase release risk. */
+import { setUpdateStatusReader } from '../updater-status-access'
 import { randomUUID } from 'node:crypto'
 
 import { app, ipcMain } from 'electron'
@@ -21,6 +22,9 @@ import { browserManager } from '../browser/browser-manager'
 import { agentPresenceRegistry } from '../agents/agent-presence-registry'
 import { consoleTileBindings } from '../agents/console-tile-bindings'
 import { assertBoardWindowSender } from './board-ipc-sender-guard'
+import { requestRendererReply } from './renderer-reply-request'
+import type { BoardCardActionReply } from '../../shared/board-card-actions'
+import type { TabSnoozeCliReply } from '../../shared/tab-snooze-cli'
 import { hasSystemMediaAccess, requestSystemMediaAccess } from '../browser/browser-media-access'
 import type { DobiusRuntimeService } from '../runtime/dobius-runtime'
 import {
@@ -56,6 +60,31 @@ import { registerFloatingPhoneWindowHandlers } from './floating-phone-window'
 import { registerJarvisIpcHandlers } from '../jarvis/jarvis-ipc'
 
 const UPDATER_SETUP_FALLBACK_MS = 15_000
+
+// `dobius board restart|...` and `dobius tabs snooze` wait this long for the window's answer.
+const CLI_WINDOW_REPLY_TIMEOUT_MS = 15_000
+
+function parseCliWindowReply<T>(raw: unknown): T | null {
+  if (!raw || typeof raw !== 'object') {
+    return null
+  }
+  const reply = raw as { requestId?: unknown; ok?: unknown; message?: unknown; code?: unknown }
+  if (typeof reply.requestId !== 'string' || typeof reply.ok !== 'boolean') {
+    return null
+  }
+  if (!reply.ok && (typeof reply.code !== 'string' || typeof reply.message !== 'string')) {
+    return null
+  }
+  return raw as T
+}
+
+function cliWindowFailureText(reason: 'timeout' | 'unavailable' | 'busy'): string {
+  return reason === 'timeout'
+    ? 'The Dobius+ window did not answer in time. It may still finish; check before trying again.'
+    : reason === 'busy'
+      ? 'The Dobius+ window is handling too many requests. Try again in a moment.'
+      : 'The Dobius+ window is not open.'
+}
 
 // Why: updater setup is deferred past first paint, but a manual check (app
 // menu or updater:check IPC) can arrive inside that window — it must run
@@ -356,6 +385,38 @@ function registerRuntimeWindowLifecycle(
         ipcMain.on('board:openWebTileReply', handler)
         send('ui:boardOpenWebTile', event)
       }),
+    boardCardAction: (event) =>
+      requestRendererReply<BoardCardActionReply>({
+        ipc: ipcMain,
+        mainWindow,
+        sendChannel: 'ui:boardCardAction',
+        replyChannel: 'board:cardActionReply',
+        event,
+        timeoutMs: CLI_WINDOW_REPLY_TIMEOUT_MS,
+        parseReply: parseCliWindowReply<BoardCardActionReply>,
+        failure: (reason) => ({
+          requestId: event.requestId,
+          ok: false,
+          code: reason === 'timeout' ? 'board_card_action_failed' : 'board_window_unavailable',
+          message: cliWindowFailureText(reason)
+        })
+      }),
+    tabSnoozeRequest: (event) =>
+      requestRendererReply<TabSnoozeCliReply>({
+        ipc: ipcMain,
+        mainWindow,
+        sendChannel: 'ui:tabSnoozeRequest',
+        replyChannel: 'tabSnooze:cliReply',
+        event,
+        timeoutMs: CLI_WINDOW_REPLY_TIMEOUT_MS,
+        parseReply: parseCliWindowReply<TabSnoozeCliReply>,
+        failure: (reason) => ({
+          requestId: event.requestId,
+          ok: false,
+          code: reason === 'timeout' ? 'tab_snooze_refused' : 'tab_snooze_unavailable',
+          message: cliWindowFailureText(reason)
+        })
+      }),
     createTerminal: (worktreeId, opts) =>
       send('ui:createTerminal', {
         worktreeId,
@@ -519,6 +580,7 @@ export function registerUpdaterHandlers(store: Store): void {
   // Why here: the What's new popup is part of the update flow, and this is the
   // one updater entry point that already receives the store.
   registerWhatsNewHandlers(store)
+  setUpdateStatusReader(getUpdateStatus)
   ipcMain.removeHandler('updater:getStatus')
   ipcMain.removeHandler('updater:getVersion')
   ipcMain.removeHandler('updater:check')

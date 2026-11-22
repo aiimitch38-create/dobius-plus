@@ -83,13 +83,22 @@ export class BoardSnapshotService {
     return key
   }
 
-  /** Autosaves one board unless it is empty or unchanged since the last autosave. */
-  capture(worktreeId: string, board: unknown, reason: BoardSnapshotReason): boolean {
+  /**
+   * Autosaves one board unless it is empty or unchanged since the last autosave.
+   * `skipUnchanged` holds a manual save to the same rule; `dobius board
+   * snapshots capture` uses it so a repeated call cannot prune older history.
+   */
+  capture(
+    worktreeId: string,
+    board: unknown,
+    reason: BoardSnapshotReason,
+    options: { skipUnchanged?: boolean } = {}
+  ): boolean {
     if (!isSnapshotWorthy(board)) {
       return false
     }
     const key = boardContentKey(board)
-    if (reason !== 'manual' && this.latestKey(worktreeId) === key) {
+    if ((reason !== 'manual' || options.skipUnchanged) && this.latestKey(worktreeId) === key) {
       return false
     }
     const dir = this.folder(worktreeId)

@@ -18,12 +18,19 @@ import { LINEAR_COMMAND_SPECS } from './linear'
 import { VM_COMMAND_SPECS } from './vm'
 import { TASK_COMMAND_SPECS } from './tasks'
 import { BOARD_COMMAND_SPECS } from './board'
+import { BOARD_CARD_COMMAND_SPECS } from './board-cards'
+import { BOARD_SNAPSHOT_COMMAND_SPECS } from './board-snapshots'
+import { TABS_SNOOZE_COMMAND_SPECS } from './tabs-snooze'
 import { LEAD_COMMAND_SPECS } from './lead'
 import { TABS_COMMAND_SPECS } from './tabs'
 import { SYSTEM_COMMAND_SPECS } from './system'
 import { CREW_COMMAND_SPECS } from './crew'
 import { GIT_COMMAND_SPECS } from './git'
 import { PR_COMMAND_SPECS } from './pr'
+import { ACCOUNT_COMMAND_SPECS } from './accounts'
+import { APP_UI_COMMAND_SPECS } from './app-ui'
+import { APP_SERVICE_COMMAND_SPECS } from './app-services'
+import { ADAM_COMMAND_SPECS } from './adam'
 
 export const COMMAND_SPECS: CommandSpec[] = [
   ...CORE_COMMAND_SPECS,
@@ -45,10 +52,17 @@ export const COMMAND_SPECS: CommandSpec[] = [
   ...EMULATOR_COMMAND_SPECS,
   ...TASK_COMMAND_SPECS,
   ...BOARD_COMMAND_SPECS,
+  ...BOARD_CARD_COMMAND_SPECS,
+  ...BOARD_SNAPSHOT_COMMAND_SPECS,
+  ...TABS_SNOOZE_COMMAND_SPECS,
   ...LEAD_COMMAND_SPECS,
   ...TABS_COMMAND_SPECS,
   ...SYSTEM_COMMAND_SPECS,
   ...CREW_COMMAND_SPECS,
   ...GIT_COMMAND_SPECS,
-  ...PR_COMMAND_SPECS
+  ...PR_COMMAND_SPECS,
+  ...ADAM_COMMAND_SPECS,
+  ...APP_SERVICE_COMMAND_SPECS,
+  ...APP_UI_COMMAND_SPECS,
+  ...ACCOUNT_COMMAND_SPECS
 ]

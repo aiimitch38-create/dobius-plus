@@ -1,5 +1,7 @@
 import { z } from 'zod'
-import { defineMethod, defineStreamingMethod, type RpcAnyMethod } from '../core'
+import { defineMethod, defineStreamingMethod, type RpcAnyMethod, type RpcContext } from '../core'
+import { confirmText, describeCaller, type ConfirmationGate } from './confirm-gate'
+import { appConfirmationGate } from './crew-confirm'
 
 // Why: monotonically increasing per-process counter avoids the Date.now()
 // collision that fired when two near-simultaneous accounts.subscribe calls
@@ -24,12 +26,50 @@ const AccountsUnsubscribeParams = z.object({
     .pipe(z.string().min(1, 'Missing subscriptionId'))
 })
 
+type Provider = 'claude' | 'codex'
+
+/**
+ * Asks Carson in the app before the command line switches an account.
+ * Why: the account decides who is billed and whose limits new agents use.
+ * A paired phone is not asked: switching from the phone is Carson's own tap,
+ * and nobody may be at the desktop to click.
+ */
+async function confirmAccountSwitch(
+  gate: ConfirmationGate,
+  provider: Provider,
+  accountId: string | null,
+  ctx: RpcContext
+): Promise<void> {
+  if (ctx.clientKind === 'mobile') {
+    return
+  }
+  const snapshot = ctx.runtime.getAccountsSnapshot()
+  const account = snapshot[provider].accounts.find((entry) => entry.id === accountId)
+  const name = provider === 'claude' ? 'Claude' : 'Codex'
+  const target =
+    accountId === null
+      ? 'the account signed in outside Dobius+'
+      : account
+        ? confirmText(account.email, 'email')
+        : `account ${confirmText(accountId, 'id')}`
+  await gate(
+    {
+      title: `Switch the ${name} account?`,
+      message: `New ${name} agents will use ${target}, and its plan is billed.`,
+      detail: describeCaller(ctx),
+      confirmLabel: 'Switch'
+    },
+    ctx
+  )
+}
+
 // Why: bridges the desktop ClaudeAccountService / CodexAccountService /
 // RateLimitService into the mobile WebSocket RPC. Read + switch + remove
 // only — interactive add/re-auth flows spawn `claude login` / `codex login`
 // PTYs that need a desktop browser, so they intentionally remain
 // desktop-only. See plan in spec doc for issue #1438.
-export const ACCOUNT_METHODS: readonly RpcAnyMethod[] = [
+export function buildAccountMethods(gate: ConfirmationGate): readonly RpcAnyMethod[] {
+  return [
   defineMethod({
     name: 'accounts.list',
     params: null,
@@ -45,12 +85,18 @@ export const ACCOUNT_METHODS: readonly RpcAnyMethod[] = [
   defineMethod({
     name: 'accounts.selectClaude',
     params: SelectAccountParams,
-    handler: async (params, { runtime }) => runtime.selectClaudeAccount(params.accountId)
+    handler: async (params, ctx) => {
+      await confirmAccountSwitch(gate, 'claude', params.accountId, ctx)
+      return ctx.runtime.selectClaudeAccount(params.accountId)
+    }
   }),
   defineMethod({
     name: 'accounts.selectCodex',
     params: SelectAccountParams,
-    handler: async (params, { runtime }) => runtime.selectCodexAccount(params.accountId)
+    handler: async (params, ctx) => {
+      await confirmAccountSwitch(gate, 'codex', params.accountId, ctx)
+      return ctx.runtime.selectCodexAccount(params.accountId)
+    }
   }),
   defineMethod({
     name: 'accounts.removeClaude',
@@ -109,3 +155,6 @@ export const ACCOUNT_METHODS: readonly RpcAnyMethod[] = [
     }
   })
 ]
+}
+
+export const ACCOUNT_METHODS: readonly RpcAnyMethod[] = buildAccountMethods(appConfirmationGate)

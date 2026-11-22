@@ -3,13 +3,8 @@ import { existsSync, watch, type FSWatcher } from 'node:fs'
 import { join } from 'node:path'
 import type { Store } from '../persistence'
 import type { KnowledgeReadResult, KnowledgeTree } from '../../shared/knowledge'
-import {
-  buildKnowledgeTree,
-  claudeDir,
-  isAllowedKnowledgePath,
-  safeReadDir,
-  safeReadFile
-} from './knowledge-indexer'
+import { claudeDir, safeReadDir } from './knowledge-indexer'
+import { knowledgeTree, readKnowledgeFile, setKnowledgeStore } from './knowledge-access'
 
 const WATCH_DEBOUNCE_MS = 1500
 
@@ -69,20 +64,13 @@ function startKnowledgeWatchers(): void {
 }
 
 export function registerKnowledgeHandlers(store: Store): void {
-  ipcMain.handle('knowledge:tree', async (): Promise<KnowledgeTree> => buildKnowledgeTree(store))
+  setKnowledgeStore(store)
+  ipcMain.handle('knowledge:tree', async (): Promise<KnowledgeTree> => knowledgeTree(store))
   ipcMain.handle('knowledge:watch', async (): Promise<void> => startKnowledgeWatchers())
 
   ipcMain.handle(
     'knowledge:read',
-    async (_event, filePath: string): Promise<KnowledgeReadResult> => {
-      if (typeof filePath !== 'string' || !isAllowedKnowledgePath(filePath, store)) {
-        throw new Error('Path is outside the knowledge roots.')
-      }
-      const content = safeReadFile(filePath)
-      if (content === null) {
-        throw new Error('Could not read the knowledge file.')
-      }
-      return { content, filePath }
-    }
+    async (_event, filePath: string): Promise<KnowledgeReadResult> =>
+      readKnowledgeFile(store, filePath)
   )
 }

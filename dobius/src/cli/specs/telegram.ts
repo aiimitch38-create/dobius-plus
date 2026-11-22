@@ -36,5 +36,34 @@ export const TELEGRAM_COMMAND_SPECS: CommandSpec[] = [
       'dobius telegram history --group NLD',
       'dobius telegram history --group NLD --limit 200 --before 4812'
     ]
-  }
+  },
+  {
+    path: ['telegram', 'snapshot'],
+    summary: 'Show the Telegram account in more detail: phase, groups, drafts, reply handling',
+    usage: 'dobius telegram snapshot [--json]',
+    allowedFlags: [...GLOBAL_FLAGS],
+    notes: ['Draft text and participant consent details are left out; see `dobius telegram status` for drafts.'],
+    examples: ['dobius telegram snapshot --json']
+  },
+  ...(['start', 'stop', 'pause', 'resume'] as const).map(
+    (action): CommandSpec => ({
+      path: ['telegram', 'replies', action],
+      summary: {
+        start: 'Start Telegram auto-replies (ADAM drafts, you approve each send)',
+        stop: 'Stop Telegram auto-replies',
+        pause: 'Pause the Telegram account (disconnects until resumed)',
+        resume: 'Reconnect the paused Telegram account'
+      }[action],
+      usage: `dobius telegram replies ${action} [--json]`,
+      allowedFlags: [...GLOBAL_FLAGS],
+      notes:
+        action === 'start' || action === 'resume'
+          ? [
+              'Dobius+ shows a dialog asking you to confirm in the app first; nothing changes unless someone clicks it there.',
+              'Same as the buttons on the Telegram settings page. Every reply still needs your approval before it is sent.'
+            ]
+          : ['Same as the button on the Telegram settings page.'],
+      examples: [`dobius telegram replies ${action}`]
+    })
+  )
 ]

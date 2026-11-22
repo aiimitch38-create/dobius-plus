@@ -28,12 +28,19 @@ import { LINEAR_HANDLERS } from './handlers/linear'
 import { VM_HANDLERS } from './handlers/vm'
 import { TASK_HANDLERS } from './handlers/tasks'
 import { BOARD_HANDLERS } from './handlers/board'
+import { BOARD_CARD_HANDLERS } from './handlers/board-cards'
+import { BOARD_SNAPSHOT_HANDLERS } from './handlers/board-snapshots'
+import { TABS_SNOOZE_HANDLERS } from './handlers/tabs-snooze'
 import { LEAD_HANDLERS } from './handlers/lead'
 import { TABS_HANDLERS } from './handlers/tabs'
 import { SYSTEM_HANDLERS } from './handlers/system'
 import { CREW_HANDLERS } from './handlers/crew'
 import { GIT_HANDLERS } from './handlers/git'
 import { PR_HANDLERS } from './handlers/pr'
+import { ACCOUNT_HANDLERS } from './handlers/accounts'
+import { APP_UI_HANDLERS } from './handlers/app-ui'
+import { APP_SERVICE_HANDLERS } from './handlers/app-services'
+import { ADAM_HANDLERS } from './handlers/adam'
 
 export type HandlerContext = {
   flags: Map<string, string | boolean>
@@ -76,12 +83,19 @@ function buildHandlers(): Map<string, CommandHandler> {
     VM_HANDLERS,
     TASK_HANDLERS,
     BOARD_HANDLERS,
+    BOARD_CARD_HANDLERS,
+    BOARD_SNAPSHOT_HANDLERS,
+    TABS_SNOOZE_HANDLERS,
     LEAD_HANDLERS,
     TABS_HANDLERS,
     SYSTEM_HANDLERS,
     CREW_HANDLERS,
     GIT_HANDLERS,
-    PR_HANDLERS
+    PR_HANDLERS,
+    ADAM_HANDLERS,
+    APP_SERVICE_HANDLERS,
+    APP_UI_HANDLERS,
+    ACCOUNT_HANDLERS
   ]
   for (const group of groups) {
     for (const [key, handler] of Object.entries(group)) {

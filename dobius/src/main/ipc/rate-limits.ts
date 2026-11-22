@@ -1,8 +1,10 @@
 import { ipcMain } from 'electron'
+import { setRateLimitServiceForRuntime } from './usage-access'
 import type { RateLimitService } from '../rate-limits/service'
 import type { RateLimitRuntimeTarget } from '../../shared/rate-limit-types'
 
 export function registerRateLimitHandlers(rateLimits: RateLimitService): void {
+  setRateLimitServiceForRuntime(rateLimits)
   ipcMain.handle('rateLimits:get', () => rateLimits.getState())
   ipcMain.handle('rateLimits:refresh', () => rateLimits.refresh())
   ipcMain.handle('rateLimits:refreshCodexForTarget', (_event, target: RateLimitRuntimeTarget) =>

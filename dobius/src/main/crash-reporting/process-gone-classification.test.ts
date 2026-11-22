@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   shouldRecordProcessGoneCrash,
-  shouldRecoverRendererAfterProcessGone
+  shouldRecoverRendererAfterProcessGone,
+  shouldRepaintWindowsAfterGpuGone
 } from './process-gone-classification'
 
 describe('shouldRecordProcessGoneCrash', () => {
@@ -385,5 +386,22 @@ describe('shouldRecoverRendererAfterProcessGone', () => {
         expectedTeardown: 'none'
       })
     ).toBe(false)
+  })
+})
+
+describe('shouldRepaintWindowsAfterGpuGone', () => {
+  it('repaints every window when the GPU process dies (port of Line A #27)', () => {
+    expect(shouldRepaintWindowsAfterGpuGone({ processType: 'GPU', reason: 'crashed' })).toBe(true)
+    expect(shouldRepaintWindowsAfterGpuGone({ processType: 'gpu', reason: 'killed' })).toBe(true)
+  })
+
+  it('leaves windows alone for a clean GPU exit or another child process', () => {
+    expect(shouldRepaintWindowsAfterGpuGone({ processType: 'GPU', reason: 'clean-exit' })).toBe(
+      false
+    )
+    expect(shouldRepaintWindowsAfterGpuGone({ processType: 'Utility', reason: 'crashed' })).toBe(
+      false
+    )
+    expect(shouldRepaintWindowsAfterGpuGone({ reason: 'crashed' })).toBe(false)
   })
 })

@@ -201,8 +201,11 @@ export type AdamThreadRow = {
   [extra: string]: unknown
 }
 
-/** Which way in a turn with ADAM came from. Both share one Hermes session. */
-export type AdamTurnSource = 'voice' | 'thread'
+/**
+ * Which way in a turn with ADAM came from. All share one Hermes session. `cli`
+ * is `dobius adam ask`; main writes its rows, as it does for voice.
+ */
+export type AdamTurnSource = 'voice' | 'thread' | 'cli'
 
 /** Sent to the window for each accepted ADAM turn: first the words asked, then the reply. */
 export type AdamTurnEvent = {

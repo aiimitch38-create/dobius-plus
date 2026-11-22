@@ -47,10 +47,17 @@ import { CHANNEL_TEMPLATE_METHODS } from './channel-templates'
 import { SAVE_SUBSCRIPTION_METHODS } from './save-subscriptions'
 import { TASK_METHODS } from './tasks'
 import { BOARD_CONSOLE_METHODS } from './board-consoles'
+import { BOARD_CARD_METHODS } from './board-cards'
+import { BOARD_SNAPSHOT_METHODS } from './board-snapshots'
+import { TAB_SNOOZE_METHODS } from './tab-snooze'
 import { BOARD_WEB_TILE_METHODS } from './board-web-tiles'
 import { AGENT_CONTROL_METHODS } from './agent-control'
 import { CREW_METHODS } from './crew'
 import { LEAD_METHODS } from './leads'
+import { ADAM_METHODS } from './adam'
+import { APP_SERVICE_METHODS } from './app-services'
+import { APP_UI_METHODS } from './app-ui'
+import { TELEGRAM_REPLY_METHODS } from './telegram-replies'
 // Communications-specific method groups. Not part of ALL_RPC_METHODS by
 // default until this pass — each backs a family of vendor/buzz-desktop
 // dispatch cases in dobiusCommunications.ts (see COMMUNICATIONS_RUNTIME_METHODS
@@ -122,10 +129,17 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...SAVE_SUBSCRIPTION_METHODS,
   ...TASK_METHODS,
   ...BOARD_CONSOLE_METHODS,
+  ...BOARD_CARD_METHODS,
+  ...BOARD_SNAPSHOT_METHODS,
+  ...TAB_SNOOZE_METHODS,
   ...BOARD_WEB_TILE_METHODS,
   ...AGENT_CONTROL_METHODS,
   ...CREW_METHODS,
   ...LEAD_METHODS,
+  ...ADAM_METHODS,
+  ...APP_SERVICE_METHODS,
+  ...APP_UI_METHODS,
+  ...TELEGRAM_REPLY_METHODS,
   ...COMMUNICATIONS_AGENT_METHODS,
   ...IDENTITY_RPC_METHODS,
   ...HUDDLE_METHODS,

@@ -5,6 +5,7 @@ import { getUserDataRoot } from '../storage/user-data-root'
 import type { BoardSnapshotMeta, BoardSnapshotFile } from '../../shared/board-snapshot-types'
 import { BOARD_SNAPSHOT_INTERVAL_MS } from './board-snapshot-rules'
 import { BoardSnapshotService } from './board-snapshot-service'
+import { setActiveBoardSnapshotService } from './board-snapshot-active'
 
 // Board snapshots run in main from the persisted UI payload: hourly, on quit,
 // when the renderer leaves the Board, and an archive copy when a board
@@ -21,6 +22,7 @@ export function registerBoardSnapshotHandlers(store: Store): void {
   }
   registered = true
   const service = new BoardSnapshotService(join(getUserDataRoot(), 'board-snapshots'))
+  setActiveBoardSnapshotService(service)
   const boards = (): unknown => store.getUI().boardsByWorktree
 
   let previous = boards()
