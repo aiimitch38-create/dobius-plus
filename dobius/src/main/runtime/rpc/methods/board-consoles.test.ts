@@ -522,3 +522,76 @@ describe('board.resolveConsole', () => {
     expect((await resolve([consoleCard(1, null)], [live(1)], undefined)).ok).toBe(false)
   })
 })
+
+describe('terminal.resolveTab', () => {
+  async function resolveTab(terminals: TestTerminal[], tabId: unknown, activeLeafByTab = {}) {
+    const { runtime } = makeRuntime([], true, terminals, activeLeafByTab)
+    const dispatcher = new RpcDispatcher({ runtime, methods: BOARD_CONSOLE_METHODS })
+    const response = await dispatcher.dispatch(makeRequest('terminal.resolveTab', { tabId }))
+    return { response, runtime }
+  }
+
+  it('returns the running terminal of that tab, looked up across every worktree', async () => {
+    const { response, runtime } = await resolveTab(
+      [
+        { handle: 'term_other', tabId: 'tab-2', ptyId: 'pty-2', connected: true },
+        { handle: 'term_1', tabId: 'tab-1', ptyId: 'pty-1', connected: true }
+      ],
+      'tab-1'
+    )
+    expect(response).toMatchObject({ ok: true, result: { handle: 'term_1', tabId: 'tab-1' } })
+    expect(runtime.listTerminals).toHaveBeenCalledWith(undefined, expect.any(Number))
+  })
+
+  it('keeps the tab link while terminals are listed from PTY records', async () => {
+    const { response } = await resolveTab(
+      [{ handle: 'term_pty', tabId: 'pty:pty-1', originTabId: 'tab-1', ptyId: 'pty-1', connected: true }],
+      'tab-1'
+    )
+    expect(response).toMatchObject({ ok: true, result: { handle: 'term_pty' } })
+  })
+
+  it('picks the focused pane of a split tab', async () => {
+    const { response } = await resolveTab(
+      [
+        { handle: 'term_left', tabId: 'tab-1', leafId: 'leaf-l', ptyId: 'pty-1', connected: true },
+        { handle: 'term_right', tabId: 'tab-1', leafId: 'leaf-r', ptyId: 'pty-2', connected: true }
+      ],
+      'tab-1',
+      { 'tab-1': 'leaf-r' }
+    )
+    expect(response).toMatchObject({ ok: true, result: { handle: 'term_right' } })
+  })
+
+  it('fails with terminal_tab_not_found for an unknown or closed tab, never another terminal', async () => {
+    const { response } = await resolveTab(
+      [{ handle: 'term_1', tabId: 'tab-1', ptyId: 'pty-1', connected: true }],
+      'tab-gone'
+    )
+    expect(response).toMatchObject({ ok: false, error: { code: 'terminal_tab_not_found' } })
+    expect(JSON.stringify(response)).not.toContain('term_1')
+  })
+
+  it('fails with terminal_tab_not_running when the tab has only an exited terminal', async () => {
+    const { response } = await resolveTab(
+      [{ handle: 'term_dead', tabId: 'tab-1', ptyId: null, connected: false }],
+      'tab-1'
+    )
+    expect(response).toMatchObject({ ok: false, error: { code: 'terminal_tab_not_running' } })
+  })
+
+  it('fails with terminal_tab_pane_unclear for two live panes and no known focus', async () => {
+    const { response } = await resolveTab(
+      [
+        { handle: 'term_left', tabId: 'tab-1', leafId: 'leaf-l', ptyId: 'pty-1', connected: true },
+        { handle: 'term_right', tabId: 'tab-1', leafId: 'leaf-r', ptyId: 'pty-2', connected: true }
+      ],
+      'tab-1'
+    )
+    expect(response).toMatchObject({ ok: false, error: { code: 'terminal_tab_pane_unclear' } })
+  })
+
+  it('rejects a blank tab id', async () => {
+    expect((await resolveTab([], '  ')).response.ok).toBe(false)
+  })
+})

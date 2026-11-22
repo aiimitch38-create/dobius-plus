@@ -131,7 +131,7 @@ async function resolveOrchestrationTerminalHandle(
 ): Promise<string> {
   const explicit = getOptionalStringFlag(flags, flagName)
   if (explicit) {
-    return explicit
+    return await resolveTerminalAddress(explicit, flags, cwd, client)
   }
   const envHandle = process.env.DOBIUS_TERMINAL_HANDLE
   if (envHandle && envHandle.length > 0) {
@@ -263,14 +263,18 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, (r) => `Replied ${r.message.id}`)
   },
 
-  'orchestration inbox': async ({ flags, client, json }) => {
+  'orchestration inbox': async ({ flags, client, cwd, json }) => {
     const full = flags.has('full')
+    const terminalFlag = getOptionalStringFlag(flags, 'terminal')
+    const terminal = terminalFlag
+      ? await resolveTerminalAddress(terminalFlag, flags, cwd, client)
+      : undefined
     const result = await client.call<{
       messages: MessageSummary[]
       count: number
     }>('orchestration.inbox', {
       limit: getOptionalPositiveIntegerFlag(flags, 'limit'),
-      terminal: getOptionalStringFlag(flags, 'terminal')
+      terminal
     })
     printResult(result, json, (r) => {
       if (r.count === 0) {
@@ -411,7 +415,7 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
     }>(
       'orchestration.ask',
       {
-        to: getRequiredStringFlag(flags, 'to'),
+        to: await resolveTerminalAddress(getRequiredStringFlag(flags, 'to'), flags, cwd, client),
         question: getRequiredStringFlag(flags, 'question'),
         options: getOptionalStringFlag(flags, 'options'),
         timeoutMs: parsedTimeoutMs,
