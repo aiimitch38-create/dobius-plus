@@ -3338,6 +3338,34 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
     expect(mockApi.session.patch).toHaveBeenLastCalledWith({ sleepingAgentSessionsByPaneKey: {} })
   })
 
+  it('does not mistake a natural PTY exit during the acknowledgement for the hibernation kill', async () => {
+    // The pane's exit handler asks consumeSuppressedPtyExit whether an exit is
+    // the hibernation kill. Suppression installed before the acknowledgement
+    // made a PTY that died on its own look like that kill: the pane stayed
+    // mounted with no PTY, then the rollback removed its recovery record.
+    const store = createTestStore()
+    const { wt, targetLeaf, targetPaneKey } = seedHibernatableAgentPane(store)
+    let exitTreatedAsHibernationKill: boolean | undefined
+    mockApi.session.patch.mockImplementationOnce(async () => {
+      exitTreatedAsHibernationKill = store.getState().consumeSuppressedPtyExit('pty-agent')
+      store.getState().clearTabPtyId('tab-1', 'pty-agent')
+      store.getState().removeAgentStatus(targetPaneKey)
+    })
+
+    await expect(
+      store.getState().shutdownCompletedAgentPaneForHibernation(wt, {
+        paneKey: targetPaneKey,
+        tabId: 'tab-1',
+        leafId: targetLeaf,
+        ptyId: 'pty-agent'
+      })
+    ).rejects.toThrow('agent_hibernation_eligibility_changed')
+
+    expect(exitTreatedAsHibernationKill).toBe(false)
+    expect(mockApi.pty.kill).not.toHaveBeenCalled()
+    expect(store.getState().suppressedPtyExitIds['pty-agent']).toBeUndefined()
+  })
+
   it('keeps a newer recovery record when a refused hibernation rolls back', async () => {
     const store = createTestStore()
     const { wt, targetLeaf, targetPaneKey } = seedHibernatableAgentPane(store)

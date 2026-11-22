@@ -2033,10 +2033,6 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
     }
 
     set((s) => ({
-      suppressedPtyExitIds: {
-        ...s.suppressedPtyExitIds,
-        ...Object.fromEntries(shutdownPtyIds.map((ptyId) => [ptyId, true] as const))
-      },
       sleepingAgentSessionsByPaneKey: {
         ...s.sleepingAgentSessionsByPaneKey,
         ...sleepingAgentSessionRecords
@@ -2064,6 +2060,8 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       const acked = get()
       if (
         acked.terminalLayoutsByTabId[opts.tabId]?.ptyIdsByLeafId?.[opts.leafId] !== opts.ptyId ||
+        (expectedRuntimePtyIds.length === 0 &&
+          !(acked.ptyIdsByTabId[opts.tabId] ?? []).includes(opts.ptyId)) ||
         acked.sleepingAgentSessionsByPaneKey[opts.paneKey] !==
           sleepingAgentSessionRecords[opts.paneKey] ||
         acked.agentStatusByPaneKey[opts.paneKey] !== state.agentStatusByPaneKey[opts.paneKey] ||
@@ -2078,6 +2076,18 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       await rollbackTargetShutdownState()
       throw err
     }
+
+    // Why: suppression makes the pane treat the next exit of this PTY as the
+    // hibernation kill (stay mounted, arm the wake). Installed while main was
+    // still acknowledging, a PTY that exited on its own was mistaken for that
+    // kill and then lost its record to the rollback — no PTY and no recovery.
+    // So it goes in only now, synchronously with the kill being issued.
+    set((s) => ({
+      suppressedPtyExitIds: {
+        ...s.suppressedPtyExitIds,
+        ...Object.fromEntries(shutdownPtyIds.map((ptyId) => [ptyId, true] as const))
+      }
+    }))
 
     if (expectedRuntimePtyIds.length > 0) {
       const runtimeEnvironmentId = resolveTerminalStopRuntimeEnvironmentId(get(), worktreeId)
