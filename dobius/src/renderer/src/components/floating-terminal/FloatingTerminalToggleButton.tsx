@@ -6,7 +6,10 @@ import { useShortcutLabel } from '@/hooks/useShortcutLabel'
 import { useAppStore } from '@/store'
 import { VoiceOrb } from '@/components/dictation/VoiceOrb'
 import { dispatchDictationControl } from '@/components/dictation/dictation-control-events'
-import { voiceOrbLevelSource } from '@/components/dictation/voice-orb-live-level'
+import {
+  startAdamVoiceTurnFromOrb,
+  voiceOrbLevelSource
+} from '@/components/dictation/voice-orb-live-level'
 import { ensureFloatingTerminalAgentTab } from '@/lib/floating-terminal-agent-tab'
 import {
   anchorFloatingTerminalTriggerPosition,
@@ -332,11 +335,7 @@ export function FloatingTerminalToggleButton({
                 useAppStore.getState().setAdamAwake(true)
                 // The app-wide coordinator owns this shortcut and capture;
                 // opening a separate orb window would create a second character.
-                try {
-                  void window.api.jarvis.pressPtt()
-                } catch (error) {
-                  console.error('pressPtt failed', error)
-                }
+                startAdamVoiceTurnFromOrb(() => window.api.jarvis.pressPtt())
               }}
             >
               {adamAwake ? null : <VoiceOrb size={36} getLevel={readSharedOrbLevel} />}

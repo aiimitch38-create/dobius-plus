@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
 import { VoiceOrb } from '@/components/dictation/VoiceOrb'
+import { startAdamVoiceTurnFromOrb } from '@/components/dictation/voice-orb-live-level'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
@@ -247,11 +248,7 @@ export function BoardCommandBar({
               // this input box — no spoken reply ever comes back from
               // that path). pressPtt is the real "listen, then speak"
               // trigger, same one the floating-terminal dock orb uses.
-              try {
-                void window.api.jarvis.pressPtt()
-              } catch (error) {
-                console.error('pressPtt failed', error)
-              }
+              startAdamVoiceTurnFromOrb(() => window.api.jarvis.pressPtt())
             }}
           >
             {adamAwake ? null : <VoiceOrb size={60} getLevel={getVoiceLevel} />}

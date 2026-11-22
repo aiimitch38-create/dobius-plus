@@ -23,3 +23,21 @@ export function publishVoiceOrbPresentation(next: VoiceOrbPresentation): void {
   // Captions can stay identical across voice owners, so phase updates need their own subscription.
   listeners.forEach((listener) => listener())
 }
+
+/**
+ * Starts an Adam listen-then-speak turn from an orb click, only when no voice
+ * activity is showing. Why: pressPtt is a toggle (a second press cancels
+ * thinking, stops capture or ends a live call), and waking the body is not
+ * the same as the voice being idle.
+ */
+export function startAdamVoiceTurnFromOrb(pressPtt: () => Promise<unknown>): boolean {
+  if (presentation.state !== 'idle') {
+    return false
+  }
+  try {
+    void pressPtt().catch((error: unknown) => console.error('pressPtt failed', error))
+  } catch (error) {
+    console.error('pressPtt failed', error)
+  }
+  return true
+}
