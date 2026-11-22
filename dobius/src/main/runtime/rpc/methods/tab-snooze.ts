@@ -110,6 +110,7 @@ export const TAB_SNOOZE_METHODS: RpcMethod[] = [
       if (entry.returning) {
         throw new CliActionError('tab_snooze_returning', 'That tab is already coming back; it will not be resumed twice.')
       }
+      // Ungated by design: ADAM drives the Board; Pause crew + caps guard.
       if (entry.agentSession || entry.launchAgent) {
         // Why: bringing it back resumes an agent, and Pause crew stops anything
         // autonomous from starting one.

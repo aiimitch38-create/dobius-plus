@@ -14,6 +14,7 @@ export type SnoozeTabOutcome =
   | 'needs-confirm'
   | 'missing'
   | 'tab-gone'
+  | 'in-progress'
   | 'split-panes'
   | 'unavailable'
   | Extract<SnoozeTabResult, { ok: false }>['reason']
@@ -55,11 +56,33 @@ function findTerminalTab(state: SnoozeState, tabId: string) {
  * alive, and a tab that went away while main was saving does not keep its
  * entry (it was closed for real, not snoozed).
  */
+// Why one lock for the menu and `dobius tabs snooze`: two snoozes of one tab
+// would both save it, and the second, finding the tab closed, would discard
+// the entry (and conversation) the first just saved.
+const snoozingTabs = new Set<string>()
+
 export async function runTabSnooze(
   deps: SnoozeTabDeps,
   tabId: string,
   until: number | null,
   options: { confirmed?: boolean } = {}
+): Promise<SnoozeTabOutcome> {
+  if (snoozingTabs.has(tabId)) {
+    return 'in-progress'
+  }
+  snoozingTabs.add(tabId)
+  try {
+    return await snoozeTabOnce(deps, tabId, until, options)
+  } finally {
+    snoozingTabs.delete(tabId)
+  }
+}
+
+async function snoozeTabOnce(
+  deps: SnoozeTabDeps,
+  tabId: string,
+  until: number | null,
+  options: { confirmed?: boolean }
 ): Promise<SnoozeTabOutcome> {
   const done = (outcome: SnoozeTabOutcome): SnoozeTabOutcome => {
     deps.notify(outcome)
@@ -110,6 +133,7 @@ function notifySnoozeOutcome(outcome: SnoozeTabOutcome): void {
     case 'needs-confirm':
     case 'missing':
     case 'tab-gone':
+    case 'in-progress':
       return
     case 'snoozed':
       toast.success(translate('lib.tabSnooze.snoozed', 'Tab snoozed. It waits in the sidebar.'))
