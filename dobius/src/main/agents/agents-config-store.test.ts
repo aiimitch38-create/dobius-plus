@@ -30,6 +30,14 @@ afterEach(() => {
 })
 
 describe('agents config store: crew control state', () => {
+  it('getAgentsExecutionState returns only the four shared fields', async () => {
+    writeFileSync(configPath(), '{')
+    const store = await loadStore()
+    const state = store.getAgentsExecutionState()
+    expect(Object.keys(state).sort()).toEqual(['detail', 'filePath', 'paused', 'status'])
+    expect(state).toMatchObject({ paused: true, status: 'unreadable', filePath: configPath() })
+  })
+
   it('treats a missing file as unpaused and does not create one', async () => {
     const store = await loadStore()
     expect(store.getAgentsControlState()).toMatchObject({ status: 'missing', paused: false })

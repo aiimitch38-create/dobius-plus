@@ -169,6 +169,13 @@ export function getAgentsControlState(): AgentsControlState {
   }
 }
 
+// Why: the Agents page (IPC) and `dobius crew status` (RPC) show the same
+// projection, so neither can leak a field the other does not.
+export function getAgentsExecutionState(): AgentsControlState {
+  const { paused, status, detail, filePath } = getAgentsControlState()
+  return { paused, status, detail, filePath }
+}
+
 export function getAgentsPaused(): boolean {
   return getAgentsControlState().paused
 }

@@ -24,7 +24,8 @@ export async function approveDraftAndPost(id: string): Promise<AgentDraftComment
   }
   postingDraftIds.add(id)
   try {
-    // Why: this function is reachable only from the human Approve & post IPC handler.
+    // Why: reachable only from the human Approve & post IPC handler and the
+    // full-key `crew.draftApprove` RPC. Keep it off the agent-key allowlist.
     await postTaskComment(draft.target.gid, draft.body)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

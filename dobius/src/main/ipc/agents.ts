@@ -32,14 +32,14 @@ import {
 } from '../agents/agent-notification-store'
 import { dismissBriefingItems, listRecentBriefingItems } from '../agents/agent-briefing-store'
 import {
-  getAgentsControlState,
+  getAgentsExecutionState,
   getAgentsPaused,
   getPingStatus,
   setAgentsPaused
 } from '../agents/agents-config-store'
 import { startAgentHeartbeats } from '../agents/agent-heartbeat-service'
 import { startAsanaAutoMode } from '../agents/asana-auto-mode-service'
-import { listDrafts, setDraftStatus } from '../agents/agent-draft-store'
+import { discardDraft, listDrafts } from '../agents/agent-draft-store'
 import { approveDraftAndPost } from '../agents/agent-draft-approval'
 import { setDobiusToolKnowledgeStore } from '../agents/agent-tools/dobius-tool-server'
 import {
@@ -204,13 +204,7 @@ export function registerAgentsHandlers(
   ipcMain.handle('agents:listDrafts', () => listDrafts())
 
   ipcMain.removeHandler('agents:discardDraft')
-  ipcMain.handle('agents:discardDraft', (_event, id: string) => {
-    const draft = setDraftStatus(id, 'discarded')
-    if (!draft) {
-      throw new Error('Draft not found')
-    }
-    return draft
-  })
+  ipcMain.handle('agents:discardDraft', (_event, id: string) => discardDraft(id))
 
   // Why: approving a draft is the only W2 path that writes an Asana comment, and it is IPC-only.
   ipcMain.removeHandler('agents:approveDraft')
@@ -220,10 +214,10 @@ export function registerAgentsHandlers(
   ipcMain.handle('agents:getPaused', () => getAgentsPaused())
 
   ipcMain.removeHandler('agents:getExecutionState')
-  ipcMain.handle('agents:getExecutionState', (): AgentsExecutionState => {
-    const { paused, status, detail, filePath } = getAgentsControlState()
-    return { paused, status, detail, filePath }
-  })
+  ipcMain.handle(
+    'agents:getExecutionState',
+    (): AgentsExecutionState => getAgentsExecutionState()
+  )
 
   ipcMain.removeHandler('agents:setPaused')
   ipcMain.handle('agents:setPaused', (_event, paused: boolean) => setAgentsPaused(paused))

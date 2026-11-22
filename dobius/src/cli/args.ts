@@ -187,7 +187,8 @@ export function isCommandGroup(commandPath: string[]): boolean {
         'vm',
         'tasks',
         'board',
-        'lead'
+        'lead',
+        'crew'
       ].includes(commandPath[0])) ||
     (commandPath.length === 2 && commandPath[0] === 'agent' && commandPath[1] === 'hooks') ||
     (commandPath.length === 2 &&
