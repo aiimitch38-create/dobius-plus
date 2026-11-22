@@ -55,6 +55,10 @@ function readRawSegments(command: string): RawWord[][] | null {
         quote = null
       } else if (char === '\\' && quote === '"' && index + 1 < command.length) {
         index += 1
+        if (command[index] === '\n') {
+          // A line continuation: not read here, so not trusted.
+          return null
+        }
         text += command[index]
       } else {
         // `$` still expands inside double quotes.
@@ -67,7 +71,9 @@ function readRawSegments(command: string): RawWord[][] | null {
       quote = char
       inWord = true
     } else if (char === '\\') {
-      if (index + 1 >= command.length) {
+      // A trailing backslash, or a backslash-newline continuation (the shell
+      // removes both characters and joins the lines): not read here.
+      if (index + 1 >= command.length || command[index + 1] === '\n') {
         return null
       }
       index += 1
@@ -92,10 +98,12 @@ function readRawSegments(command: string): RawWord[][] | null {
     } else {
       // A glob only matters where it could produce a command name or an
       // option: at the start of the word, or in a word that already is one.
+      // "Start" is judged by the text so far, because empty quotes (`''?exec`)
+      // begin a word without adding to it.
       const isGlob = char === '*' || char === '?' || char === '['
       rewrites ||=
         char === '$' ||
-        (isGlob && (!inWord || text.startsWith('-') || words.every((entry) => entry.redirect)))
+        (isGlob && (text === '' || text.startsWith('-') || words.every((entry) => entry.redirect)))
       text += char
       inWord = true
     }

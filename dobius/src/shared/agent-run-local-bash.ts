@@ -60,10 +60,10 @@ const FOLDER_FLAGS: ReadonlySet<string> = new Set(['--dir', '-C', '--filter', '-
 const SYSTEM_COMMAND_DIR = /^(?:\/bin\/|\/usr\/bin\/|\/usr\/local\/bin\/|\/opt\/homebrew\/bin\/)(?=[^/]+$)/
 
 const PLAIN_FILE_PATH = /^[\w@%+=:,.~/-]+$/
-const TOOLING_DIR = /(?:^|\/)(?:\.git|\.husky|node_modules)(?:\/|$)/
+const TOOLING_DIR = /(?:^|\/)(?:\.git|\.husky|\.claude|node_modules)(?:\/|$)/
 // package.json, lockfiles, `*.config.*`, tsconfig and the named tool configs.
 const TOOLING_FILE =
-  /^(?:package\.json|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|uv\.lock|poetry\.lock|\.npmrc|\.yarnrc(?:\.yml)?|\.pnpmfile\.cjs|pnpm-workspace\.yaml|conftest\.py|pyproject\.toml|setup\.(?:py|cfg)|tox\.ini|pytest\.ini|mypy\.ini|\.?ruff\.toml|biome\.jsonc?|\.gitattributes|\.gitmodules|.+\.config\.[\w.]+|\.?(?:vitest|jest|vite|eslint|oxlint|oxfmt|prettier|babel|tsconfig|jsconfig)[\w.-]*)$/
+  /^(?:package\.json|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|uv\.lock|poetry\.lock|\.npmrc|\.yarnrc(?:\.yml)?|\.pnpmfile\.cjs|pnpm-workspace\.yaml|conftest\.py|pyproject\.toml|setup\.(?:py|cfg)|tox\.ini|pytest\.ini|mypy\.ini|\.?ruff\.toml|biome\.jsonc?|\.gitattributes|\.gitmodules|\.mcp\.json|.+\.config\.[\w.]+|\.?(?:vitest|jest|vite|eslint|oxlint|oxfmt|prettier|babel|tsconfig|jsconfig)[\w.-]*)$/
 
 /** True for a path that decides what git, the package manager or a check tool runs. */
 export function isToolingPath(filePath: string): boolean {
