@@ -70,6 +70,9 @@ vi.mock('@/store', async () => {
     settings: null,
     activeModal: 'none',
     boardStudio: null,
+    adamAwake: false,
+    setAdamAwake: (awake: boolean) => set({ adamAwake: awake }),
+    requestAdamDock: vi.fn(),
     setBoardStudio: (studio: BoardStudioId | null) => set({ boardStudio: studio }),
     openModal: vi.fn(),
     addRepo: async () => null,
@@ -143,6 +146,17 @@ describe('BoardHome studio host', () => {
     expect(storeMock.store!.getState().boardStudio).toBeNull()
     expect(container.querySelector('[data-studio-host]')).toBeNull()
     expect(container.textContent).toContain('stub:HomeLauncherBar')
+  })
+
+  it('clicking the sleeping orb wakes Adam and starts a voice turn', () => {
+    const pressPtt = vi.fn(async () => undefined)
+    ;(window as unknown as { api: unknown }).api = { jarvis: { pressPtt } }
+    storeMock.store!.setState({ adamAwake: false })
+    renderHome()
+    const orb = container.querySelector('button[aria-label]') as HTMLButtonElement
+    act(() => orb.click())
+    expect(storeMock.store!.getState().adamAwake).toBe(true)
+    expect(pressPtt).toHaveBeenCalledTimes(1)
   })
 
   it('clears the open studio when Home unmounts', () => {
