@@ -7,6 +7,7 @@ import { useAppStore } from '@/store'
 import { VoiceOrb } from '@/components/dictation/VoiceOrb'
 import { dispatchDictationControl } from '@/components/dictation/dictation-control-events'
 import {
+  endAdamVoiceFromOrb,
   startAdamVoiceTurnFromOrb,
   voiceOrbLevelSource
 } from '@/components/dictation/voice-orb-live-level'
@@ -325,6 +326,7 @@ export function FloatingTerminalToggleButton({
                 if (useAppStore.getState().adamAwake) {
                   // Dock slot is empty while Adam roams — clicking it calls
                   // him back and turns him off, it doesn't start a new turn.
+                  endAdamVoiceFromOrb()
                   useAppStore.getState().requestAdamDock()
                   return
                 }

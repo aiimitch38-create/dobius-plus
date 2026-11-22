@@ -243,6 +243,7 @@ export class LiveVoiceCall {
         return
       case 'error':
         console.warn('[live-voice] session error:', event.message)
+        this.logProblem(`session error: ${event.message}`)
         break
       default:
         break

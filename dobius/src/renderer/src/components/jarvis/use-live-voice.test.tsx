@@ -99,7 +99,7 @@ describe('useLiveVoice', () => {
     await act(async () => {
       noticeListener?.({ kind: 'cap-warning', text: 'eighty percent' })
     })
-    expect(channel.sent.map((data) => JSON.parse(data).text)).toContain('eighty percent')
+    expect(channel.sent.map((data) => JSON.parse(data).content)).toContain('eighty percent')
     await act(async () => {
       root?.unmount()
     })
