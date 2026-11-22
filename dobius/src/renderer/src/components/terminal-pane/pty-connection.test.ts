@@ -6763,6 +6763,77 @@ describe('connectPanePty', () => {
     })
   })
 
+  it('cold-restores a Claude console in an auto-fix workspace only with the restricted profile', async () => {
+    const { connectPanePty } = await import('./pty-connection')
+    const transport = createMockTransport('fresh-pty')
+    transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
+      if (sessionId) {
+        return {
+          id: 'fresh-pty',
+          coldRestore: { scrollback: 'cold-payload', cwd: '/tmp/autofix-login-abc12345' }
+        }
+      }
+      return 'fresh-pty'
+    })
+    transportFactoryQueue.push(transport)
+    const paneKey = makePaneKey('tab-1', LEAF_1)
+    mockStoreState = {
+      ...mockStoreState,
+      tabsByWorktree: {
+        'wt-1': [{ id: 'tab-1', ptyId: 'lost-pty' }]
+      },
+      worktreesByRepo: {
+        repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/tmp/autofix-login-abc12345' }]
+      },
+      settings: {
+        ...mockStoreState.settings,
+        agentCmdOverrides: {},
+        agentDefaultArgs: { claude: '--dangerously-skip-permissions' },
+        agentDefaultEnv: { claude: { ANTHROPIC_BASE_URL: 'https://claude.example.test' } }
+      },
+      agentStatusByPaneKey: {},
+      // No captured launch config: an old record would fall back to Settings.
+      sleepingAgentSessionsByPaneKey: {
+        [paneKey]: {
+          paneKey,
+          tabId: 'tab-1',
+          worktreeId: 'wt-1',
+          agent: 'claude',
+          providerSession: { key: 'session_id', id: 'claude-session-1' },
+          prompt: 'fix the bug',
+          state: 'working',
+          capturedAt: 1,
+          updatedAt: 1
+        }
+      }
+    } as StoreState
+    bindSleepingResumeOwnerForTest(
+      paneKey,
+      { key: 'session_id', id: 'claude-session-1' },
+      'claude'
+    )
+
+    const pane = createPane(1)
+    const manager = createManager(1)
+    const deps = createDeps({
+      restoredLeafId: LEAF_1,
+      restoredPtyIdByLeafId: { [LEAF_1]: 'lost-pty' }
+    })
+
+    connectPanePty(pane as never, manager as never, deps as never)
+    await flushAsyncTicks(20)
+    await new Promise((resolve) => setTimeout(resolve, 70))
+
+    const calls = transport.connect.mock.calls as unknown as [
+      { command?: string; env?: Record<string, string> }
+    ][]
+    const call = calls.find(([options]) => options.command)?.[0]
+    expect(call?.command).toMatch(/^claude '--restricted' '--strict-mcp-config' /)
+    expect(call?.command).toContain("'--resume' 'claude-session-1'")
+    expect(call?.command).not.toContain('dangerously')
+    expect(call?.env?.ANTHROPIC_BASE_URL).toBeUndefined()
+  })
+
   it('clears stale launch config when a pane consumes a non-agent startup command', async () => {
     const { connectPanePty } = await import('./pty-connection')
     const transport = createMockTransport()

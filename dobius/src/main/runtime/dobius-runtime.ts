@@ -12951,6 +12951,8 @@ export class DobiusRuntimeService {
     startupPrompt?: string
     /** Set by autonomous launches: Pause crew is re-checked right before the agent spawns. */
     executionOrigin?: ExecutionOrigin
+    /** Local workspaces only: runs after the folder exists, before the startup agent spawns. */
+    prepareWorkspace?: (worktreePath: string) => Promise<void> | void
     pendingFirstAgentMessageRename?: boolean
     automationProvenance?: AutomationWorkspaceProvenance
     startup?: WorktreeStartupLaunch
@@ -13052,6 +13054,7 @@ export class DobiusRuntimeService {
           if (startupTrustAgent) {
             this.markLocalWorkspaceTrustedForAgent(startupTrustAgent, worktree.path)
           }
+          await args.prepareWorkspace?.(worktree.path)
           this.assertAgentSpawnAdmitted(args.executionOrigin, worktree.path)
           const terminal = await this.createTerminal(`id:${worktree.id}`, {
             executionOrigin: args.executionOrigin,
@@ -13740,6 +13743,7 @@ export class DobiusRuntimeService {
         if (startupTrustAgent) {
           this.markLocalWorkspaceTrustedForAgent(startupTrustAgent, worktreePath)
         }
+        await args.prepareWorkspace?.(worktreePath)
         this.assertAgentSpawnAdmitted(args.executionOrigin, worktreePath)
         const terminal = await this.createTerminal(`id:${worktree.id}`, {
           executionOrigin: args.executionOrigin,

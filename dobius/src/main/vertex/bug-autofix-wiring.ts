@@ -1,7 +1,8 @@
 /* Connects bug-autofix.ts to the real store, settings, Pause crew gate and
  * runtime. Split out so the decision logic stays testable without Electron. */
 
-import { basename } from 'node:path'
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
 
 import { blockExecutionOrigin, checkExecutionAdmission } from '../agents/execution-gate'
 import { readLeadConfig } from '../leads/lead-config'
@@ -9,7 +10,8 @@ import type { DobiusRuntimeService } from '../runtime/dobius-runtime'
 import type { Store } from '../persistence'
 import { buildBugFixStartup, BUG_FIX_AGENT } from './bug-autofix-claude-profile'
 import { configureBugAutoFix, disposeBugAutoFix, type BugAutoFixWorktree } from './bug-autofix'
-import { isSafeAttachmentId, vertexTaskAttachmentDir } from './vertex-attachment-paths'
+import { BUG_FIX_EVIDENCE_DIR } from '../../shared/bug-fix-agent-profile'
+import { isInsideAttachmentsRoot } from './vertex-attachment-paths'
 import { vertexTaskStore } from './vertex-task-store'
 
 function projectIdOf(repoPath: string): string | null {
@@ -28,6 +30,22 @@ type WorktreeLike = { id: string; path: string; branch?: string; displayName?: s
 
 function toFound(worktree: WorktreeLike): BugAutoFixWorktree {
   return { worktreeId: worktree.id, worktreePath: worktree.path, branch: worktree.branch }
+}
+
+/** Copies the card's screenshots into the new workspace, so the agent works
+ *  on copies and the original evidence stays out of its reach. The folder
+ *  ignores itself, so the copies are never committed. */
+export function copyBugEvidence(screenshots: readonly string[], worktreePath: string): void {
+  const sources = screenshots.filter(isInsideAttachmentsRoot)
+  if (sources.length === 0) {
+    return
+  }
+  const dir = join(worktreePath, BUG_FIX_EVIDENCE_DIR)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, '.gitignore'), '*\n')
+  for (const source of sources) {
+    copyFileSync(source, join(dir, basename(source)))
+  }
 }
 
 export function wireBugAutoFix(store: Store, runtime: DobiusRuntimeService): void {
@@ -85,25 +103,29 @@ export function wireBugAutoFix(store: Store, runtime: DobiusRuntimeService): voi
       }
       return listed.authoritative ? null : 'unknown'
     },
-    createWorktree: async ({ repoId, name, prompt, comment, taskId, hasAttachments }) => {
-      // Why: --restricted confines file tools to the workspace; the card's own
-      // screenshot folder is the one extra place the agent may read.
-      const addDirs =
-        hasAttachments && isSafeAttachmentId(taskId) ? [vertexTaskAttachmentDir(taskId)] : []
+    createWorktree: async ({ repoId, name, prompt, comment, screenshots }) => {
       const result = await runtime.createManagedWorktree({
         repoSelector: repoId,
         name,
         comment,
         // Why an explicit startup: the normal launch uses Carson's default args,
         // which include --dangerously-skip-permissions. See the profile file.
-        startup: buildBugFixStartup(prompt, addDirs),
+        startup: buildBugFixStartup(prompt),
         createdWithAgent: BUG_FIX_AGENT,
         activate: false,
         // Why skip: this repo's setup script runs `pnpm install`, and a fix
         // agent must never install. The prompt links node_modules instead.
         setupDecision: 'skip',
         // Pause crew is re-checked right before the agent spawns.
-        executionOrigin: 'bug-report'
+        executionOrigin: 'bug-report',
+        prepareWorkspace: (worktreePath) => {
+          try {
+            copyBugEvidence(screenshots, worktreePath)
+          } catch (error) {
+            // Why: missing screenshots must not block the fix; the agent says so.
+            console.warn('[bug-autofix] could not copy screenshots:', error)
+          }
+        }
       })
       return { ...toFound(result.worktree), warning: result.warning }
     }

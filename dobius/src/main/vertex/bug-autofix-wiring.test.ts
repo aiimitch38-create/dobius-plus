@@ -1,3 +1,7 @@
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { BugAutoFixDeps } from './bug-autofix'
@@ -13,6 +17,7 @@ vi.mock('../agents/execution-gate', () => ({
 }))
 
 import { wireBugAutoFix } from './bug-autofix-wiring'
+import { setVertexAttachmentsRoot } from './vertex-attachment-paths'
 
 function wire(runtime: Record<string, unknown>): BugAutoFixDeps {
   const store = { getSettings: () => ({}) }
@@ -67,17 +72,42 @@ describe('bug auto-fix wiring: interrupted-start lookup', () => {
 })
 
 describe('bug auto-fix wiring: launch', () => {
-  it('lets the agent read only its own card screenshot folder', async () => {
-    const createManagedWorktree = vi.fn(async () => ({
-      worktree: { id: 'repo::/w/x', path: '/w/x', branch: 'x' }
-    }))
-    const deps = wire({ createManagedWorktree })
-    const base = { repoId: 'repo', name: 'autofix-x-1', prompt: 'p', comment: 'c', taskId: 'task-1' }
-    await deps.createWorktree({ ...base, hasAttachments: true })
-    const withShots = (createManagedWorktree.mock.calls[0] as unknown as [{ startup: { command: string } }])[0]
-    expect(withShots.startup.command).toMatch(/'--add-dir' '[^']*vertex-attachments\/task-1'/)
-    await deps.createWorktree({ ...base, hasAttachments: false })
-    const without = (createManagedWorktree.mock.calls[1] as unknown as [{ startup: { command: string } }])[0]
-    expect(without.startup.command).not.toContain('--add-dir')
+  it('copies the screenshots into the workspace and gives no outside folder', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'autofix-evidence-'))
+    try {
+      const shots = join(root, 'ud', 'vertex-attachments', 'task-1')
+      mkdirSync(shots, { recursive: true })
+      writeFileSync(join(shots, 'a1.png'), 'png')
+      const outside = join(root, 'secret.txt')
+      writeFileSync(outside, 'nope')
+      setVertexAttachmentsRoot(join(root, 'ud', 'vertex-attachments'))
+      const worktree = join(root, 'w', 'autofix-x-1')
+      mkdirSync(worktree, { recursive: true })
+      const createManagedWorktree = vi.fn(
+        async (args: { prepareWorkspace?: (path: string) => void }) => {
+          await args.prepareWorkspace?.(worktree)
+          return { worktree: { id: 'repo::w', path: worktree, branch: 'x' } }
+        }
+      )
+      const deps = wire({ createManagedWorktree })
+      await deps.createWorktree({
+        repoId: 'repo',
+        name: 'autofix-x-1',
+        prompt: 'p',
+        comment: 'c',
+        screenshots: [join(shots, 'a1.png'), outside]
+      })
+      const call = createManagedWorktree.mock.calls[0][0] as unknown as {
+        startup: { command: string }
+      }
+      expect(call.startup.command).not.toContain('--add-dir')
+      const evidence = join(worktree, '.dobius', 'bug-report')
+      expect(readFileSync(join(evidence, 'a1.png'), 'utf8')).toBe('png')
+      expect(readFileSync(join(evidence, '.gitignore'), 'utf8')).toBe('*\n')
+      expect(existsSync(join(evidence, 'secret.txt'))).toBe(false)
+    } finally {
+      setVertexAttachmentsRoot(null)
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

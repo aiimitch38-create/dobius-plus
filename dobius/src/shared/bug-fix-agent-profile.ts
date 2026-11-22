@@ -8,14 +8,16 @@
  *   --restricted                   ignores user, project and local settings
  *                                  files, so no inherited allow rule, hook or
  *                                  defaultMode widens this profile; confines
- *                                  file tools to the workspace (plus --add-dir)
- *                                  and refuses bypassPermissions
+ *                                  file tools to the workspace and refuses
+ *                                  bypassPermissions
  *   --strict-mcp-config            with no --mcp-config: no MCP servers at all
  *   --tools <tools...>             the only built-in tools; --restricted drops
  *                                  Bash unless it is named here
- *   --add-dir <directories...>     only the card's own screenshot folder
  *   --disallowedTools <tools...>   deny rules; a deny always beats an allow
- *   --allowedTools <tools...>      the verify-and-commit loop runs unattended
+ *   --allowedTools <tools...>      only file tools and read-only git; tests,
+ *                                  typechecks and commits run code the agent
+ *                                  may have written (a test file, a hook), so
+ *                                  each one asks Carson in the console
  *   --permission-mode acceptEdits  file edits auto-accepted; any Bash not
  *                                  pre-allowed asks Carson in the console
  * Never --dangerously-skip-permissions or --allow-dangerously-skip-permissions.
@@ -27,6 +29,10 @@ export const BUG_FIX_PROFILE_FLAG = '--restricted'
 
 /** Worktree folder names start with this (see bugFixWorktreeName in main). */
 export const BUG_FIX_WORKTREE_PREFIX = 'autofix-'
+
+/** The card's screenshots are copied here, inside the fix agent's workspace,
+ *  so the agent never gets access to the originals. */
+export const BUG_FIX_EVIDENCE_DIR = '.dobius/bug-report'
 
 export const BUG_FIX_TOOLS: readonly string[] = ['Bash', 'Read', 'Edit', 'Write', 'Glob', 'Grep']
 
@@ -63,29 +69,22 @@ export const BUG_FIX_ALLOWED_TOOLS: readonly string[] = [
   'Write',
   'Glob',
   'Grep',
-  'Bash(pnpm run typecheck:node)',
-  'Bash(pnpm run typecheck:web)',
-  'Bash(pnpm run typecheck:cli)',
-  'Bash(npx vitest run *)',
   'Bash(git status*)',
   'Bash(git diff*)',
   'Bash(git log*)',
-  'Bash(git show*)',
-  'Bash(git add *)',
-  'Bash(git commit *)'
+  'Bash(git show*)'
 ]
 
 function quoted(values: readonly string[]): string {
   return values.map((value) => `"${value.replace(/["\\]/g, '\\$&')}"`).join(' ')
 }
 
-/** The Claude args for a fix agent; `addDirs` are extra read folders. */
-export function bugFixClaudeArgs(addDirs: readonly string[] = []): string {
+/** The Claude args for a fix agent. */
+export function bugFixClaudeArgs(): string {
   return [
     BUG_FIX_PROFILE_FLAG,
     '--strict-mcp-config',
     `--tools ${quoted([BUG_FIX_TOOLS.join(',')])}`,
-    ...(addDirs.length ? [`--add-dir ${quoted(addDirs)}`] : []),
     `--disallowedTools ${quoted(BUG_FIX_DENIED_TOOLS)}`,
     `--allowedTools ${quoted(BUG_FIX_ALLOWED_TOOLS)}`,
     '--permission-mode acceptEdits'
@@ -102,4 +101,22 @@ export function isBugFixProfileLaunch(commandOrArgs: string | null | undefined):
 export function isBugFixWorktreePath(worktreePath: string | null | undefined): boolean {
   const name = (worktreePath ?? '').split(/[\\/]/).filter(Boolean).at(-1) ?? ''
   return name.startsWith(BUG_FIX_WORKTREE_PREFIX)
+}
+
+/** Launch inputs that replace Settings and captured ones whenever Claude
+ *  starts or resumes in a fix agent's folder, so no relaunch path can rebuild
+ *  the command from the Settings defaults. Null for any other launch. */
+export function bugFixLaunchOverrides(
+  agent: string,
+  ...workspacePaths: (string | null | undefined)[]
+): {
+  cmdOverrides: Record<string, never>
+  agentArgs: string
+  agentEnv: Record<string, string>
+  agentCommand: undefined
+} | null {
+  if (agent !== 'claude' || !workspacePaths.some((path) => isBugFixWorktreePath(path))) {
+    return null
+  }
+  return { cmdOverrides: {}, agentArgs: bugFixClaudeArgs(), agentEnv: {}, agentCommand: undefined }
 }

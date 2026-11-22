@@ -47,24 +47,23 @@ describe('bug fix agent launch profile', () => {
     }
   })
 
-  it('pre-allows only edits, git add/commit, typecheck and vitest', () => {
-    expect(BUG_FIX_ALLOWED_TOOLS).toEqual(
-      expect.arrayContaining([
-        'Edit',
-        'Bash(git add *)',
-        'Bash(git commit *)',
-        'Bash(pnpm run typecheck:node)',
-        'Bash(npx vitest run *)'
-      ])
-    )
-    expect(BUG_FIX_ALLOWED_TOOLS.some((tool) => /push|install|rm /.test(tool))).toBe(false)
+  it('pre-allows only file tools and read-only git; tests, typechecks and commits ask first', () => {
+    expect(BUG_FIX_ALLOWED_TOOLS).toEqual([
+      'Read',
+      'Edit',
+      'Write',
+      'Glob',
+      'Grep',
+      'Bash(git status*)',
+      'Bash(git diff*)',
+      'Bash(git log*)',
+      'Bash(git show*)'
+    ])
+    const allowed = startup.command.slice(startup.command.indexOf("'--allowedTools'"))
+    expect(allowed).not.toMatch(/vitest|typecheck|git commit|git add/)
   })
-})
 
-describe('bug fix agent extra read folders', () => {
-  it('adds --add-dir inside the variadic block, before --permission-mode', () => {
-    const { command } = buildBugFixStartup('Go', ['/ud/vertex-attachments/t1'])
-    expect(command).toContain("'--add-dir' '/ud/vertex-attachments/t1' '--disallowedTools'")
-    expect(command).toMatch(/'--permission-mode' 'acceptEdits' 'Go'$/)
+  it('never gives the agent an extra folder outside its workspace', () => {
+    expect(startup.command).not.toContain('--add-dir')
   })
 })

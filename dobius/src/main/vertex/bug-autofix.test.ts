@@ -113,6 +113,8 @@ describe('bug auto-fix', () => {
     expect(request.repoId).toBe('repo')
     expect(request.name).toBe('autofix-bug-a-a')
     expect(request.prompt).toContain('The button does nothing')
+    expect(request).not.toHaveProperty('taskId')
+    expect(request.screenshots).toEqual([])
     const stored = h.tasks[0]
     expect(stored.status).toBe('in-progress')
     expect(stored.autoFix).toMatchObject({
@@ -423,8 +425,11 @@ describe('bug auto-fix', () => {
       { id: 'repo', name: 'dobius-plus', path: '/r/dobius-plus' }
     )
     expect(prompt).toContain('<bug-report>')
-    expect(prompt).toContain('/u/shot.png')
+    // The agent gets a copy inside its workspace, never the original path.
+    expect(prompt).toContain('.dobius/bug-report/shot.png')
+    expect(prompt).not.toContain('/u/shot.png')
     expect(prompt).toContain('typecheck:node')
+    expect(prompt).toContain('wait for Carson to approve')
     expect(prompt).toContain('Never install anything')
     expect(prompt).toContain('Never push')
     expect(prompt).toContain('git commit')

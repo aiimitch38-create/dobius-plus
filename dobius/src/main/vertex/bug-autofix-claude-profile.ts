@@ -14,16 +14,12 @@ export {
 
 export const BUG_FIX_AGENT: TuiAgent = 'claude'
 
-/** `addDirs`: extra folders the agent may read (the card's screenshots). */
-export function buildBugFixStartup(
-  prompt: string,
-  addDirs: readonly string[] = []
-): WorktreeStartupLaunch {
+export function buildBugFixStartup(prompt: string): WorktreeStartupLaunch {
   const plan = buildAgentStartupPlan({
     agent: BUG_FIX_AGENT,
     prompt,
     cmdOverrides: {},
-    agentArgs: bugFixClaudeArgs(addDirs),
+    agentArgs: bugFixClaudeArgs(),
     agentEnv: {},
     platform: process.platform
   })

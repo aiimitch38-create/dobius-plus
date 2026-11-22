@@ -171,6 +171,46 @@ describe('ai vault resume command runtime', () => {
     })
   })
 
+  it('resumes an auto-fix session only with the restricted profile', () => {
+    const state = makeState({
+      worktreePath: '/home/alice/workspaces/autofix-login-abc12345',
+      localWindowsRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' }
+    })
+    state.settings = {
+      ...state.settings,
+      agentCmdOverrides: { claude: 'claude-work' },
+      agentDefaultArgs: { claude: '--dangerously-skip-permissions' },
+      agentDefaultEnv: { claude: { ANTHROPIC_BASE_URL: 'https://claude.example.test' } }
+    } as never
+    const session = {
+      agent: 'claude' as const,
+      sessionId: 'session-1',
+      cwd: '/home/alice/workspaces/autofix-login-abc12345',
+      codexHome: null,
+      // Even a remote host's prebuilt command must not be used verbatim.
+      executionHostId: 'ssh:box' as const,
+      resumeCommand: 'claude --dangerously-skip-permissions --resume session-1'
+    }
+    const startup = buildAiVaultResumeStartupForWorktree({
+      state,
+      worktreeId: 'repo-1::worktree-1',
+      session,
+      commandOverride: 'claude --dangerously-skip-permissions'
+    })
+    expect(startup.command).toMatch(/^claude '--restricted' '--strict-mcp-config' /)
+    expect(startup.command).toMatch(/'--permission-mode' 'acceptEdits' '--resume' 'session-1'$/)
+    expect(startup.command).not.toMatch(/dangerously|claude-work/)
+    expect(startup.env ?? {}).toEqual({})
+
+    // Found by the target workspace folder too, when the recorded cwd differs.
+    const byWorkspace = buildAiVaultResumeStartupForWorktree({
+      state,
+      worktreeId: 'repo-1::worktree-1',
+      session: { ...session, cwd: '/somewhere/else', executionHostId: undefined }
+    })
+    expect(byWorkspace.command).toContain("'--restricted'")
+  })
+
   it('gates clean Claude resume on the cleanClaudeResume setting', () => {
     const session = {
       agent: 'claude' as const,

@@ -25,7 +25,9 @@
  * here are the 2-slot cap and one agent per card. */
 
 import type { ExecutionAdmission } from '../agents/execution-gate'
-import { BUG_FIX_WORKTREE_PREFIX } from '../../shared/bug-fix-agent-profile'
+import { basename } from 'node:path'
+
+import { BUG_FIX_EVIDENCE_DIR, BUG_FIX_WORKTREE_PREFIX } from '../../shared/bug-fix-agent-profile'
 import type {
   VertexTask,
   VertexTaskAutoFix,
@@ -61,9 +63,9 @@ export type BugAutoFixDeps = {
     name: string
     prompt: string
     comment: string
-    /** The card, so its screenshot folder can be made readable to the agent. */
-    taskId: string
-    hasAttachments: boolean
+    /** The card's screenshot files, copied into the new workspace before the
+     *  agent starts (the prompt names them by their copied path). */
+    screenshots: string[]
   }) => Promise<BugAutoFixWorktree>
   /** Does this workspace have a terminal with a running agent? Throwing means unknown. */
   isWorktreeLive: (worktreeId: string) => Promise<boolean>
@@ -113,7 +115,11 @@ export function buildBugFixPrompt(task: VertexTask, repo: BugAutoFixRepo): strin
   const data = {
     title: task.title,
     report: task.description.slice(0, REPORT_LIMIT),
-    screenshots: (task.attachments ?? []).map((a) => a.path),
+    // Why relative: the files are copies inside the workspace; the agent is
+    // never given the originals.
+    screenshots: (task.attachments ?? []).map(
+      (a) => `${BUG_FIX_EVIDENCE_DIR}/${basename(a.path)}`
+    ),
   }
   return [
     `You are fixing a bug Carson reported on the Dobius+ Kanban (card id: ${task.id}).`,
@@ -132,6 +138,8 @@ export function buildBugFixPrompt(task: VertexTask, repo: BugAutoFixRepo): strin
     '3. Verify. In the app folder (dobius/ when it exists): pnpm run typecheck:node,',
     '   pnpm run typecheck:web, and your targeted tests with',
     '   npx vitest run --config config/vitest.config.ts <paths>.',
+    '   Tests, typechecks and commits wait for Carson to approve them in this console;',
+    '   batch them into as few commands as you can.',
     `   If dobius/node_modules is missing, link it: ln -s "${repo.path}/dobius/node_modules" dobius/node_modules`,
     '4. Commit on this branch: git add <your files>, then git commit -m "...".',
     '5. Finish with a short plain-English note: what was wrong, what you changed,',
@@ -270,8 +278,7 @@ export function createBugAutoFix(deps: BugAutoFixDeps) {
         name: worktreeName,
         prompt: buildBugFixPrompt(claimed, repo),
         comment: `Auto-fix for Kanban bug: ${task.title}`.slice(0, 200),
-        taskId: task.id,
-        hasAttachments: (claimed.attachments?.length ?? 0) > 0,
+        screenshots: (claimed.attachments ?? []).map((a) => a.path),
       })
       const startedAt = now()
       startedHere.set(task.id, { worktreeId: created.worktreeId, startedAt })
