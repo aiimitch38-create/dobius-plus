@@ -595,3 +595,46 @@ describe('terminal.resolveTab', () => {
     expect((await resolveTab([], '  ')).response.ok).toBe(false)
   })
 })
+
+describe('card address across a console restart (9.7)', () => {
+  it('card:<id> follows the card to its new terminal; the old tab is never used', async () => {
+    // Before restart: card c1 owns tab-1.
+    const before = makeRuntime(
+      [consoleCard(1, null)],
+      true,
+      [{ handle: 'term_old', tabId: 'tab-1', ptyId: 'pty-1', connected: true }]
+    )
+    const d1 = new RpcDispatcher({ runtime: before.runtime, methods: BOARD_CONSOLE_METHODS })
+    expect(
+      await d1.dispatch(makeRequest('board.resolveConsole', { worktree: `id:${WT}`, card: 'c1' }))
+    ).toMatchObject({ ok: true, result: { handle: 'term_old' } })
+
+    // After restart: same card id, new tab; the old tab's terminal may still be closing.
+    const after = makeRuntime(
+      [{ ...consoleCard(1, null), tabId: 'tab-new' }],
+      true,
+      [
+        { handle: 'term_old', tabId: 'tab-1', ptyId: 'pty-1', connected: true },
+        { handle: 'term_new', tabId: 'tab-new', ptyId: 'pty-9', connected: true }
+      ]
+    )
+    const d2 = new RpcDispatcher({ runtime: after.runtime, methods: BOARD_CONSOLE_METHODS })
+    expect(
+      await d2.dispatch(makeRequest('board.resolveConsole', { worktree: `id:${WT}`, card: 'c1' }))
+    ).toMatchObject({ ok: true, result: { id: 'c1', tabId: 'tab-new', handle: 'term_new' } })
+  })
+
+  it('reads "not running" while the new terminal is still starting, not the old one', async () => {
+    const { runtime } = makeRuntime(
+      [{ ...consoleCard(1, null), tabId: 'tab-new' }],
+      true,
+      [{ handle: 'term_old', tabId: 'tab-1', ptyId: 'pty-1', connected: true }]
+    )
+    const dispatcher = new RpcDispatcher({ runtime, methods: BOARD_CONSOLE_METHODS })
+    const response = await dispatcher.dispatch(
+      makeRequest('board.resolveConsole', { worktree: `id:${WT}`, card: 'c1' })
+    )
+    expect(response).toMatchObject({ ok: false, error: { code: 'board_card_not_running' } })
+    expect(JSON.stringify(response)).not.toContain('term_old')
+  })
+})
