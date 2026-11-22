@@ -2,8 +2,8 @@
 // Why: the check executes files the agent just wrote (a test file is enough),
 // so it must gain nothing the agent's own sandbox does not give: no network,
 // no unix sockets, no writes outside the run folder and a fresh temp folder,
-// no reads of sign-in files. If the sandbox cannot be applied the check does
-// not run at all.
+// no reads of sign-in files, no planting of files that run unsandboxed later.
+// Whenever that cannot be guaranteed the check does not run at all.
 
 import { execFile } from 'node:child_process'
 import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
@@ -14,102 +14,32 @@ import type { AutomationPrecheckResult } from '../../shared/automations-types'
 import { runAutomationPrecheck } from '../automations/precheck-runner'
 import { getUserDataRoot } from '../storage/user-data-root'
 import { buildPostcheckEnv } from './agent-run-postcheck-env'
+import {
+  findEnvLinkTargets,
+  isWithin,
+  postcheckSecretPaths,
+  resolveThroughExisting
+} from './agent-run-postcheck-paths'
+import { buildPostcheckSandboxProfile } from './agent-run-postcheck-profile'
 
 const SANDBOX_EXEC = '/usr/bin/sandbox-exec'
 const PROBE_TIMEOUT_MS = 5000
 
-// Folders and files under home that hold sign-in material or app secrets.
-const HOME_SECRET_PATHS = [
-  '.ssh',
-  '.aws',
-  '.config',
-  '.gnupg',
-  '.docker',
-  '.kube',
-  '.claude',
-  '.claude.json',
-  '.codex',
-  '.dobius',
-  '.netrc',
-  '.npmrc',
-  '.git-credentials',
-  'Library/Keychains',
-  'Library/Cookies',
-  'Library/Messages'
-]
-
-// System services a compiler, test runner or git needs to start. Nothing here
-// reaches the keychain, the network or another app.
-const MACH_SERVICES = [
-  'com.apple.system.opendirectoryd.libinfo',
-  'com.apple.system.opendirectoryd.membership',
-  'com.apple.system.notification_center',
-  'com.apple.system.logger',
-  'com.apple.logd',
-  'com.apple.diagnosticd',
-  'com.apple.cfprefsd.daemon',
-  'com.apple.cfprefsd.agent',
-  'com.apple.FSEvents'
-]
-
 export type SandboxedPostcheck =
-  | { ok: true; result: AutomationPrecheckResult }
+  | {
+      ok: true
+      result: AutomationPrecheckResult
+      /** Something the check started is still running and could not be stopped. */
+      processesLeft: boolean
+    }
   | { ok: false; reason: string }
-
-function sbString(value: string): string {
-  return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`
-}
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`
 }
 
-function isWithin(target: string, root: string): boolean {
-  const relative = path.relative(root, target)
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
-}
-
-// The sandbox matches real paths, so `/tmp` must become `/private/tmp`.
-function realPath(target: string): string {
-  return existsSync(target) ? realpathSync(target) : path.resolve(target)
-}
-
-/** All paths must already be real (symlink-free) absolute paths. */
-export function buildPostcheckSandboxProfile(args: {
-  cwd: string
-  tempDir: string
-  homeDir: string
-  userDataDir: string
-}): string {
-  const secrets = [
-    ...HOME_SECRET_PATHS.map((entry) => path.join(args.homeDir, entry)),
-    args.userDataDir
-  ]
-  // A run folder that lives inside a denied folder (an agent's own workspace
-  // under ~/.dobius) stays readable. Not when it CONTAINS one: a run folder of
-  // home must not re-open every secret under it.
-  const cwdHoldsSecrets = secrets.some((secret) => isWithin(secret, args.cwd))
-  const dotEnv = String.raw`(deny file-read* (regex #"/\.env[^/]*$"))`
-  return [
-    '(version 1)',
-    '(deny default)',
-    '(allow process-exec*)',
-    '(allow process-fork)',
-    '(allow signal (target same-sandbox))',
-    '(allow sysctl-read)',
-    '(allow file-ioctl)',
-    '(allow ipc-posix-shm-read*)',
-    '(allow ipc-posix-sem)',
-    `(allow mach-lookup ${MACH_SERVICES.map((name) => `(global-name ${sbString(name)})`).join(' ')})`,
-    '(allow file-read*)',
-    `(deny file-read* ${secrets.map((secret) => `(subpath ${sbString(secret)})`).join(' ')})`,
-    ...(cwdHoldsSecrets ? [] : [`(allow file-read* (subpath ${sbString(args.cwd)}))`]),
-    dotEnv,
-    `(allow file-write* (subpath ${sbString(args.cwd)}) (subpath ${sbString(args.tempDir)}))`,
-    '(allow file-write-data (literal "/dev/null") (literal "/dev/zero") (literal "/dev/dtracehelper"))',
-    // Already denied by default; stated so nobody "fixes" a failing check by allowing it.
-    '(deny network*)'
-  ].join('\n')
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function probeSandbox(profile: string): Promise<string | null> {
@@ -123,6 +53,28 @@ function probeSandbox(profile: string): Promise<string | null> {
       }
     )
   })
+}
+
+/** Resolves everything the profile needs, or says why this folder cannot be sandboxed. */
+function planSandbox(cwdArg: string, tempDir: string): { profile: string } | { refusal: string } {
+  const cwd = resolveThroughExisting(cwdArg)
+  const secretPaths = postcheckSecretPaths({
+    homeDir: os.homedir(),
+    userDataDir: getUserDataRoot()
+  })
+  // The check may write anywhere in the run folder. A run folder that holds a
+  // sign-in folder (home itself) or sits inside one cannot be made safe.
+  if (secretPaths.some((secret) => isWithin(secret, cwd) || isWithin(cwd, secret))) {
+    return { refusal: 'the run folder holds, or is inside, a protected sign-in folder' }
+  }
+  return {
+    profile: buildPostcheckSandboxProfile({
+      cwd,
+      tempDir,
+      secretPaths,
+      envLinkTargets: findEnvLinkTargets(cwd)
+    })
+  }
 }
 
 /**
@@ -141,18 +93,20 @@ export async function runSandboxedPostcheck(args: {
   let profile: string
   try {
     tempDir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'dobius-postcheck-')))
-    profile = buildPostcheckSandboxProfile({
-      cwd: realPath(args.cwd),
-      tempDir,
-      homeDir: realPath(os.homedir()),
-      userDataDir: realPath(getUserDataRoot())
-    })
+    const plan = planSandbox(args.cwd, tempDir)
+    if ('refusal' in plan) {
+      rmSync(tempDir, { recursive: true, force: true })
+      return { ok: false, reason: plan.refusal }
+    }
+    profile = plan.profile
   } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : String(error) }
+    return { ok: false, reason: errorText(error) }
   }
+  let processesLeft = true
   try {
     const probeFailure = await probeSandbox(profile)
     if (probeFailure !== null) {
+      processesLeft = false
       return { ok: false, reason: `the sandbox did not start (${probeFailure})` }
     }
     const result = await runAutomationPrecheck({
@@ -163,6 +117,7 @@ export async function runSandboxedPostcheck(args: {
       target: {
         type: 'local',
         cwd: args.cwd,
+        requireGroupExit: true,
         env: {
           ...buildPostcheckEnv(process.env),
           TMPDIR: tempDir,
@@ -172,16 +127,20 @@ export async function runSandboxedPostcheck(args: {
         }
       }
     })
+    // ponytail: only the check's process group is tracked. A process that
+    // starts its own session is not found (macOS hides other processes'
+    // environments, so it cannot be tagged); it stays inside the sandbox.
+    processesLeft = result.processGroupAlive === true
     // Records and retry prompts show the command that was asked for, not the wrapper.
-    return { ok: true, result: { ...result, command: args.postcheck.command } }
+    return { ok: true, result: { ...result, command: args.postcheck.command }, processesLeft }
   } finally {
-    try {
-      rmSync(tempDir, { recursive: true, force: true })
-    } catch (error) {
-      console.error(
-        '[agents] could not remove the postcheck temp folder:',
-        error instanceof Error ? error.message : String(error)
-      )
+    // Why not while something is still running: it may be using the folder.
+    if (!processesLeft) {
+      try {
+        rmSync(tempDir, { recursive: true, force: true })
+      } catch (error) {
+        console.error('[agents] could not remove the postcheck temp folder:', errorText(error))
+      }
     }
   }
 }

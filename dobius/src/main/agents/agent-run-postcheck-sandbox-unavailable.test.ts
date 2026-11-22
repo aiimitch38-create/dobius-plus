@@ -1,3 +1,6 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ runAutomationPrecheck: vi.fn(), probeError: 'sandbox_apply: Operation not permitted' }))
@@ -30,7 +33,7 @@ describe('runSandboxedPostcheck when the sandbox cannot be used', () => {
     async () => {
       const outcome = await runSandboxedPostcheck({
         postcheck: { command: 'npm test', timeoutSeconds: 60 },
-        cwd: process.cwd()
+        cwd: mkdtempSync(path.join(tmpdir(), 'dobius-postcheck-none-'))
       })
       expect(outcome).toEqual({
         ok: false,
@@ -44,7 +47,7 @@ describe('runSandboxedPostcheck when the sandbox cannot be used', () => {
     Object.defineProperty(process, 'platform', { value: 'linux' })
     const outcome = await runSandboxedPostcheck({
       postcheck: { command: 'npm test', timeoutSeconds: 60 },
-      cwd: process.cwd()
+      cwd: mkdtempSync(path.join(tmpdir(), 'dobius-postcheck-none-'))
     })
     expect(outcome).toEqual({ ok: false, reason: 'no sandbox is available on this system' })
     expect(mocks.runAutomationPrecheck).not.toHaveBeenCalled()

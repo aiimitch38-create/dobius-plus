@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
 import net from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -9,7 +18,7 @@ const mocks = vi.hoisted(() => ({ userData: '' }))
 vi.mock('../ipc/ssh', () => ({ getSshConnectionManager: () => null }))
 vi.mock('../storage/user-data-root', () => ({ getUserDataRoot: () => mocks.userData }))
 
-import { buildPostcheckSandboxProfile, runSandboxedPostcheck } from './agent-run-postcheck-sandbox'
+import { runSandboxedPostcheck } from './agent-run-postcheck-sandbox'
 
 const node = JSON.stringify(process.execPath)
 
@@ -155,39 +164,144 @@ describe.skipIf(process.platform !== 'darwin')('runSandboxedPostcheck (real sand
     }
   })
 
+  it('denies getting at a .env file by renaming, linking or copying it', async () => {
+    for (const command of [
+      'mv .env readable.txt && cat readable.txt',
+      'ln .env hard.txt && cat hard.txt',
+      'ln -s .env soft.txt && cat soft.txt',
+      'cp .env copy.txt && cat copy.txt',
+      `${node} -e "const fs = require('fs'); fs.renameSync('.env', 'r.txt'); console.log(fs.readFileSync('r.txt', 'utf8'))"`
+    ]) {
+      const result = await check(command)
+      expect(result.exitCode, command).not.toBe(0)
+      expect(`${result.stdout}${result.stderr}`, command).not.toContain('ENV-SECRET')
+    }
+    expect(readFileSync(path.join(cwd, '.env'), 'utf8')).toBe('ENV-SECRET')
+  })
+
+  it('denies deleting or overwriting a .env file', async () => {
+    expect((await check('rm .env')).exitCode).not.toBe(0)
+    expect((await check('echo x > .env')).exitCode).not.toBe(0)
+    expect(readFileSync(path.join(cwd, '.env'), 'utf8')).toBe('ENV-SECRET')
+  })
+
+  it.each([
+    ['.claude/settings.json', 'mkdir -p .claude && echo x > .claude/settings.json'],
+    ['.claude/settings.local.json', 'mkdir -p .claude; echo x > .claude/settings.local.json'],
+    ['.claude/hooks', 'mkdir -p .claude/hooks && echo x > .claude/hooks/run.sh'],
+    ['.mcp.json', 'echo x > .mcp.json'],
+    ['.husky', 'mkdir .husky && echo x > .husky/pre-commit'],
+    ['a nested .claude', 'mkdir -p pkg/.claude && echo x > pkg/.claude/settings.json'],
+    ['a tree built in the temp folder', 'mkdir -p "$TMPDIR/e/.claude" && mv "$TMPDIR/e/.claude" .claude']
+  ])('denies planting %s', async (target, command) => {
+    const result = await check(command)
+    expect(result.exitCode).not.toBe(0)
+    const name = target.startsWith('.') ? target.split('/')[0] : '.claude'
+    expect(existsSync(path.join(cwd, name))).toBe(false)
+    expect(existsSync(path.join(cwd, 'pkg', '.claude'))).toBe(false)
+  })
+
+  it('denies moving a prepared folder or file onto a protected name', async () => {
+    const dir = await check('mkdir staged && echo x > staged/settings.json && mv staged .claude')
+    expect(dir.exitCode).not.toBe(0)
+    expect(existsSync(path.join(cwd, '.claude'))).toBe(false)
+    const file = await check('echo x > staged.json && mv staged.json .mcp.json')
+    expect(file.exitCode).not.toBe(0)
+    expect(existsSync(path.join(cwd, '.mcp.json'))).toBe(false)
+  })
+
+  it('denies writing git hooks or config and replacing the .git folder', async () => {
+    mkdirSync(path.join(cwd, '.git', 'hooks'), { recursive: true })
+    writeFileSync(path.join(cwd, '.git', 'config'), 'ORIGINAL')
+    for (const command of [
+      'echo x > .git/hooks/pre-commit',
+      'echo x >> .git/config',
+      'mv .git .git-old',
+      'rm -rf .git/hooks',
+      'mv .git/hooks .git/hooks-old'
+    ]) {
+      expect((await check(command)).exitCode, command).not.toBe(0)
+    }
+    expect(existsSync(path.join(cwd, '.git', 'hooks', 'pre-commit'))).toBe(false)
+    expect(existsSync(path.join(cwd, '.git-old'))).toBe(false)
+    expect(readFileSync(path.join(cwd, '.git', 'config'), 'utf8')).toBe('ORIGINAL')
+  })
+
+  it('denies a sign-in folder that is a symlink, under both of its names', async () => {
+    const realAws = path.join(root, 'vault', 'aws')
+    mkdirSync(realAws, { recursive: true })
+    writeFileSync(path.join(realAws, 'credentials'), 'LINKED-AWS-SECRET')
+    rmSync(path.join(home, '.aws'), { recursive: true })
+    symlinkSync(realAws, path.join(home, '.aws'))
+
+    for (const command of [
+      'cat "$HOME/.aws/credentials"',
+      `cat ${JSON.stringify(path.join(realAws, 'credentials'))}`,
+      `ls ${JSON.stringify(realAws)}`
+    ]) {
+      const result = await check(command)
+      expect(result.exitCode, command).not.toBe(0)
+      expect(`${result.stdout}${result.stderr}`, command).not.toContain('LINKED-AWS-SECRET')
+      expect(result.stdout, command).not.toContain('credentials')
+    }
+  })
+
+  it('denies the real file behind a .env symlink in the project', async () => {
+    mkdirSync(path.join(cwd, 'conf'))
+    writeFileSync(path.join(cwd, 'conf', 'plain-name.txt'), 'LINKED-ENV-SECRET')
+    symlinkSync(path.join(cwd, 'conf', 'plain-name.txt'), path.join(cwd, '.env.production'))
+
+    for (const command of [
+      'cat .env.production',
+      'cat conf/plain-name.txt',
+      'mv conf conf2 && cat conf2/plain-name.txt',
+      'mv conf/plain-name.txt out.txt && cat out.txt'
+    ]) {
+      const result = await check(command)
+      expect(result.exitCode, command).not.toBe(0)
+      expect(`${result.stdout}${result.stderr}`, command).not.toContain('LINKED-ENV-SECRET')
+    }
+  })
+
+  it.each([
+    ['home itself', () => home],
+    ['inside a sign-in folder', () => path.join(home, '.config', 'proj')]
+  ])('refuses to run at all when the run folder is %s', async (_label, folder) => {
+    mkdirSync(folder(), { recursive: true })
+    const outcome = await runSandboxedPostcheck({
+      postcheck: { command: 'echo ran > ran.txt', timeoutSeconds: 20 },
+      cwd: folder()
+    })
+    expect(outcome).toEqual({
+      ok: false,
+      reason: 'the run folder holds, or is inside, a protected sign-in folder'
+    })
+    expect(existsSync(path.join(folder(), 'ran.txt'))).toBe(false)
+  })
+
+  function isRunning(pid: number): boolean {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      // No such process.
+      return false
+    }
+  }
+
+  it('stops a background process the check left in its process group', async () => {
+    const outcome = await runSandboxedPostcheck({
+      postcheck: { command: 'sleep 60 >/dev/null 2>&1 & echo $! > pid.txt', timeoutSeconds: 20 },
+      cwd
+    })
+    expect(outcome).toMatchObject({ ok: true, processesLeft: false })
+    const pid = Number(readFileSync(path.join(cwd, 'pid.txt'), 'utf8'))
+    expect(pid).toBeGreaterThan(0)
+    expect(isRunning(pid)).toBe(false)
+  })
+
   it('removes its temp folder afterwards', async () => {
     const result = await check('echo "$TMPDIR"')
     expect(existsSync(result.stdout.trim())).toBe(false)
-  })
-})
-
-describe('buildPostcheckSandboxProfile', () => {
-  const base = { tempDir: '/private/tmp/t', homeDir: '/Users/me', userDataDir: '/Users/me/Library/Application Support/dobius-plus' }
-
-  it('denies by default, denies the network and writes only to the run folder and temp folder', () => {
-    const profile = buildPostcheckSandboxProfile({ ...base, cwd: '/Users/me/Projects (Code)/app' })
-    expect(profile).toContain('(deny default)')
-    expect(profile).toContain('(deny network*)')
-    expect(profile).toContain(
-      '(allow file-write* (subpath "/Users/me/Projects (Code)/app") (subpath "/private/tmp/t"))'
-    )
-    expect(profile).toContain('(subpath "/Users/me/.ssh")')
-    expect(profile).toContain('(subpath "/Users/me/Library/Application Support/dobius-plus")')
-    expect(profile).not.toMatch(/allow network|allow default|allow mach-lookup\)/)
-  })
-
-  it('keeps a run folder inside a denied folder readable', () => {
-    const profile = buildPostcheckSandboxProfile({ ...base, cwd: '/Users/me/.dobius/agents/a1/work' })
-    expect(profile).toContain('(allow file-read* (subpath "/Users/me/.dobius/agents/a1/work"))')
-  })
-
-  it('does not re-open the secrets when the run folder is home itself', () => {
-    const profile = buildPostcheckSandboxProfile({ ...base, cwd: '/Users/me' })
-    expect(profile).not.toContain('(allow file-read* (subpath "/Users/me"))')
-  })
-
-  it('escapes quotes in paths', () => {
-    const profile = buildPostcheckSandboxProfile({ ...base, cwd: '/Users/me/a"b' })
-    expect(profile).toContain(String.raw`(subpath "/Users/me/a\"b")`)
   })
 })
