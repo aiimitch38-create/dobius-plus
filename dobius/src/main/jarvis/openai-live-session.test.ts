@@ -69,15 +69,34 @@ describe('createOpenAiLiveSession', () => {
     const [url, init] = fetchImpl.mock.calls[0] ?? []
     expect(url).toBe(OPENAI_LIVE_API.sessionsUrl)
     expect(init?.method).toBe('POST')
-    expect(init?.headers).toEqual({ Authorization: `Bearer ${KEY}` })
+    expect(init?.headers).toEqual({
+      Authorization: `Bearer ${KEY}`,
+      'Content-Type': 'application/json'
+    })
     expect(init?.signal).toBeInstanceOf(AbortSignal)
-    const body = init?.body as FormData
-    expect(body.get('sdp')).toBe(OFFER)
-    expect(JSON.parse(String(body.get('session')))).toEqual({
-      model: 'gpt-live-1.1',
-      voice: 'marin',
-      wake_policy: { type: 'speech' },
-      idle_timeout_s: 30
+    expect(JSON.parse(String(init?.body))).toEqual({
+      session: {
+        model: 'gpt-live-1.1',
+        audio: { output: { voice: 'marin' } },
+        wake_policy: { type: 'speech' },
+        idle_timeout_s: 30
+      },
+      transport: { type: 'webrtc', sdp: OFFER }
+    })
+  })
+
+  it('reads the documented 201 answer: session.id and transport.sdp', async () => {
+    const fetchImpl = fetchReturning(
+      () =>
+        new Response(
+          JSON.stringify({ session: { id: 'live_123' }, transport: { type: 'webrtc', sdp: ANSWER } }),
+          { status: 201, headers: { 'content-type': 'application/json' } }
+        )
+    )
+    expect(await createOpenAiLiveSession(OFFER, OPTIONS, deps(fetchImpl))).toEqual({
+      ok: true,
+      answerSdp: ANSWER,
+      sessionId: 'live_123'
     })
   })
 
