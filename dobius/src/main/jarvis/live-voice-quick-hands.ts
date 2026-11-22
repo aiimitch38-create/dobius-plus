@@ -4,6 +4,7 @@
 // doubt (odd phrasing, no terminal or several terminals by that name) returns
 // null and the request goes to him unchanged. Nothing here closes, switches
 // or changes settings; the only write is typing text the request spelled out.
+import { checkExecutionAdmission } from '../agents/execution-gate'
 import type { RuntimeTerminalRead, RuntimeTerminalSummary } from '../../shared/runtime-types'
 import { usageSummaryForRuntime } from '../ipc/usage-access'
 
@@ -296,6 +297,9 @@ export type QuickHandsRuntime = {
     options?: { beforeWrite?: (ptyId: string) => void | Promise<void> }
   ) => Promise<unknown>
   getDriver: (ptyId: string) => { kind: string }
+  getTerminalAgentStatus: (
+    handle: string
+  ) => Promise<{ isRunningAgent: boolean; status: string | null }>
 }
 
 const READ_TAIL_LINES = 40
@@ -329,6 +333,21 @@ export function createRuntimeQuickHands(
         name: terminal.title?.trim() || terminal.branch || 'terminal'
       })),
     typeInto: async (handle, text, enter) => {
+      // Why these guards: a misheard request must never answer a permission
+      // prompt, run a shell command, or act while the crew is paused. A throw
+      // hands the request to ADAM, whose own gates decide.
+      const agent = await runtime().getTerminalAgentStatus(handle)
+      if (agent.status === 'permission') {
+        throw new Error('terminal is waiting on a permission prompt')
+      }
+      if (enter) {
+        if (!agent.isRunningAgent) {
+          throw new Error('Enter is only pressed for agent terminals, never a plain shell')
+        }
+        if (!checkExecutionAdmission('board-relay').allowed) {
+          throw new Error('the crew is paused')
+        }
+      }
       await runtime().sendTerminal(handle, { text }, { beforeWrite: notPhoneDriven })
       if (enter) {
         await wait(SUBMIT_DELAY_MS)

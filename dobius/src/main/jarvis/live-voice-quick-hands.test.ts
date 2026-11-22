@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
+
+const admission = vi.hoisted(() => ({ allowed: true }))
+vi.mock('../agents/execution-gate', () => ({
+  checkExecutionAdmission: () => ({ allowed: admission.allowed })
+}))
 import {
   createRuntimeQuickHands,
   findTerminal,
@@ -189,7 +194,10 @@ describe('runQuickHand', () => {
 })
 
 describe('createRuntimeQuickHands', () => {
-  function fakeRuntime(driver = 'idle'): QuickHandsRuntime & {
+  function fakeRuntime(
+    driver = 'idle',
+    agent: { isRunningAgent: boolean; status: string | null } = { isRunningAgent: true, status: 'idle' }
+  ): QuickHandsRuntime & {
     sendTerminal: ReturnType<typeof vi.fn>
   } {
     return {
@@ -203,7 +211,8 @@ describe('createRuntimeQuickHands', () => {
       sendTerminal: vi.fn(async (_handle, _action, options) => {
         await options?.beforeWrite?.('pty-1')
       }),
-      getDriver: () => ({ kind: driver })
+      getDriver: () => ({ kind: driver }),
+      getTerminalAgentStatus: async () => agent
     }
   }
 
@@ -224,5 +233,33 @@ describe('createRuntimeQuickHands', () => {
   it('refuses to type into a terminal a phone is driving', async () => {
     const hands = createRuntimeQuickHands(() => fakeRuntime('mobile'), async () => undefined)
     await expect(hands.typeInto('t1', 'ls', false)).rejects.toThrow(/phone/)
+  })
+
+  it('never presses Enter in a plain shell, but may type there', async () => {
+    const runtime = fakeRuntime('idle', { isRunningAgent: false, status: null })
+    const hands = createRuntimeQuickHands(() => runtime, async () => undefined)
+    await expect(hands.typeInto('t1', 'rm -rf x', true)).rejects.toThrow(/plain shell/)
+    expect(runtime.sendTerminal).not.toHaveBeenCalled()
+    await hands.typeInto('t1', 'hello', false)
+    expect(runtime.sendTerminal).toHaveBeenCalledTimes(1)
+  })
+
+  it('never types into a terminal waiting on a permission prompt', async () => {
+    const runtime = fakeRuntime('idle', { isRunningAgent: true, status: 'permission' })
+    const hands = createRuntimeQuickHands(() => runtime, async () => undefined)
+    await expect(hands.typeInto('t1', 'yes', false)).rejects.toThrow(/permission/)
+    expect(runtime.sendTerminal).not.toHaveBeenCalled()
+  })
+
+  it('does not press Enter while the crew is paused', async () => {
+    admission.allowed = false
+    try {
+      const runtime = fakeRuntime()
+      const hands = createRuntimeQuickHands(() => runtime, async () => undefined)
+      await expect(hands.typeInto('t1', 'go', true)).rejects.toThrow(/paused/)
+      expect(runtime.sendTerminal).not.toHaveBeenCalled()
+    } finally {
+      admission.allowed = true
+    }
   })
 })
