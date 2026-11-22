@@ -175,7 +175,11 @@ export function supportsBrowserPageFlag(commandPath: string[]): boolean {
       'usage',
       'limits',
       'version',
-      'feedback'
+      'feedback',
+      'settings',
+      'view',
+      'accounts',
+      'notify'
     ].includes(commandPath[0])
   ) {
     return false
@@ -229,7 +233,10 @@ export function isCommandGroup(commandPath: string[]): boolean {
         'knowledge',
         'imessage',
         'update',
-        'backup'
+        'backup',
+        'settings',
+        'view',
+        'accounts'
       ].includes(commandPath[0])) ||
     (commandPath.length === 2 && commandPath[0] === 'agent' && commandPath[1] === 'hooks') ||
     (commandPath.length === 2 &&

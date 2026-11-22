@@ -24,6 +24,8 @@ import { SYSTEM_COMMAND_SPECS } from './system'
 import { CREW_COMMAND_SPECS } from './crew'
 import { GIT_COMMAND_SPECS } from './git'
 import { PR_COMMAND_SPECS } from './pr'
+import { ACCOUNT_COMMAND_SPECS } from './accounts'
+import { APP_UI_COMMAND_SPECS } from './app-ui'
 import { APP_SERVICE_COMMAND_SPECS } from './app-services'
 import { ADAM_COMMAND_SPECS } from './adam'
 
@@ -54,5 +56,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
   ...GIT_COMMAND_SPECS,
   ...PR_COMMAND_SPECS,
   ...ADAM_COMMAND_SPECS,
-  ...APP_SERVICE_COMMAND_SPECS
+  ...APP_SERVICE_COMMAND_SPECS,
+  ...APP_UI_COMMAND_SPECS,
+  ...ACCOUNT_COMMAND_SPECS
 ]
