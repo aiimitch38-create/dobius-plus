@@ -11,6 +11,10 @@ import { SelfEditStore, selfEditRoots } from './self-edit'
 import { resolveSelfEditRepoRoot } from './self-edit-repo-root'
 import { closeSelfEditWindow, showSelfEditProposal } from '../window/self-edit-window'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
+import { createOpenAiLiveSession, testOpenAiLiveConnection } from './openai-live-session'
+import type { OpenAiLiveSessionOptions } from './openai-live-session'
+import { resolveLiveVoiceSettings } from '../../shared/live-voice-settings'
+import type { OpenAiLiveSessionResult } from '../../shared/speech-types'
 import {
   clearElevenLabsApiKey,
   dropLegacyElevenLabsKeyFromSettings,
@@ -106,6 +110,7 @@ export function registerJarvisIpcHandlers(store: Store, mainWindow: BrowserWindo
   const service = getJarvisService(createJarvisDeps(store))
   registerHandlers(store, service)
   registerElevenLabsKeyHandlers(store)
+  registerLiveSessionHandlers(store)
   wireWakeWordObservation(store, service)
   restorePersistedMode(store, service)
 }
@@ -143,6 +148,52 @@ function registerElevenLabsKeyHandlers(store: Store): void {
     dropLegacyElevenLabsKeyFromSettings(store)
     return elevenLabsKeyStatus(store)
   })
+}
+
+function liveSessionOptions(store: Store): OpenAiLiveSessionOptions {
+  // Why from the store, not the window: the window supplies only the offer, so
+  // a compromised renderer cannot pick the voice or switch standby off.
+  const live = resolveLiveVoiceSettings(store.getSettings().voice)
+  return { voice: live.voice, idleTimeoutSec: live.idleTimeoutSec }
+}
+
+// Why one at a time: every created session starts billing, so a double click
+// or a retry loop in the window must not open several at once.
+let liveSessionInFlight = false
+
+async function runLiveSessionOnce<T>(
+  run: () => Promise<T>
+): Promise<T | Extract<OpenAiLiveSessionResult, { ok: false }>> {
+  if (liveSessionInFlight) {
+    return {
+      ok: false,
+      kind: 'busy',
+      error: 'A live voice connection is already being set up. Wait a moment and try again.'
+    }
+  }
+  liveSessionInFlight = true
+  try {
+    return await run()
+  } finally {
+    liveSessionInFlight = false
+  }
+}
+
+function registerLiveSessionHandlers(store: Store): void {
+  ipcMain.removeHandler('jarvis:liveSessionConnect')
+  ipcMain.handle('jarvis:liveSessionConnect', (_event, payload: unknown) => {
+    const offerSdp =
+      payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? (payload as { offerSdp?: unknown }).offerSdp
+        : undefined
+    // createOpenAiLiveSession validates the offer itself and reads the key.
+    return runLiveSessionOnce(() => createOpenAiLiveSession(offerSdp, liveSessionOptions(store)))
+  })
+
+  ipcMain.removeHandler('jarvis:liveSessionTest')
+  ipcMain.handle('jarvis:liveSessionTest', () =>
+    runLiveSessionOnce(() => testOpenAiLiveConnection(liveSessionOptions(store)))
+  )
 }
 
 function registerHandlers(store: Store, service: JarvisService): void {

@@ -107,6 +107,7 @@ import {
   ONBOARDING_FLOW_VERSION,
   ONBOARDING_FINAL_STEP
 } from '../shared/constants'
+import { resolveLiveVoiceEngine } from '../shared/live-voice-settings'
 import {
   parseWorkspaceSession,
   workspaceSessionStateSchema
@@ -3383,7 +3384,11 @@ export class Store {
             ),
             voice: {
               ...getDefaultVoiceSettings(),
-              ...parsed.settings?.voice
+              ...parsed.settings?.voice,
+              // Why here: settings saved before the engine choice existed have
+              // no liveVoiceEngine, and the plain merge above cannot tell an
+              // explicit ElevenLabs user from one who never chose.
+              liveVoiceEngine: resolveLiveVoiceEngine(parsed.settings?.voice)
             }
           },
           // Why: 'recent' used to mean the weighted smart sort. One-shot

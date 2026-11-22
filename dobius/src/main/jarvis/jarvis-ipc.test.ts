@@ -58,6 +58,15 @@ vi.mock('electron', () => ({
   }
 }))
 
+const live = vi.hoisted(() => ({
+  create: vi.fn(async (..._args: unknown[]) => ({ ok: true, answerSdp: 'v=0', sessionId: 's1' })),
+  test: vi.fn(async (..._args: unknown[]) => ({ ok: true, message: 'Connected.' }))
+}))
+vi.mock('./openai-live-session', () => ({
+  createOpenAiLiveSession: live.create,
+  testOpenAiLiveConnection: live.test
+}))
+
 vi.mock('../speech/speech-runtime-service', () => ({
   getSpeechSttService: () => ({ startDictation: async () => undefined })
 }))
@@ -192,5 +201,67 @@ describe('Adam Hermes voice routing', () => {
     )
     await electron.handlers.get('jarvis:cancelAsk')?.()
     expect(adam.cancel).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('OpenAI Live session IPC', () => {
+  function liveStore(voice: Record<string, unknown>): Store {
+    return { getSettings: () => ({ voice }), updateSettings: vi.fn() } as unknown as Store
+  }
+
+  it('passes only the offer from the window; voice and idle timeout come from saved settings', async () => {
+    await register(
+      liveStore({ openAiLiveVoice: 'cedar', liveVoiceIdleTimeoutSec: 45 }),
+      fakeWindow()
+    )
+    const connect = electron.handlers.get('jarvis:liveSessionConnect')
+
+    const result = await connect?.({}, { offerSdp: 'v=0 offer', voice: 'evil', apiKey: 'x' })
+
+    expect(result).toEqual({ ok: true, answerSdp: 'v=0', sessionId: 's1' })
+    expect(live.create).toHaveBeenCalledWith('v=0 offer', { voice: 'cedar', idleTimeoutSec: 45 })
+  })
+
+  it('normalizes bad saved settings and malformed payloads before the session module sees them', async () => {
+    await register(
+      liveStore({ openAiLiveVoice: 'BAD VOICE!', liveVoiceIdleTimeoutSec: 9000 }),
+      fakeWindow()
+    )
+    const connect = electron.handlers.get('jarvis:liveSessionConnect')
+
+    await connect?.({}, 'just a string')
+    await connect?.({}, null)
+    await connect?.({}, ['v=0'])
+
+    for (const call of live.create.mock.calls) {
+      expect(call).toEqual([undefined, { voice: 'marin', idleTimeoutSec: 60 }])
+    }
+    expect(live.create).toHaveBeenCalledTimes(3)
+  })
+
+  it('refuses a second session while one is still being created', async () => {
+    await register(liveStore({}), fakeWindow())
+    let finish: (value: { ok: true; answerSdp: string; sessionId: string }) => void = () =>
+      undefined
+    live.create.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const connect = electron.handlers.get('jarvis:liveSessionConnect')
+    const test = electron.handlers.get('jarvis:liveSessionTest')
+
+    const first = connect?.({}, { offerSdp: 'v=0 offer' })
+    expect(await connect?.({}, { offerSdp: 'v=0 offer' })).toMatchObject({
+      ok: false,
+      kind: 'busy'
+    })
+    expect(await test?.({})).toMatchObject({ ok: false, kind: 'busy' })
+    finish({ ok: true, answerSdp: 'v=0', sessionId: 's2' })
+    expect(await first).toMatchObject({ ok: true, sessionId: 's2' })
+
+    expect(await test?.({})).toEqual({ ok: true, message: 'Connected.' })
+    expect(live.test).toHaveBeenCalledWith({ voice: 'marin', idleTimeoutSec: 30 })
   })
 })
