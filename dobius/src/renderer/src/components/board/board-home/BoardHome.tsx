@@ -317,6 +317,13 @@ export default function BoardHome(): React.JSX.Element {
               return
             }
             useAppStore.getState().setAdamAwake(true)
+            // Why: waking only animates the body; pressPtt starts the real
+            // listen-then-speak turn, same as the command-bar and dock orbs.
+            try {
+              void window.api.jarvis.pressPtt()
+            } catch (error) {
+              console.error('pressPtt failed', error)
+            }
           }}
         >
           {adamAwake ? null : <VoiceOrb size={112} getLevel={() => voiceOrbLevelSource.current()} />}
