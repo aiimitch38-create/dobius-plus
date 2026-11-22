@@ -150,6 +150,24 @@ describe('launchAgentInNewTab', () => {
     mockPasteDraftWhenAgentReady.mockResolvedValue(true)
   })
 
+  it('sends the restricted command to a paired host for an auto-fix workspace', async () => {
+    mockIsWebRuntimeSessionActive.mockReturnValue(true)
+    store.settings = {
+      agentCmdOverrides: {},
+      agentDefaultArgs: { claude: '--dangerously-skip-permissions' },
+      agentDefaultEnv: {},
+      activeRuntimeEnvironmentId: 'web-runtime'
+    }
+    store.worktreesByRepo['repo-1'][0].path = '/repo/autofix-login-abc12345'
+    const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
+
+    launchAgentInNewTab({ agent: 'claude', worktreeId: 'wt-1', groupId: 'group-1' })
+
+    const [request] = mockCreateWebRuntimeSessionTerminal.mock.calls[0] as [{ command?: string }]
+    expect(request.command).toMatch(/^claude '--restricted' /)
+    expect(request.command).not.toContain('dangerously')
+  })
+
   it('launches Claude in an auto-fix workspace only with the restricted profile', async () => {
     const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
     store.worktreesByRepo['repo-1'][0].path = '/repo/autofix-login-abc12345'

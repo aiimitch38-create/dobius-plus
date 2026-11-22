@@ -249,7 +249,7 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
       // Why also explicit command/args: a bare { agent } makes the host rebuild
       // the launch from its Settings defaults, which would drop a restricted
       // (bug-fix) or account-pinned command on restart.
-      ...(hasPrompt || agentCommandOverride !== undefined || agentArgs !== undefined
+      ...(hasPrompt || bugFix || agentCommandOverride !== undefined || agentArgs !== undefined
         ? {
             command: startupPlan.launchCommand,
             ...(startupPlan.env ? { env: startupPlan.env } : {}),
