@@ -72,7 +72,9 @@ const ERROR_TEXT: Record<OpenAiLiveErrorKind, string> = {
   rejected: 'OpenAI turned the request down.',
   'bad-response': 'OpenAI answered in a way this app did not understand.',
   'over-cap':
-    "Today's live voice spending cap is reached. Voice calls start again tomorrow, or raise the cap in Settings, Voice."
+    "Today's live voice spending cap is reached. Voice calls start again tomorrow, or raise the cap in Settings, Voice.",
+  'meter-unavailable':
+    "Live calls are off because today's spending record (live-voice-meter.json in the Dobius+ data folder) could not be read or saved, so the daily cap cannot be checked. Fix or delete that file to call again."
 }
 
 export function liveVoiceFailure(kind: OpenAiLiveErrorKind): OpenAiLiveFailure {

@@ -21,6 +21,7 @@ import { NamedTimers } from './live-voice-timers'
 import { LiveDelegations } from './live-voice-delegation'
 import { LIVE_RECYCLE_RETRY_MS, LiveReconnectPolicy } from './live-voice-reconnect'
 import { LiveLevels } from './live-voice-levels'
+import { LiveSessionLink } from './live-voice-link'
 import { LiveTranscript } from './live-voice-transcript'
 import { commentaryEvent, muteEvent, parseLiveEvent, type LiveEvent } from './live-voice-wire'
 
@@ -46,6 +47,7 @@ export class LiveVoiceCall {
   private capWarned = false
   private readonly reconnect: LiveReconnectPolicy
   private readonly levels: LiveLevels
+  private readonly link: LiveSessionLink
 
   constructor(
     private readonly deps: LiveVoiceCallDeps,
@@ -53,11 +55,10 @@ export class LiveVoiceCall {
   ) {
     this.timers = new NamedTimers(deps.setTimeout, deps.clearTimeout)
     this.levels = new LiveLevels(deps.levelOf)
-    this.transcript = new LiveTranscript((line) => {
-      void deps.api.liveTranscript(line).catch(() => undefined)
-    })
+    this.link = new LiveSessionLink(deps.api)
+    this.transcript = new LiveTranscript((line) => this.link.transcript(line))
     this.delegations = new LiveDelegations({
-      api: deps.api,
+      link: this.link,
       transcript: this.transcript,
       timers: this.timers,
       now: () => this.now(),
@@ -129,9 +130,9 @@ export class LiveVoiceCall {
       const result = await this.deps.api.liveSessionConnect(offerSdp)
       if (!isCurrent()) {
         // Why report: main already counts this session as this window's
-        // call, and its meter must stop.
+        // call, and its meter must stop. Its own token, never the new call's.
         if (result.ok) {
-          void this.deps.api.liveSessionReport({ type: 'closed' }).catch(() => undefined)
+          this.link.report('closed', result.callToken ?? null)
         }
         return
       }
@@ -140,6 +141,7 @@ export class LiveVoiceCall {
         return
       }
       call.connected = true
+      this.link.adopt(result.callToken ?? null)
       await call.peer.setRemoteDescription({ type: 'answer', sdp: result.answerSdp })
       if (isCurrent()) {
         this.timers.arm('connect', LIVE_CONNECT_TIMEOUT_MS, () =>
@@ -204,13 +206,13 @@ export class LiveVoiceCall {
         this.settleState()
         return
       case 'paused':
-        this.report('paused')
+        this.link.report('paused')
         if (this.snapshot.state !== 'thinking') {
           this.update({ state: 'standby' })
         }
         return
       case 'resumed':
-        this.report('resumed')
+        this.link.report('resumed')
         this.touchIdle()
         this.settleState()
         return
@@ -281,7 +283,7 @@ export class LiveVoiceCall {
     // Why before reporting closed: main only saves lines for its active call.
     if (call.connected) {
       this.transcript.flush()
-      this.report('closed')
+      this.link.close()
     }
     closeLivePeer(call)
   }
@@ -305,10 +307,6 @@ export class LiveVoiceCall {
       }
       void this.hangUp()
     })
-  }
-
-  private report(type: 'paused' | 'resumed' | 'closed'): void {
-    void this.deps.api.liveSessionReport({ type }).catch(() => undefined)
   }
 
   /** A reconnect that fails for a passing reason keeps trying; others stop. */

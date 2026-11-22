@@ -3412,14 +3412,16 @@ export type PreloadApi = {
     liveDelegate: (request: {
       request: string
       callLines: string[]
+      callToken: string
     }) => Promise<LiveDelegateResult>
     /** Carson said stop: cancel the ADAM turn this call started. */
-    liveCancel: () => Promise<{ ok: boolean }>
+    liveCancel: (payload: { callToken: string }) => Promise<{ ok: boolean }>
     /** Keeps a spoken line ADAM never saw (small talk) in his thread. */
     liveTranscript: (line: {
       role: 'user' | 'assistant'
       text: string
       itemId: string
+      callToken: string
     }) => Promise<{ ok: boolean }>
     /** Spending-cap notices for the window that owns the live call. */
     onLiveNotice: (callback: (notice: LiveVoiceNotice) => void) => () => void

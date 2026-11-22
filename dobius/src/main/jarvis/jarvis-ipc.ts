@@ -24,7 +24,7 @@ import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-c
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
 import { registerLiveVoiceIpc } from './live-voice-ipc'
 
-export { getActiveLiveSessionForTest } from './live-voice-ipc'
+export { forceEndLiveCallForTest, getActiveLiveSessionForTest } from './live-voice-ipc'
 import { migrateElevenLabsKeyOutOfSettings, resolveElevenLabsApiKey } from './elevenlabs-key-store'
 import { registerElevenLabsKeyHandlers } from './elevenlabs-key-ipc'
 import { registerSelfEditHandlers } from './self-edit-ipc'
@@ -140,6 +140,9 @@ export function askAdam(text: string, options: AdamAskOptions): ReturnType<AdamC
   return adamConversation.ask(text, options)
 }
 
+// Conversation first: a turn still saving its asked row has no brain call yet.
+const cancelAdamTurn = (): void => void (adamConversation?.cancel(), adamVoice?.cancel())
+
 /** True while ADAM is answering any turn (voice, live call or Board). */
 function isAdamBusy(): boolean {
   return adamConversation?.busy ?? false
@@ -177,10 +180,7 @@ export function registerJarvisIpcHandlers(store: Store, mainWindow: BrowserWindo
     trustedSender: trustedLiveSender,
     askAdam,
     isAdamBusy,
-    cancelAdam: () => {
-      adamConversation?.cancel()
-      adamVoice?.cancel()
-    },
+    cancelAdam: cancelAdamTurn,
     lookingAt: () => lastLookingAt,
     thread: getAdamThread
   })

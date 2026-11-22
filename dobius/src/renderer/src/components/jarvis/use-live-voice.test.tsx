@@ -34,7 +34,12 @@ const peer = {
   onconnectionstatechange: null
 }
 const api = {
-  liveSessionConnect: vi.fn(async () => ({ ok: true as const, answerSdp: 'v=0', sessionId: null })),
+  liveSessionConnect: vi.fn(async () => ({
+    ok: true as const,
+    answerSdp: 'v=0',
+    sessionId: null,
+    callToken: 't1'
+  })),
   liveSessionReport: vi.fn(async () => ({ ok: true })),
   liveDelegate: vi.fn(),
   liveCancel: vi.fn(async () => ({ ok: true })),
@@ -100,6 +105,6 @@ describe('useLiveVoice', () => {
     })
     expect(unsubscribe).toHaveBeenCalled()
     expect(peer.close).toHaveBeenCalled()
-    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed' })
+    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed', callToken: 't1' })
   })
 })

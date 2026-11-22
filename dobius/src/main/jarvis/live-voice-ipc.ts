@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { join } from 'node:path'
 import { OPENAI_LIVE_CALL_READY, resolveLiveVoiceSettings } from '../../shared/live-voice-settings'
-import type { AdamLookingAt, OpenAiLiveFailure } from '../../shared/speech-types'
+import type { AdamLookingAt, OpenAiLiveSessionResult } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getUserDataRoot } from '../storage/user-data-root'
 import type { AdamConversation } from './adam-conversation'
@@ -65,14 +65,39 @@ function getLiveCalls(store: Store, deps: LiveVoiceIpcDeps): LiveVoiceCalls {
     isAdamBusy: deps.isAdamBusy,
     cancelAdam: deps.cancelAdam,
     lookingAt: deps.lookingAt,
-    appendThread: (row) => deps.thread().append(row)
+    appendThread: (row) => deps.thread().append(row),
+    forceEnd: forceEndLiveCall
   })
   return liveCalls
 }
 
 // Why one at a time: every created session starts billing, so a double click
-// or a retry loop in the window must not open several at once.
+// or a retry loop in the window must not open several at once. Taken before
+// the first await of a connect, released when it settles.
 let liveSessionInFlight = false
+
+/**
+ * Ends the owning window's call without its help (it ignored the cap).
+ * Why reload: there is no documented call to close a Live session, and the
+ * WebRTC peer lives in the page, so ending the page ends the peer. A page
+ * too stuck to reload is crashed on the next try. The watchers below then
+ * clear the call and stop the meter.
+ */
+function forceEndLiveCall(attempt: number): void {
+  const owner = activeLiveSession?.owner
+  if (!owner || owner.isDestroyed()) {
+    return
+  }
+  if (attempt === 1) {
+    owner.reload()
+  } else {
+    owner.forcefullyCrashRenderer()
+  }
+}
+
+export function forceEndLiveCallForTest(attempt: number): void {
+  forceEndLiveCall(attempt)
+}
 
 /**
  * Calls `onGone` once when the window's page goes away: closed, crashed, or
@@ -105,6 +130,7 @@ let activeLiveSession: {
   owner: LiveSender
   ownerId: number
   sessionId: string | null
+  callToken: string
   unwatch: () => void
 } | null = null
 
@@ -119,14 +145,14 @@ function clearActiveLiveSession(): void {
   }
 }
 
-function setActiveLiveSession(owner: LiveSender, sessionId: string | null): void {
+function setActiveLiveSession(owner: LiveSender, sessionId: string | null, callToken: string): void {
   clearActiveLiveSession()
   const unwatch = watchOwnerGone(owner, () => {
     if (activeLiveSession?.owner === owner) {
       clearActiveLiveSession()
     }
   })
-  activeLiveSession = { owner, ownerId: owner.id, sessionId, unwatch }
+  activeLiveSession = { owner, ownerId: owner.id, sessionId, callToken, unwatch }
 }
 
 export function getActiveLiveSessionForTest(): {
@@ -138,30 +164,72 @@ export function getActiveLiveSessionForTest(): {
     : null
 }
 
-async function runLiveSessionOnce<T>(
+/**
+ * Creates the session for a connect that holds the lock. The setup charge
+ * is saved first; a page that goes away meanwhile aborts the create.
+ */
+async function connectLiveSession(
+  store: Store,
+  deps: LiveVoiceIpcDeps,
+  calls: LiveVoiceCalls,
   sender: LiveSender,
-  run: (signal: AbortSignal) => Promise<T>
-): Promise<T | OpenAiLiveFailure> {
-  if (liveSessionInFlight) {
-    return liveVoiceFailure('busy')
+  offerSdp: unknown
+): Promise<OpenAiLiveSessionResult> {
+  const refused = calls.reserveStart()
+  if (refused) {
+    return refused
   }
-  liveSessionInFlight = true
-  // Why: a create still in flight when its window closes would open a session
-  // nobody can use or hang up, so the request is aborted with the window.
   const controller = new AbortController()
   const unwatch = watchOwnerGone(sender, () => controller.abort())
   try {
-    return await run(controller.signal)
+    const options = await liveSessionOptions(store, deps)
+    // Why re-check: the page may have closed or reloaded while the thread was read.
+    if (controller.signal.aborted || sender.isDestroyed()) {
+      calls.setupFailed('not-allowed')
+      return liveVoiceFailure('cancelled')
+    }
+    // createOpenAiLiveSession validates the offer itself and reads the key.
+    const result = await createOpenAiLiveSession(offerSdp, options, { signal: controller.signal })
+    if (!result.ok) {
+      calls.setupFailed(result.kind)
+      return result
+    }
+    if (controller.signal.aborted || sender.isDestroyed()) {
+      // A session exists, but its page is gone; its peer cannot connect. The
+      // setup charge stays counted.
+      calls.setupFailed('cancelled')
+      return liveVoiceFailure('cancelled')
+    }
+    const callToken = calls.callStarted(sender.id)
+    setActiveLiveSession(sender, result.sessionId, callToken)
+    return { ...result, callToken }
+  } catch (error) {
+    calls.setupFailed('network')
+    throw error
   } finally {
     unwatch()
-    liveSessionInFlight = false
   }
 }
 
-/** The live call's owner id when this sender is the trusted window that owns it. */
-function liveOwnerId(deps: LiveVoiceIpcDeps, event: Electron.IpcMainInvokeEvent): number | null {
+/**
+ * The live call's owner id when this sender is the trusted window that owns
+ * it AND the message carries the token of the current call, so a late
+ * message from an earlier call never touches the one that replaced it.
+ */
+function liveOwnerId(
+  deps: LiveVoiceIpcDeps,
+  event: Electron.IpcMainInvokeEvent,
+  payload: unknown
+): number | null {
   const sender = deps.trustedSender(event)
-  return sender && activeLiveSession?.owner === sender ? activeLiveSession.ownerId : null
+  const token =
+    payload && typeof payload === 'object' ? (payload as { callToken?: unknown }).callToken : null
+  return sender &&
+    activeLiveSession?.owner === sender &&
+    typeof token === 'string' &&
+    token === activeLiveSession.callToken
+    ? activeLiveSession.ownerId
+    : null
 }
 
 /** Registers every OpenAI Live IPC handler; the window owns audio, main owns the rest. */
@@ -178,45 +246,28 @@ export function registerLiveVoiceIpc(store: Store, deps: LiveVoiceIpcDeps): void
     if (live.engine !== 'openai-live' || !OPENAI_LIVE_CALL_READY) {
       return liveVoiceFailure('not-ready')
     }
-    // Why refuse while another window's call is open: a second session would
-    // bill while only one is metered. The owning window reports 'closed'
-    // before it reconnects, so a connect from the owner itself means its page
-    // lost the old call (its peer died with it): end that one and go on.
-    if (liveSessionInFlight || (activeLiveSession && activeLiveSession.owner !== sender)) {
+    // Why refuse while any call is open, even the owner's: replacing it here
+    // would stop its meter while its session may still bill. The window
+    // reports 'closed' before it reconnects; a page that went away is
+    // cleared by the watchers.
+    if (liveSessionInFlight || activeLiveSession) {
       return liveVoiceFailure('busy')
-    }
-    clearActiveLiveSession()
-    const refused = calls.refuseStart()
-    if (refused) {
-      return refused
     }
     const offerSdp =
       payload && typeof payload === 'object' && !Array.isArray(payload)
         ? (payload as { offerSdp?: unknown }).offerSdp
         : undefined
-    // createOpenAiLiveSession validates the offer itself and reads the key.
-    let gone = false
-    const unwatch = watchOwnerGone(sender, () => {
-      gone = true
-    })
-    const options = await liveSessionOptions(store, deps).finally(unwatch)
-    // Why re-check: the page may have closed or reloaded while the thread was read.
-    if (gone || sender.isDestroyed()) {
-      return liveVoiceFailure('cancelled')
+    liveSessionInFlight = true
+    try {
+      return await connectLiveSession(store, deps, calls, sender, offerSdp)
+    } finally {
+      liveSessionInFlight = false
     }
-    const result = await runLiveSessionOnce(sender, (signal) =>
-      createOpenAiLiveSession(offerSdp, options, { signal })
-    )
-    if (result.ok && !sender.isDestroyed()) {
-      setActiveLiveSession(sender, result.sessionId)
-      calls.callStarted(sender.id)
-    }
-    return result
   })
 
   ipcMain.removeHandler('jarvis:liveSessionReport')
   ipcMain.handle('jarvis:liveSessionReport', (event, report: unknown) => {
-    const ownerId = liveOwnerId(deps, event)
+    const ownerId = liveOwnerId(deps, event, report)
     if (ownerId === null) {
       return { ok: false }
     }
@@ -232,21 +283,21 @@ export function registerLiveVoiceIpc(store: Store, deps: LiveVoiceIpcDeps): void
   // thread and his Hermes session like any other turn.
   ipcMain.removeHandler('jarvis:liveDelegate')
   ipcMain.handle('jarvis:liveDelegate', (event, payload: unknown) => {
-    const ownerId = liveOwnerId(deps, event)
+    const ownerId = liveOwnerId(deps, event, payload)
     return ownerId === null
       ? { ok: false, error: 'No live call is open in this window.' }
       : calls.delegate(ownerId, payload)
   })
 
   ipcMain.removeHandler('jarvis:liveCancel')
-  ipcMain.handle('jarvis:liveCancel', (event) => {
-    const ownerId = liveOwnerId(deps, event)
+  ipcMain.handle('jarvis:liveCancel', (event, payload: unknown) => {
+    const ownerId = liveOwnerId(deps, event, payload)
     return { ok: ownerId !== null && calls.cancelDelegation(ownerId) }
   })
 
   ipcMain.removeHandler('jarvis:liveTranscript')
   ipcMain.handle('jarvis:liveTranscript', async (event, payload: unknown) => {
-    const ownerId = liveOwnerId(deps, event)
+    const ownerId = liveOwnerId(deps, event, payload)
     return { ok: ownerId !== null && (await calls.recordTranscript(ownerId, payload)) }
   })
 

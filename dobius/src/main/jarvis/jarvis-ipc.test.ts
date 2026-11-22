@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import type { BrowserWindow } from 'electron'
 import { EventEmitter } from 'node:events'
@@ -334,6 +334,17 @@ describe('OpenAI Live session IPC', () => {
     return { sender: contents, senderFrame: contents.mainFrame }
   }
 
+  // Connects and returns the call token main issued for this call.
+  async function callToken(contents: LiveContents): Promise<string> {
+    const result = (await handler('jarvis:liveSessionConnect')(from(contents), {
+      offerSdp: 'v=0 offer'
+    })) as { callToken?: string }
+    if (!result.callToken) {
+      throw new Error(`no call token: ${JSON.stringify(result)}`)
+    }
+    return result.callToken
+  }
+
   function handler(channel: string): Handler {
     const found = electron.handlers.get(channel)
     if (!found) {
@@ -361,7 +372,12 @@ describe('OpenAI Live session IPC', () => {
       apiKey: 'x'
     })
 
-    expect(result).toEqual({ ok: true, answerSdp: 'v=0', sessionId: 's1' })
+    expect(result).toEqual({
+      ok: true,
+      answerSdp: 'v=0',
+      sessionId: 's1',
+      callToken: expect.any(String)
+    })
     expect(live.create).toHaveBeenCalledWith(
       'v=0 offer',
       {
@@ -381,9 +397,11 @@ describe('OpenAI Live session IPC', () => {
     )
     const connect = handler('jarvis:liveSessionConnect')
 
-    await connect(from(contents), 'just a string')
-    await connect(from(contents), null)
-    await connect(from(contents), ['v=0'])
+    const report = handler('jarvis:liveSessionReport')
+    for (const payload of ['just a string', null, ['v=0']]) {
+      const result = (await connect(from(contents), payload)) as { callToken: string }
+      await report(from(contents), { type: 'closed', callToken: result.callToken })
+    }
 
     expect(live.create).toHaveBeenCalledTimes(3)
     for (const call of live.create.mock.calls) {
@@ -446,6 +464,7 @@ describe('OpenAI Live session IPC', () => {
       ok: false,
       kind: 'busy'
     })
+    await vi.waitFor(() => expect(live.create).toHaveBeenCalledTimes(1))
     finish({ ok: true, answerSdp: 'v=0', sessionId: 's2' })
     expect(await first).toMatchObject({ ok: true, sessionId: 's2' })
   })
@@ -493,9 +512,15 @@ describe('OpenAI Live session IPC', () => {
     const { getActiveLiveSessionForTest } = await import('./jarvis-ipc')
     const connect = handler('jarvis:liveSessionConnect')
 
+    const report = handler('jarvis:liveSessionReport')
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      await connect(from(contents), { offerSdp: 'v=0 offer' })
+      const result = (await connect(from(contents), { offerSdp: 'v=0 offer' })) as {
+        callToken: string
+      }
       expect(contents.listenerCount('destroyed')).toBe(1)
+      if (attempt < 4) {
+        await report(from(contents), { type: 'closed', callToken: result.callToken })
+      }
     }
     expect(getActiveLiveSessionForTest()).toEqual({ ownerId: 7, sessionId: 's1' })
 
@@ -554,12 +579,13 @@ describe('OpenAI Live session IPC', () => {
     const delegate = handler('jarvis:liveDelegate')
     expect(await delegate(from(contents), { request: 'status?' })).toMatchObject({ ok: false })
 
-    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    const token = await callToken(contents)
     const other = liveWindow(99).contents
     expect(
-      await delegate({ sender: other, senderFrame: other.mainFrame }, { request: 'status?' })
+      await delegate({ sender: other, senderFrame: other.mainFrame }, { request: 'status?', callToken: token })
     ).toMatchObject({ ok: false })
-    expect(await delegate(from(contents), { request: 'status?' })).toEqual({
+    expect(await delegate(from(contents), { request: 'status?' })).toMatchObject({ ok: false })
+    expect(await delegate(from(contents), { request: 'status?', callToken: token })).toEqual({
       ok: true,
       kind: 'answer',
       speak: 'Adam Hermes reply'
@@ -570,7 +596,7 @@ describe('OpenAI Live session IPC', () => {
   it('stop cancels the live call’s ADAM turn, and hanging up stops the call', async () => {
     const { window, contents } = liveWindow()
     await register(liveStore({}), window)
-    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    const token = await callToken(contents)
     let finish: (value: { kind: 'cancelled'; text: '' }) => void = () => undefined
     adam.ask.mockImplementationOnce(
       () =>
@@ -579,14 +605,19 @@ describe('OpenAI Live session IPC', () => {
         })
     )
     adam.cancel.mockImplementationOnce(() => finish({ kind: 'cancelled', text: '' }))
-    const answer = handler('jarvis:liveDelegate')(from(contents), { request: 'long job' })
-    expect(await handler('jarvis:liveCancel')(from(contents))).toEqual({ ok: true })
+    const answer = handler('jarvis:liveDelegate')(from(contents), {
+      request: 'long job',
+      callToken: token
+    })
+    expect(await handler('jarvis:liveCancel')(from(contents), { callToken: token })).toEqual({
+      ok: true
+    })
     expect(await answer).toEqual({ ok: true, kind: 'cancelled', speak: '' })
 
     const { getActiveLiveSessionForTest } = await import('./jarvis-ipc')
-    expect(await handler('jarvis:liveSessionReport')(from(contents), { type: 'closed' })).toEqual({
-      ok: true
-    })
+    expect(
+      await handler('jarvis:liveSessionReport')(from(contents), { type: 'closed', callToken: token })
+    ).toEqual({ ok: true })
     expect(getActiveLiveSessionForTest()).toBeNull()
   })
 
@@ -596,8 +627,9 @@ describe('OpenAI Live session IPC', () => {
     const transcript = handler('jarvis:liveTranscript')
     const line = { role: 'user', text: 'hi', itemId: '1' }
     expect(await transcript(from(contents), line)).toEqual({ ok: false })
-    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
-    expect(await transcript(from(contents), line)).toEqual({ ok: true })
+    const token = await callToken(contents)
+    expect(await transcript(from(contents), line)).toEqual({ ok: false })
+    expect(await transcript(from(contents), { ...line, callToken: token })).toEqual({ ok: true })
     const rows = (await handler('jarvis:adamThreadGet')(from(contents))) as {
       text: string
       voice?: boolean
@@ -620,11 +652,68 @@ describe('OpenAI Live session IPC', () => {
   it('a stop during the thread save keeps the request from ever reaching ADAM', async () => {
     const { window, contents } = liveWindow()
     await register(liveStore({}), window)
-    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
-    const answer = handler('jarvis:liveDelegate')(from(contents), { request: 'deploy it' })
-    await handler('jarvis:liveCancel')(from(contents))
+    const token = await callToken(contents)
+    const answer = handler('jarvis:liveDelegate')(from(contents), {
+      request: 'deploy it',
+      callToken: token
+    })
+    await handler('jarvis:liveCancel')(from(contents), { callToken: token })
     expect(await answer).toEqual({ ok: true, kind: 'cancelled', speak: '' })
     expect(adam.ask).not.toHaveBeenCalled()
+  })
+
+  it('refuses a repeat connect while the window’s call is still open', async () => {
+    const { window, contents } = liveWindow(7)
+    await register(liveStore({}), window)
+    const { getActiveLiveSessionForTest } = await import('./jarvis-ipc')
+    await callToken(contents)
+    expect(
+      await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    ).toMatchObject({ ok: false, kind: 'busy' })
+    expect(live.create).toHaveBeenCalledTimes(1)
+    expect(getActiveLiveSessionForTest()).toEqual({ ownerId: 7, sessionId: 's1' })
+  })
+
+  it('a late "closed" from an earlier call does not end the call that replaced it', async () => {
+    const { window, contents } = liveWindow(7)
+    await register(liveStore({}), window)
+    const { getActiveLiveSessionForTest } = await import('./jarvis-ipc')
+    const report = handler('jarvis:liveSessionReport')
+    const first = await callToken(contents)
+    await report(from(contents), { type: 'closed', callToken: first })
+    live.create.mockResolvedValueOnce({ ok: true, answerSdp: 'v=0', sessionId: 's2' })
+    const second = await callToken(contents)
+    expect(second).not.toBe(first)
+    expect(await report(from(contents), { type: 'closed', callToken: first })).toEqual({ ok: false })
+    expect(await report(from(contents), { type: 'closed' })).toEqual({ ok: false })
+    expect(getActiveLiveSessionForTest()).toEqual({ ownerId: 7, sessionId: 's2' })
+  })
+
+  it('writes the setup charge to disk before the session is created', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    let onDisk = -1
+    live.create.mockImplementationOnce(async () => {
+      const file = JSON.parse(readFileSync(join(electron.userData, 'live-voice-meter.json'), 'utf8'))
+      onDisk = file.days[localDayKey(Date.now())].activeSec
+      return { ok: true, answerSdp: 'v=0', sessionId: 's1' }
+    })
+    await callToken(contents)
+    expect(onDisk).toBe(15)
+  })
+
+  it('ends a call from main by reloading a window that ignores the cap', async () => {
+    const { window, contents } = liveWindow(7)
+    const reload = vi.fn(() =>
+      contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+    )
+    Object.assign(contents, { reload, forcefullyCrashRenderer: vi.fn() })
+    await register(liveStore({}), window)
+    const { getActiveLiveSessionForTest, forceEndLiveCallForTest } = await import('./jarvis-ipc')
+    await callToken(contents)
+    forceEndLiveCallForTest(1)
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(getActiveLiveSessionForTest()).toBeNull()
   })
 
   it('has no connection-test handler, so nothing can open a session just to test', async () => {

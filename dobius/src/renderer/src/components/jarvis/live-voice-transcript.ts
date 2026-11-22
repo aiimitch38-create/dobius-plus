@@ -44,6 +44,11 @@ export class LiveTranscript {
   private input = ''
   private output = ''
   private delegated = false
+  // Why separate from `delegated`: ADAM's spoken answer can start after
+  // Carson talked over the filler, in a later exchange. It is in the thread
+  // already, so it is skipped wherever it lands.
+  private replyOwed = false
+  private replyStarted = false
   private lastSpeaker: 'user' | 'assistant' | null = null
   private lines: string[] = []
   private exchange = 0
@@ -71,6 +76,15 @@ export class LiveTranscript {
     }
     this.output = `${this.output}${delta}`.slice(-MAX_BUFFER_CHARS)
     this.lastSpeaker = 'assistant'
+    if (this.replyOwed) {
+      this.delegated = true
+      this.replyStarted = true
+    }
+  }
+
+  /** The next thing the voice says is ADAM's delegated answer. */
+  expectReply(): void {
+    this.replyOwed = true
   }
 
   /** What Carson has said that no request has taken yet. */
@@ -111,6 +125,10 @@ export class LiveTranscript {
     this.output = ''
     this.delegated = false
     this.lastSpeaker = null
+    if (this.replyStarted) {
+      this.replyOwed = false
+      this.replyStarted = false
+    }
   }
 
   /** Recent call lines ADAM never saw, so a delegated request has context. */

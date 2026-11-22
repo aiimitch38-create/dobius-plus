@@ -76,9 +76,16 @@ describe('LiveVoiceMeter', () => {
     expect(meter.status(15).activeSec).toBe(LIVE_METER_MAX_SLICE_SEC)
   })
 
-  it('treats a damaged file as zero', () => {
+  it('reports a damaged file as unavailable and never overwrites it', () => {
     writeFileSync(file, '{not json')
-    expect(new LiveVoiceMeter(file, clock).status(15).usdToday).toBe(0)
+    const meter = new LiveVoiceMeter(file, clock)
+    expect(meter.available).toBe(false)
+    expect(meter.reserve(15)).toBe(false)
+    expect(readFileSync(file, 'utf8')).toBe('{not json')
+  })
+
+  it('a missing file is a first run, not damage', () => {
+    expect(new LiveVoiceMeter(file, clock).available).toBe(true)
   })
 
   it('estimates per the published per-minute prices', () => {

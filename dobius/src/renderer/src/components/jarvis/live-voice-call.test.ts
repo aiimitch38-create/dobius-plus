@@ -61,7 +61,12 @@ let delegateReply: Deferred<LiveDelegateResult>
 let api: { [K in keyof LiveVoiceApi]: ReturnType<typeof vi.fn> }
 let snapshots: LiveVoiceSnapshot[] = []
 
-const OK: OpenAiLiveSessionResult = { ok: true, answerSdp: 'v=0\r\nanswer', sessionId: 's1' }
+const OK: OpenAiLiveSessionResult = {
+  ok: true,
+  answerSdp: 'v=0\r\nanswer',
+  sessionId: 's1',
+  callToken: 'call-1'
+}
 
 function makeCall(): LiveVoiceCall {
   return new LiveVoiceCall(
@@ -142,10 +147,10 @@ describe('call state machine', () => {
     await connected(call)
     peer().channel.emit({ type: 'session.paused' })
     expect(call.getSnapshot().state).toBe('standby')
-    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'paused' })
+    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'paused', callToken: 'call-1' })
     peer().channel.emit({ type: 'session.resumed' })
     expect(call.getSnapshot().state).toBe('listening')
-    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'resumed' })
+    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'resumed', callToken: 'call-1' })
   })
 
   it('push-to-talk presses mute and unmute instead of hanging up', async () => {
@@ -170,7 +175,7 @@ describe('call state machine', () => {
     expect(call.getSnapshot().state).toBe('idle')
     expect(peer().close).toHaveBeenCalled()
     expect(track.stop).toHaveBeenCalled()
-    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed' })
+    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed', callToken: 'call-1' })
   })
 
   it('a hang-up during connect closes the session main opened for it', async () => {
@@ -180,7 +185,7 @@ describe('call state machine', () => {
     void call.hangUp()
     connect.resolve(OK)
     await vi.advanceTimersByTimeAsync(0)
-    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed' })
+    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed', callToken: 'call-1' })
     expect(peer().close).toHaveBeenCalled()
     expect(peer().setRemoteDescription).not.toHaveBeenCalled()
     expect(call.getSnapshot().state).toBe('idle')
@@ -222,7 +227,7 @@ describe('delegation bridge', () => {
     peer().channel.emit({ type: 'session.delegation.created', delegation_id: 'd1' })
     expect(call.getSnapshot().state).toBe('thinking')
     await vi.advanceTimersByTimeAsync(600)
-    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'What is running?', callLines: [] })
+    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'What is running?', callLines: [], callToken: 'call-1' })
     delegateReply.resolve({ ok: true, kind: 'answer', speak: 'Two agents are running.' })
     await vi.advanceTimersByTimeAsync(0)
     expect(peer().channel.sent.at(-1)).toEqual({
@@ -241,7 +246,7 @@ describe('delegation bridge', () => {
     await vi.advanceTimersByTimeAsync(300)
     peer().channel.emit({ type: 'session.input_transcript.delta', delta: ' build' })
     await vi.advanceTimersByTimeAsync(700)
-    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'Check the build', callLines: [] })
+    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'Check the build', callLines: [], callToken: 'call-1' })
   })
 
   it('"stop" while ADAM works cancels the ADAM turn', async () => {
@@ -297,18 +302,21 @@ describe('transcripts in the ADAM thread', () => {
     expect(api.liveTranscript).toHaveBeenCalledWith({
       role: 'user',
       text: 'Can you hear me?',
-      itemId: '1'
+      itemId: '1',
+      callToken: 'call-1'
     })
     expect(api.liveTranscript).toHaveBeenCalledWith({
       role: 'assistant',
       text: 'Loud and clear.',
-      itemId: '1'
+      itemId: '1',
+      callToken: 'call-1'
     })
     peer().channel.emit({ type: 'session.delegation.created' })
     await vi.advanceTimersByTimeAsync(600)
     expect(api.liveDelegate).toHaveBeenCalledWith({
       request: 'What is running?',
-      callLines: ['Carson: Can you hear me?', "ADAM's voice: Loud and clear."]
+      callLines: ['Carson: Can you hear me?', "ADAM's voice: Loud and clear."],
+      callToken: 'call-1'
     })
     delegateReply.resolve({ ok: true, kind: 'answer', speak: 'Two.' })
     await vi.advanceTimersByTimeAsync(0)
@@ -329,7 +337,7 @@ describe('spending cap', () => {
     expect(peer().channel.sent.at(-1)).toMatchObject({ text: 'cap reached' })
     await vi.advanceTimersByTimeAsync(LIVE_CAP_HANG_UP_GRACE_MS + 10)
     expect(call.getSnapshot()).toMatchObject({ state: 'error', errorText: 'cap reached' })
-    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed' })
+    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed', callToken: 'call-1' })
   })
 })
 
@@ -339,7 +347,7 @@ describe('reconnect', () => {
     await connected(call)
     peer().channel.emit({ type: 'session.closed', reason: 'expired' })
     expect(call.getSnapshot().state).toBe('connecting')
-    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed' })
+    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed', callToken: 'call-1' })
     await vi.advanceTimersByTimeAsync(1_000)
     expect(peers).toHaveLength(2)
     expect(api.liveSessionConnect).toHaveBeenCalledTimes(2)
@@ -433,6 +441,66 @@ describe('reconnect edge cases', () => {
     peer().channel.emit({ type: 'session.output_transcript.delta', delta: 'On it.' })
     peer().channel.emit({ type: 'session.input_transcript.delta', delta: ' build' })
     await vi.advanceTimersByTimeAsync(700)
-    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'Check the build', callLines: [] })
+    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'Check the build', callLines: [], callToken: 'call-1' })
+  })
+})
+
+describe('review round 2', () => {
+  const said = (): unknown[] => peer().channel.sent.map((event) => event.text)
+
+  it('a reply that lands after "stop" is never spoken', async () => {
+    const call = makeCall()
+    await connected(call)
+    peer().channel.emit({ type: 'session.input_transcript.delta', delta: 'Run the tests' })
+    peer().channel.emit({ type: 'session.delegation.created' })
+    await vi.advanceTimersByTimeAsync(600)
+    expect(api.liveDelegate).toHaveBeenCalledTimes(1)
+    peer().channel.emit({ type: 'session.input_transcript.delta', delta: 'Stop.' })
+    await vi.advanceTimersByTimeAsync(800)
+    // Main answered just before the cancel reached it.
+    delegateReply.resolve({ ok: true, kind: 'answer', speak: 'All tests pass.' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(said()).not.toContain('All tests pass.')
+  })
+
+  it('a delegation that arrives before Carson’s words waits for them', async () => {
+    const call = makeCall()
+    await connected(call)
+    peer().channel.emit({ type: 'session.delegation.created' })
+    await vi.advanceTimersByTimeAsync(300)
+    peer().channel.emit({ type: 'session.input_transcript.delta', delta: 'What time is it' })
+    await vi.advanceTimersByTimeAsync(700)
+    expect(api.liveDelegate).toHaveBeenCalledWith(
+      expect.objectContaining({ request: 'What time is it' })
+    )
+  })
+
+  it('a delegation with no words at all asks again instead of reaching ADAM', async () => {
+    const call = makeCall()
+    await connected(call)
+    peer().channel.emit({ type: 'session.delegation.created' })
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(api.liveDelegate).not.toHaveBeenCalled()
+    expect(said()).toContain('Sorry, I did not catch that. Could you say it again?')
+  })
+
+  it('ADAM’s spoken answer is not saved again after Carson talks over the filler', async () => {
+    const call = makeCall()
+    await connected(call)
+    const emit = (type: 'input' | 'output', delta: string): void =>
+      peer().channel.emit({ type: `session.${type}_transcript.delta`, delta })
+    emit('input', 'Check the build')
+    peer().channel.emit({ type: 'session.delegation.created' })
+    emit('output', 'On it.')
+    await vi.advanceTimersByTimeAsync(600)
+    emit('input', 'ok')
+    delegateReply.resolve({ ok: true, kind: 'answer', speak: 'All green.' })
+    await vi.advanceTimersByTimeAsync(0)
+    emit('output', 'All green.')
+    emit('input', 'thanks')
+    await call.hangUp()
+    const texts = api.liveTranscript.mock.calls.map(([line]) => (line as { text: string }).text)
+    expect(texts).not.toContain('All green.')
+    expect(texts).toContain('ok')
   })
 })

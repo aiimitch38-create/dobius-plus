@@ -5,6 +5,7 @@ import type {
   JarvisAskResult,
   LiveDelegateResult,
   LiveVoiceNotice,
+  OpenAiLiveErrorKind,
   OpenAiLiveFailure
 } from '../../shared/speech-types'
 import type { AdamAskOptions } from './adam-conversation'
@@ -23,6 +24,29 @@ const LIVE_TRANSCRIPT_MAX_CHARS = 4_000
 export const LIVE_STILL_WORKING_TEXT = 'ADAM is still working on the last thing. Ask again when he is done.'
 export const LIVE_CAP_REACHED_TEXT =
   "Today's live voice spending cap is reached, so this call is ending. You can still type to ADAM on the Board, or raise the cap in Settings, Voice."
+// Why 15 seconds: creating a WebRTC session bills 15 seconds up front
+// (design doc section 1.7), whether or not the call ever connects.
+export const LIVE_SETUP_RESERVE_SEC = 15
+// Why main can end the call: a window that misses or ignores the cap notice
+// must not keep billing. One meter tick after the cap, main ends it.
+export const LIVE_CAP_FORCE_END_MS = 15_000
+// Refusals OpenAI (or main) gave before any session existed: never billed.
+const SETUP_NOT_BILLED: ReadonlySet<OpenAiLiveErrorKind> = new Set([
+  'invalid-offer',
+  'busy',
+  'not-allowed',
+  'not-ready',
+  'no-key',
+  'key-unreadable',
+  'bad-key',
+  'no-access',
+  'no-billing',
+  'rate-limited',
+  'rejected',
+  'over-cap',
+  'meter-unavailable'
+])
+
 export const LIVE_CAP_WARNING_TEXT = "Heads up: about 80 percent of today's live voice budget is used."
 
 const encodeUntrusted = (value: unknown): string =>
@@ -102,6 +126,12 @@ export type LiveVoiceCallsDeps = {
   cancelAdam: () => void
   lookingAt: () => AdamLookingAt | null
   appendThread: (row: AdamThreadRow) => Promise<void>
+  /**
+   * Ends the owning window's call without its help. Attempt 1, 2, ... so
+   * the caller can escalate. The meter runs until the call is reported gone.
+   */
+  forceEnd?: (attempt: number) => void
+  now?: () => number
   setInterval?: (handler: () => void, ms: number) => unknown
   clearInterval?: (timer: unknown) => void
 }
@@ -119,6 +149,9 @@ export class LiveVoiceCalls {
   // Why a token per call: transcript row ids are `live:<call>:<item>:<role>`,
   // stable within a call so a resent line is saved once.
   private callToken = ''
+  private reservedSec = 0
+  private capReachedAt: number | null = null
+  private forceAttempts = 0
 
   constructor(private readonly deps: LiveVoiceCallsDeps) {}
 
@@ -126,18 +159,44 @@ export class LiveVoiceCalls {
     return this.ownerId
   }
 
-  /** Null when a new call may start; the refusal otherwise. */
-  refuseStart(): OpenAiLiveFailure | null {
-    return this.deps.meter.status(this.deps.capUsd()).overCap ? liveVoiceFailure('over-cap') : null
+  /**
+   * Null when a new call may start, with its setup charge already saved;
+   * the refusal otherwise. Every null is followed by callStarted or setupFailed.
+   */
+  reserveStart(): OpenAiLiveFailure | null {
+    const meter = this.deps.meter
+    if (!meter.available) {
+      return liveVoiceFailure('meter-unavailable')
+    }
+    if (meter.status(this.deps.capUsd()).overCap) {
+      return liveVoiceFailure('over-cap')
+    }
+    if (!meter.reserve(LIVE_SETUP_RESERVE_SEC)) {
+      return liveVoiceFailure('meter-unavailable')
+    }
+    this.reservedSec = LIVE_SETUP_RESERVE_SEC
+    return null
   }
 
-  callStarted(ownerId: number): void {
+  /** No call came of the reserved start; the charge stays unless never billed. */
+  setupFailed(kind: OpenAiLiveErrorKind): void {
+    if (this.reservedSec > 0 && SETUP_NOT_BILLED.has(kind)) {
+      this.deps.meter.release(this.reservedSec)
+    }
+    this.reservedSec = 0
+  }
+
+  /** Returns the call's token; every later call IPC must carry it. */
+  callStarted(ownerId: number): string {
     if (this.ownerId !== null) {
       this.callEnded(this.ownerId)
     }
     this.ownerId = ownerId
     this.callToken = randomUUID()
-    this.deps.meter.start()
+    this.capReachedAt = null
+    this.forceAttempts = 0
+    this.deps.meter.start(this.reservedSec)
+    this.reservedSec = 0
     const timer = (this.deps.setInterval ?? ((run, ms) => setInterval(run, ms)))(
       () => this.tick(),
       LIVE_METER_TICK_MS
@@ -145,6 +204,7 @@ export class LiveVoiceCalls {
     ;(timer as { unref?: () => void } | null)?.unref?.()
     this.timer = timer
     this.tick()
+    return this.callToken
   }
 
   /** Session events the window saw on the data channel. */
@@ -188,6 +248,13 @@ export class LiveVoiceCalls {
     if (status.overCap) {
       // Why every tick: a window that missed the first notice still hangs up.
       this.deps.notify({ kind: 'cap-reached', text: LIVE_CAP_REACHED_TEXT })
+      const now = (this.deps.now ?? Date.now)()
+      this.capReachedAt ??= now
+      if (now - this.capReachedAt >= LIVE_CAP_FORCE_END_MS) {
+        this.forceAttempts += 1
+        console.warn(`[jarvis-live] cap reached and the call is still open; ending it (try ${this.forceAttempts})`)
+        this.deps.forceEnd?.(this.forceAttempts)
+      }
       return
     }
     if (status.nearCap && this.warnedDay !== status.day) {

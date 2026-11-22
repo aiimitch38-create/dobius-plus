@@ -137,12 +137,19 @@ export type OpenAiLiveErrorKind =
   | 'rejected'
   | 'bad-response'
   | 'over-cap'
+  | 'meter-unavailable'
 
 export type OpenAiLiveFailure = { ok: false; kind: OpenAiLiveErrorKind; error: string }
 
 /** What the window gets back from a session create: never the API key. */
 export type OpenAiLiveSessionResult =
-  | { ok: true; answerSdp: string; sessionId: string | null }
+  | {
+      ok: true
+      answerSdp: string
+      sessionId: string | null
+      /** Set by main's IPC: every later call message must carry it. */
+      callToken?: string
+    }
   | OpenAiLiveFailure
 
 /** What main says back for one delegated request on a live call. */
@@ -154,7 +161,10 @@ export type LiveDelegateResult =
 export type LiveVoiceNotice = { kind: 'cap-warning' | 'cap-reached'; text: string }
 
 /** Session events the window reports to main's spend meter. */
-export type LiveVoiceSessionReport = { type: 'paused' | 'resumed' | 'closed' }
+export type LiveVoiceSessionReport = {
+  type: 'paused' | 'resumed' | 'closed'
+  callToken: string
+}
 
 /** ElevenLabs key status sent to Settings; the key itself never is (#24). */
 export type ElevenLabsKeyStatus = {

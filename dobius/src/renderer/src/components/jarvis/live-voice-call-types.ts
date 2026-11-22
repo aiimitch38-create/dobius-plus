@@ -81,9 +81,13 @@ export type PeerLike = {
 export type LiveVoiceApi = {
   liveSessionConnect: (offerSdp: string) => Promise<OpenAiLiveSessionResult>
   liveSessionReport: (report: LiveVoiceSessionReport) => Promise<{ ok: boolean }>
-  liveDelegate: (request: { request: string; callLines: string[] }) => Promise<LiveDelegateResult>
-  liveCancel: () => Promise<{ ok: boolean }>
-  liveTranscript: (line: LiveTranscriptLine) => Promise<{ ok: boolean }>
+  liveDelegate: (request: {
+    request: string
+    callLines: string[]
+    callToken: string
+  }) => Promise<LiveDelegateResult>
+  liveCancel: (payload: { callToken: string }) => Promise<{ ok: boolean }>
+  liveTranscript: (line: LiveTranscriptLine & { callToken: string }) => Promise<{ ok: boolean }>
 }
 
 export type LiveVoiceCallDeps = {

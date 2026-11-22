@@ -53,7 +53,12 @@ function finiteSeconds(value: unknown): number {
  */
 export class LiveVoiceMeter {
   private days: Record<string, LiveVoiceDayUsage> | null = null
-  private running: { standby: boolean; since: number } | null = null
+  // prepaidSec: seconds already counted for this call (the setup reserve).
+  private running: { standby: boolean; since: number; prepaidSec: number } | null = null
+  // Why fail closed: a record that cannot be read or saved would otherwise
+  // reset today's total to zero and reopen the budget. A missing file is a
+  // first run and is fine.
+  private problem: 'damaged' | 'unsaved' | null = null
 
   constructor(
     private readonly file: string,
@@ -64,10 +69,39 @@ export class LiveVoiceMeter {
     return this.running !== null
   }
 
-  /** A call connected: count it at the active rate until told otherwise. */
-  start(): void {
+  /** True when today's total is known and saved, so the cap can be trusted. */
+  get available(): boolean {
+    this.load()
+    if (this.problem === 'unsaved') {
+      this.save()
+    }
+    return this.problem === null
+  }
+
+  /** Counts seconds now, before a session exists; false (and nothing kept) if not saved. */
+  reserve(seconds: number): boolean {
+    this.addActive(seconds)
+    this.save()
+    if (this.problem === null) {
+      return true
+    }
+    this.addActive(-seconds)
+    return false
+  }
+
+  /** Gives back reserved seconds that were never billed. */
+  release(seconds: number): void {
+    this.addActive(-seconds)
+    this.save()
+  }
+
+  /**
+   * A call connected: count it at the active rate until told otherwise.
+   * `prepaidSec` were reserved for it already and are its first seconds.
+   */
+  start(prepaidSec = 0): void {
     this.accrue()
-    this.running = { standby: false, since: this.now() }
+    this.running = { standby: false, since: this.now(), prepaidSec }
   }
 
   setStandby(standby: boolean): void {
@@ -92,8 +126,10 @@ export class LiveVoiceMeter {
       return
     }
     const now = this.now()
-    const seconds = Math.min(Math.max(0, (now - running.since) / 1000), LIVE_METER_MAX_SLICE_SEC)
+    const slice = Math.min(Math.max(0, (now - running.since) / 1000), LIVE_METER_MAX_SLICE_SEC)
     running.since = now
+    const seconds = Math.max(0, slice - running.prepaidSec)
+    running.prepaidSec = Math.max(0, running.prepaidSec - slice)
     if (seconds === 0) {
       return
     }
@@ -104,6 +140,13 @@ export class LiveVoiceMeter {
       ? { ...day, standbySec: day.standbySec + seconds }
       : { ...day, activeSec: day.activeSec + seconds }
     this.save()
+  }
+
+  private addActive(seconds: number): void {
+    const days = this.load()
+    const key = localDayKey(this.now())
+    const day = days[key] ?? { activeSec: 0, standbySec: 0 }
+    days[key] = { ...day, activeSec: Math.max(0, day.activeSec + seconds) }
   }
 
   status(capUsd: number): LiveVoiceMeterStatus {
@@ -137,8 +180,11 @@ export class LiveVoiceMeter {
           }
         }
       }
-    } catch {
-      // A missing or damaged file starts at zero; the next count rewrites it.
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+        this.problem = 'damaged'
+        console.warn('[jarvis-live] spend meter file is damaged; live calls are refused:', error)
+      }
     }
     this.days = days
     return days
@@ -152,13 +198,20 @@ export class LiveVoiceMeter {
       trimmed[key] = days[key]
     }
     this.days = trimmed
+    // Why not overwrite a damaged file: it is the only record of today's
+    // spend; Carson fixes or deletes it (Settings says where).
+    if (this.problem === 'damaged') {
+      return
+    }
     const temp = `${this.file}.${randomUUID()}.tmp`
     try {
       mkdirSync(dirname(this.file), { recursive: true })
       const body: MeterFile = { version: 1, days: trimmed }
       writeFileSync(temp, JSON.stringify(body), { mode: 0o600, flag: 'wx' })
       renameSync(temp, this.file)
+      this.problem = null
     } catch (error) {
+      this.problem = 'unsaved'
       // Why keep going: the in-memory total still enforces the cap this run.
       console.warn('[jarvis-live] spend meter could not be saved:', error)
       try {

@@ -4667,13 +4667,18 @@ const api = {
       ipcRenderer.invoke('jarvis:liveSessionConnect', { offerSdp }),
     liveSessionReport: (report: LiveVoiceSessionReport): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('jarvis:liveSessionReport', report),
-    liveDelegate: (request: { request: string; callLines: string[] }): Promise<LiveDelegateResult> =>
-      ipcRenderer.invoke('jarvis:liveDelegate', request),
-    liveCancel: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('jarvis:liveCancel'),
+    liveDelegate: (request: {
+      request: string
+      callLines: string[]
+      callToken: string
+    }): Promise<LiveDelegateResult> => ipcRenderer.invoke('jarvis:liveDelegate', request),
+    liveCancel: (payload: { callToken: string }): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('jarvis:liveCancel', payload),
     liveTranscript: (line: {
       role: 'user' | 'assistant'
       text: string
       itemId: string
+      callToken: string
     }): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('jarvis:liveTranscript', line),
     onLiveNotice: (callback: (notice: LiveVoiceNotice) => void): (() => void) => {
