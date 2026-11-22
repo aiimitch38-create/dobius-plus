@@ -73,11 +73,21 @@ export const CUSTOM_AGENT_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['agents', 'run'],
     summary: 'Run an Agents-tab agent now with a prompt',
-    usage: 'dobius agents run <id> --prompt <text> [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'id', 'prompt'],
+    usage:
+      'dobius agents run <id> --prompt <text> [--check <command>] [--check-timeout <seconds>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'prompt', 'check', 'check-timeout'],
     positionalArgs: ['id'],
-    notes: ['Requires the Dobius+ app to be running; the run uses the agent\'s saved Claude or Codex engine and OAuth account.'],
-    examples: ['dobius agents run 2f9e... --prompt "Summarize open PRs"']
+    notes: [
+      'Requires the Dobius+ app to be running; the run uses the agent\'s saved Claude or Codex engine and OAuth account.',
+      'Use --check to have the app run a command in the agent\'s folder after the run ends; exit code 0 means the work passed. A failed check starts one retry with the check output.',
+      'The check is skipped, and the run marked needs-review, when the run used anything that could act outside this Mac or changed tooling files (package.json, lockfiles, tool config, node_modules, .git).',
+      'The check runs outside the agent sandbox, with only basic environment variables (no sign-in tokens or keys). --check-timeout defaults to 60 seconds, maximum 600.',
+      'Use `agents runs --json` to see each attempt, its check result and the outcome (verified, blocked or needs-review).'
+    ],
+    examples: [
+      'dobius agents run 2f9e... --prompt "Summarize open PRs"',
+      'dobius agents run 2f9e... --prompt "Fix the failing test" --check "npm test" --check-timeout 300'
+    ]
   },
   {
     path: ['agents', 'runs'],

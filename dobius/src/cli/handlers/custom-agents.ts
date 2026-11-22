@@ -8,7 +8,12 @@ import {
   formatAgentShow,
   printResult
 } from '../format'
-import { getOptionalStringFlag, getRequiredStringFlag } from '../flags'
+import {
+  getOptionalPositiveIntegerFlag,
+  getOptionalStringFlag,
+  getRequiredStringFlag
+} from '../flags'
+import { RuntimeClientError } from '../runtime-client'
 
 function getCommaListFlag(
   flags: Map<string, string | boolean>,
@@ -50,6 +55,24 @@ function collectAgentFields(flags: Map<string, string | boolean>): {
   }
 }
 
+function collectPostcheck(flags: Map<string, string | boolean>): {
+  postcheck?: { command: string; timeoutSeconds?: number }
+} {
+  const command = getOptionalStringFlag(flags, 'check')?.trim()
+  const timeoutSeconds = getOptionalPositiveIntegerFlag(flags, 'check-timeout')
+  if (!command) {
+    // A bare or empty --check must not quietly run with no check at all.
+    if (flags.has('check')) {
+      throw new RuntimeClientError('invalid_argument', '--check requires a command')
+    }
+    if (timeoutSeconds !== undefined) {
+      throw new RuntimeClientError('invalid_argument', '--check-timeout requires --check')
+    }
+    return {}
+  }
+  return { postcheck: { command, ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }) } }
+}
+
 export const CUSTOM_AGENT_HANDLERS: Record<string, CommandHandler> = {
   'agents list': async ({ client, json }) => {
     const result = await client.call<{ agents: CustomAgent[] }>('agent.list')
@@ -87,7 +110,8 @@ export const CUSTOM_AGENT_HANDLERS: Record<string, CommandHandler> = {
   'agents run': async ({ flags, client, json }) => {
     const result = await client.call<{ runId: string }>('agent.run', {
       id: getRequiredStringFlag(flags, 'id'),
-      prompt: getRequiredStringFlag(flags, 'prompt')
+      prompt: getRequiredStringFlag(flags, 'prompt'),
+      ...collectPostcheck(flags)
     })
     printResult(result, json, formatAgentRunStarted)
   },

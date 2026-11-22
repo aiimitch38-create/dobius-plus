@@ -43,6 +43,17 @@ export function formatAgentRunStarted(result: { runId: string }): string {
   return `Started agent run ${result.runId}. Use \`agents runs\` to check its status.`
 }
 
+// Only runs started with --check carry these; other runs print as before.
+function formatRunLoop(run: AgentRun): string {
+  if (run.attempt === undefined) {
+    return ''
+  }
+  const check = run.postcheck
+    ? `, check ${run.postcheck.exitCode === 0 && !run.postcheck.timedOut && !run.postcheck.error ? 'passed' : 'failed'}`
+    : ''
+  return ` (attempt ${run.attempt}${check}${run.outcome ? `, ${run.outcome}` : ''})`
+}
+
 export function formatAgentRuns(result: { runs: AgentRun[] }): string {
   if (result.runs.length === 0) {
     return 'No agent runs found.'
@@ -50,7 +61,7 @@ export function formatAgentRuns(result: { runs: AgentRun[] }): string {
   return result.runs
     .map(
       (run) =>
-        `${run.id}  ${run.agentId}  ${run.status}  ${new Date(run.startedAt).toISOString()}${
+        `${run.id}  ${run.agentId}  ${run.status}${formatRunLoop(run)}  ${new Date(run.startedAt).toISOString()}${
           run.summary ? `\n${run.summary}` : ''
         }`
     )

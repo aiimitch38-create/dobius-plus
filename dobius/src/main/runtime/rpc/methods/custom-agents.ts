@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import type { CustomAgent } from '../../../../shared/agents'
 import {
+  MAX_POSTCHECK_COMMAND_LENGTH,
+  normalizeAgentRunPostcheck
+} from '../../../../shared/agent-run-loop'
+import {
   createAgent,
   getAgent,
   listAgents,
@@ -67,7 +71,20 @@ const AgentRunStart = z.object({
   // chat wants. An automated dispatch must be able to say `false`: without it
   // a board task sent into a channel resumes whatever chat the agent last had
   // there and pays to re-ingest the whole transcript.
-  resume: z.boolean().optional()
+  resume: z.boolean().optional(),
+  // A command the app runs itself after the run settles (exit 0 = pass), with
+  // one retry on failure. Only ever set per call: there is no saved default.
+  postcheck: z
+    .object({
+      command: z
+        .string()
+        .trim()
+        .min(1, 'Missing check command')
+        .max(MAX_POSTCHECK_COMMAND_LENGTH, 'Check command is too long'),
+      // Clamped to 1..600 seconds in the handler; omitted = 60.
+      timeoutSeconds: z.number().optional()
+    })
+    .optional()
 })
 
 const AgentRunsQuery = z.object({
@@ -144,6 +161,7 @@ export const CUSTOM_AGENT_METHODS: RpcMethod[] = [
       if (!prepareClaudeLaunch) {
         throw new Error('Agent runs require the Dobius+ app to be running')
       }
+      const postcheck = normalizeAgentRunPostcheck(params.postcheck)
       const runId = await startAgentRun({
         agentId: params.id,
         prompt: params.prompt,
@@ -157,13 +175,15 @@ export const CUSTOM_AGENT_METHODS: RpcMethod[] = [
           params.sessionKey ||
           params.maxBudgetUsd ||
           params.maxTurns ||
-          params.resume !== undefined
+          params.resume !== undefined ||
+          postcheck
             ? {
                 source: params.source,
                 sessionKey: params.sessionKey,
                 ...(params.maxBudgetUsd ? { maxBudgetUsd: params.maxBudgetUsd } : {}),
                 ...(params.maxTurns ? { maxTurns: params.maxTurns } : {}),
                 ...(params.resume !== undefined ? { resume: params.resume } : {}),
+                ...(postcheck ? { postcheck } : {}),
                 ...(params.source === 'channel' ? { permissionMode: 'dontAsk' as const } : {})
               }
             : undefined
