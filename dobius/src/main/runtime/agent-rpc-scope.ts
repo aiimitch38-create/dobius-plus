@@ -9,7 +9,8 @@
 
 export const AGENT_RPC_METHOD_ALLOWLIST: ReadonlySet<string> = new Set([
   'status.get',
-  // Terminals: read, wait on, message and label existing terminals.
+  // Terminals: read, wait on, message and label existing terminals. Sends are
+  // forced through the agent-status guard (see scopeAgentRequestParams).
   'terminal.list',
   'terminal.show',
   'terminal.read',
@@ -53,9 +54,6 @@ export const AGENT_RPC_METHOD_ALLOWLIST: ReadonlySet<string> = new Set([
   'tasks.release',
   'tasks.comment',
   'tasks.attach',
-  // Claude Agent Teams inside a Dobius terminal (gated by its own team token).
-  'agentTeams.tmuxCompat',
-  'agentTeams.prepareLaunch',
   // Read-only workspace lookups the CLI uses to resolve selectors.
   'worktree.list',
   'worktree.show',
@@ -74,16 +72,39 @@ export function agentRpcDenial(method: string, params: unknown): string | null {
   }
   // Why: attaching by path makes the app read a file outside the agent's own
   // sandbox and hand it back on the card; agents must send the bytes instead.
-  if (method === 'tasks.attach' && hasFileParam(params)) {
+  if (method === 'tasks.attach' && isSet(params, 'file')) {
     return `'tasks.attach' with a file path is not allowed with the agent key; send the file contents (dataBase64) instead.`
+  }
+  // Why: --inject types the preamble plus Enter in one write after a one-time
+  // agent check, so a terminal whose agent just exited would run it as shell
+  // input. Agents dispatch without --inject; the worker picks the task up.
+  if (method === 'orchestration.dispatch' && isSet(params, 'inject')) {
+    return `'orchestration.dispatch --inject' is not allowed with the agent key; dispatch without --inject.`
   }
   return null
 }
 
-function hasFileParam(params: unknown): boolean {
+const GUARDED_SEND_METHODS: ReadonlySet<string> = new Set(['terminal.send', 'terminal.sendBound'])
+
+/**
+ * Params the agent key's request is dispatched with. Why: an unguarded send
+ * can type a command plus Enter into a plain shell, which runs outside every
+ * sandbox with the full key. Agent-key sends therefore always require the
+ * target to be running an agent at a sendable prompt (the two-phase guarded
+ * path in terminal.ts), whatever the caller asked for.
+ */
+export function scopeAgentRequestParams(method: string, params: unknown): unknown {
+  if (!GUARDED_SEND_METHODS.has(method)) {
+    return params
+  }
+  const base = params && typeof params === 'object' ? (params as Record<string, unknown>) : {}
+  return { ...base, requireAgentStatus: 'sendable' }
+}
+
+function isSet(params: unknown, key: string): boolean {
   if (!params || typeof params !== 'object') {
     return false
   }
-  const file = (params as Record<string, unknown>).file
-  return file !== undefined && file !== null && file !== ''
+  const value = (params as Record<string, unknown>)[key]
+  return value !== undefined && value !== null && value !== '' && value !== false
 }

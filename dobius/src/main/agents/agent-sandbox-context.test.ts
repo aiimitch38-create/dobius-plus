@@ -7,7 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ userDataRoot: '' }))
 vi.mock('../storage/user-data-root', () => ({ getUserDataRoot: () => mocks.userDataRoot }))
 
-import { resolveAgentRunSandboxPolicy, setAgentSandboxEnabledReader } from './agent-sandbox-context'
+import {
+  resolveAgentRunSandboxPolicy,
+  runtimeKeyRoots,
+  setAgentSandboxEnabledReader
+} from './agent-sandbox-context'
 
 let home: string
 let originalPath: string | undefined
@@ -145,3 +149,36 @@ describe('resolveAgentRunSandboxPolicy', () => {
     expect(String(warn.mock.calls[0]?.[0])).toMatch(/Agent sandbox is OFF/)
   })
 })
+
+describe('runtimeKeyRoots', () => {
+  it('names the packaged, dev and override userData roots plus a catch-all', () => {
+    const appData = path.join(home, 'Library', 'Application Support')
+    const original = process.env.DOBIUS_DEV_USER_DATA_PATH
+    process.env.DOBIUS_DEV_USER_DATA_PATH = path.join(home, 'repro-profile')
+    try {
+      const roots = runtimeKeyRoots(home, path.join(appData, 'dobius-plus'))
+      for (const name of ['dobius-plus', 'Dobius+', 'Dobius+-dev', 'dobius-dev', '*']) {
+        expect(roots, name).toContain(path.join(appData, name))
+      }
+      expect(roots).toContain(path.join(home, 'repro-profile'))
+    } finally {
+      if (original === undefined) {
+        delete process.env.DOBIUS_DEV_USER_DATA_PATH
+      } else {
+        process.env.DOBIUS_DEV_USER_DATA_PATH = original
+      }
+    }
+  })
+
+  it('denies the full key of the dev instance in a real run policy', () => {
+    const policy = resolve()
+    const denyRead = policy.sandbox?.filesystem?.denyRead ?? []
+    const darwinOrOther =
+      process.platform === 'darwin' ? path.join(home, 'Library', 'Application Support') : null
+    if (darwinOrOther) {
+      expect(denyRead).toContain(path.join(darwinOrOther, 'Dobius+-dev', 'dobius-runtime.json'))
+    }
+    expect(denyRead).toContain(path.join(home, 'user-data', 'dobius-runtime.json'))
+  })
+})
+

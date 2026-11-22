@@ -32,6 +32,11 @@ export type AgentSandboxContext = {
   tempDirs: readonly string[]
   /** The Claude CLI install and the PATH folders: whatever lands there runs unsandboxed later. */
   executableDirs: readonly string[]
+  /**
+   * Every Dobius userData root (packaged, dev, overrides; all path spellings,
+   * globs allowed) whose full runtime key file must stay unreadable.
+   */
+  runtimeKeyRoots?: readonly string[]
 }
 
 // Exactly the SDK query options this module owns.
@@ -152,8 +157,15 @@ export function buildAgentRunSandboxPolicy(context: AgentSandboxContext): AgentR
     path.join(home, 'Library', 'Messages'),
     ...USER_DATA_SECRET_DIRS.map((dir) => path.join(context.userDataDir, dir))
   ]
-  // The full runtime key. Agents use the limited key in dobius-runtime-agent.json.
-  const runtimeKeyFile = getRuntimeMetadataPath(context.userDataDir)
+  // The full runtime key of every Dobius instance, plus the temp file it is
+  // written through before the rename (writeSecureFile). Agents use the
+  // limited key in dobius-runtime-agent.json, which stays readable.
+  const runtimeKeyFiles = [
+    ...new Set([context.userDataDir, ...(context.runtimeKeyRoots ?? [])])
+  ].flatMap((root) => {
+    const file = getRuntimeMetadataPath(root)
+    return [file, `${file}.*.tmp`]
+  })
 
   // Why: Bash writes are an allowlist. A home-wide grant let an agent plant
   // code that runs outside the sandbox later (Claude hook scripts, settings
@@ -198,7 +210,7 @@ export function buildAgentRunSandboxPolicy(context: AgentSandboxContext): AgentR
         ...credentialFiles,
         ...secretFileGlobs,
         ...secretDirs,
-        runtimeKeyFile
+        ...runtimeKeyFiles
       ],
       allowRead: [ownAgentDir],
       allowWrite: [...new Set(writable)],
@@ -218,7 +230,7 @@ export function buildAgentRunSandboxPolicy(context: AgentSandboxContext): AgentR
   const disallowedTools = [
     ...otherAgentDirs.map((dir) => absoluteRule('Read', path.join(dir, '**'))),
     absoluteRule('Read', path.join(dobiusDir, 'agents-*', '**')),
-    ...[...credentialFiles, ...secretFileGlobs, runtimeKeyFile].map((target) =>
+    ...[...credentialFiles, ...secretFileGlobs, ...runtimeKeyFiles].map((target) =>
       absoluteRule('Read', target)
     ),
     ...secretDirs.map((dir) => absoluteRule('Read', path.join(dir, '**'))),

@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { getUserDataRoot } from '../storage/user-data-root'
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
+import { resolveThroughExisting } from './agent-run-postcheck-paths'
 import { buildAgentRunSandboxPolicy } from './agent-sandbox-policy'
 
 // Unset (tests, early boot) means on: the sandbox never defaults off.
@@ -40,6 +41,41 @@ function scratchDirs(): string[] {
     dirs.push('/tmp')
   }
   return [...new Set(dirs)]
+}
+
+// userData folder names Dobius has used: packaged ('dobius-plus', from the
+// package name), the display-name spelling ('Dobius+'), dev ('Dobius+-dev',
+// configureDevUserDataPath) and the older dev name ('dobius-dev').
+const KNOWN_USER_DATA_NAMES = ['dobius-plus', 'Dobius+', 'Dobius+-dev', 'dobius-dev']
+
+function defaultAppDataDir(homeDir: string): string {
+  if (process.platform === 'darwin') {
+    return path.join(homeDir, 'Library', 'Application Support')
+  }
+  if (process.platform === 'win32') {
+    return process.env.APPDATA ?? path.join(homeDir, 'AppData', 'Roaming')
+  }
+  return process.env.XDG_CONFIG_HOME || path.join(homeDir, '.config')
+}
+
+/**
+ * Every place another Dobius instance (packaged, dev, an override) keeps its
+ * full runtime key, in every path spelling. Why: the instance running this
+ * agent is only one of them; the others' keys open their own runtimes. The
+ * `*` entry covers any other folder name under the app-data folder.
+ */
+export function runtimeKeyRoots(homeDir: string, userDataRoot: string): string[] {
+  const appDataDirs = [...new Set([path.dirname(userDataRoot), defaultAppDataDir(homeDir)])]
+  const overrides = [process.env.DOBIUS_USER_DATA_PATH, process.env.DOBIUS_DEV_USER_DATA_PATH]
+  const roots = [
+    userDataRoot,
+    ...overrides.filter((dir): dir is string => Boolean(dir) && path.isAbsolute(dir as string)),
+    ...appDataDirs.flatMap((dir) => [
+      ...KNOWN_USER_DATA_NAMES.map((name) => path.join(dir, name)),
+      path.join(dir, '*')
+    ])
+  ]
+  return [...new Set(roots.flatMap((root) => [path.resolve(root), resolveThroughExisting(root)]))]
 }
 
 // The repo top level and the git common dir; a linked worktree's commits
@@ -120,6 +156,7 @@ export function resolveAgentRunSandboxPolicy(args: {
     ),
     dobiusEntries: listDir(dobiusDir, 'Dobius folder').filter((entry) => entry !== 'agents'),
     tempDirs,
+    runtimeKeyRoots: runtimeKeyRoots(homeDir, getUserDataRoot()),
     executableDirs: executableDirs(
       args.claudeExecutable,
       [args.cwd, ...gitDirs, ...tempDirs],

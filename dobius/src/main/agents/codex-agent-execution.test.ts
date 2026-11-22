@@ -112,12 +112,14 @@ const agent = {
   bypassPermissions: false
 } as CustomAgent
 
-function startFake(overrides: { maxSteps?: number; cancelled?: () => boolean } = {}) {
+function startFake(
+  overrides: { maxSteps?: number; cancelled?: () => boolean; bypass?: boolean } = {}
+) {
   const child = new FakeCodexChild()
   mocks.fakeChild = child
   const onFinish = vi.fn()
   startCodexAgentProcess({
-    agent,
+    agent: overrides.bypass ? { ...agent, bypassPermissions: true } : agent,
     prompt: 'go',
     cwd: '/repo',
     codexHome: null,
@@ -150,6 +152,22 @@ describe('startCodexAgentProcess run policy', () => {
     startFake()
     const options = vi.mocked(spawn).mock.calls[0]?.[2] as { env: NodeJS.ProcessEnv }
     expect(options.env.DOBIUS_RUNTIME_SCOPE).toBe('agent')
+  })
+
+  it('gives a full-access (bypass) run no agent-key marker: it is fully trusted', () => {
+    const original = process.env.DOBIUS_RUNTIME_SCOPE
+    process.env.DOBIUS_RUNTIME_SCOPE = 'agent'
+    try {
+      startFake({ bypass: true })
+      const options = vi.mocked(spawn).mock.calls[0]?.[2] as { env: NodeJS.ProcessEnv }
+      expect(options.env.DOBIUS_RUNTIME_SCOPE).toBeUndefined()
+    } finally {
+      if (original === undefined) {
+        delete process.env.DOBIUS_RUNTIME_SCOPE
+      } else {
+        process.env.DOBIUS_RUNTIME_SCOPE = original
+      }
+    }
   })
 
   it('turns off Codex multi-agent so sub-agents cannot escape the step cap', () => {

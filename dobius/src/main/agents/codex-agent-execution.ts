@@ -91,11 +91,19 @@ export function startCodexAgentProcess(args: {
     commandArgs.push('--model', model)
   }
   commandArgs.push('-')
-  const environment = {
+  const environment: NodeJS.ProcessEnv = {
     ...process.env,
-    ...(args.codexHome ? { CODEX_HOME: args.codexHome } : {}),
-    // Why: an agent run's `dobius` CLI calls must use the limited agent key.
-    [DOBIUS_RUNTIME_SCOPE_ENV]: AGENT_RUNTIME_SCOPE
+    ...(args.codexHome ? { CODEX_HOME: args.codexHome } : {})
+  }
+  // Why: the real barrier for a workspace-write run is Codex's own sandbox,
+  // which refuses AF_UNIX connects (checked with `codex sandbox -P :workspace`,
+  // codex-cli 0.166.0), so neither key reaches the runtime socket. The marker
+  // only matches what the CLI would see. A bypass run (danger-full-access) is
+  // fully trusted, can read the full key, and gets no pretend marker.
+  if (args.agent.bypassPermissions) {
+    delete environment[DOBIUS_RUNTIME_SCOPE_ENV]
+  } else {
+    environment[DOBIUS_RUNTIME_SCOPE_ENV] = AGENT_RUNTIME_SCOPE
   }
   // Why: a GUI-launched app has a minimal PATH, so a bare `codex` spawn fails
   // with ENOENT even when Codex is installed under a version manager.

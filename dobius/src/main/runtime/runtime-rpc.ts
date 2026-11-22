@@ -13,7 +13,7 @@ import { isPidAlive } from '../lib/is-pid-alive'
 import type { RuntimeMetadata, RuntimeTransportMetadata } from '../../shared/runtime-bootstrap'
 import type { DobiusRuntimeService } from './dobius-runtime'
 import { writeAgentRuntimeMetadata, writeRuntimeMetadata } from './runtime-metadata'
-import { agentRpcDenial } from './agent-rpc-scope'
+import { agentRpcDenial, scopeAgentRequestParams } from './agent-rpc-scope'
 import { RpcDispatcher } from './rpc/dispatcher'
 import type { RpcRequest, RpcResponse } from './rpc/core'
 import { errorResponse } from './rpc/errors'
@@ -981,7 +981,7 @@ export class DobiusRuntimeRpcServer {
     if ('error' in parsed) {
       return parsed.error
     }
-    const request = parsed.request
+    const { request, agentKey } = parsed
 
     // Why: long-poll admission fence. Short RPCs bypass the counter entirely
     // — it only guards handlers that can block for minutes. See §7 risk #2.
@@ -1004,6 +1004,7 @@ export class DobiusRuntimeRpcServer {
       return await this.dispatcher.dispatch(request, {
         authenticatedLocal: true,
         authenticatedLocalSocket: true,
+        ...(agentKey ? { agentKey: true as const } : {}),
         adamPeerEvidence: context?.adamPeerEvidence,
         signal: longPoll ? context?.signal : undefined
       })
@@ -1014,7 +1015,9 @@ export class DobiusRuntimeRpcServer {
     }
   }
 
-  private parseAndAuth(rawMessage: string): { request: RpcRequest } | { error: RpcResponse } {
+  private parseAndAuth(
+    rawMessage: string
+  ): { request: RpcRequest; agentKey: boolean } | { error: RpcResponse } {
     let request: RpcRequest
     try {
       request = JSON.parse(rawMessage) as RpcRequest
@@ -1043,9 +1046,10 @@ export class DobiusRuntimeRpcServer {
       if (denial) {
         return { error: this.buildError(request.id, 'forbidden', denial) }
       }
+      request = { ...request, params: scopeAgentRequestParams(request.method, request.params) }
     }
 
-    return { request }
+    return { request, agentKey: !isFullToken }
   }
 
   // Why: WebSocket messages go through streaming dispatch which can emit

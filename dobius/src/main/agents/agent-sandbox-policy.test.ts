@@ -105,6 +105,23 @@ describe('buildAgentRunSandboxPolicy', () => {
     ).toBe(false)
   })
 
+  it('denies the full runtime key and its write temp file in every Dobius userData root', () => {
+    const appData = `${HOME}/Library/Application Support`
+    const roots = [`${appData}/Dobius+-dev`, `${appData}/dobius-dev`, `${appData}/*`]
+    const { sandbox, disallowedTools } = buildAgentRunSandboxPolicy(
+      context({ runtimeKeyRoots: roots })
+    )
+    const denyRead = sandbox.filesystem?.denyRead ?? []
+    for (const root of [USER_DATA, ...roots]) {
+      for (const target of [`${root}/dobius-runtime.json`, `${root}/dobius-runtime.json.*.tmp`]) {
+        expect(denyRead, target).toContain(target)
+        expect(disallowedTools, target).toContain(rule('Read', target))
+      }
+    }
+    // The limited agent key stays readable everywhere.
+    expect(denyRead.filter((entry) => entry.includes('dobius-runtime-agent'))).toEqual([])
+  })
+
   it('lets Bash write only the cwd, the repo git dirs, the own agent folder, temp and caches', () => {
     const { sandbox } = buildAgentRunSandboxPolicy(context())
     const allowWrite = sandbox.filesystem?.allowWrite ?? []
