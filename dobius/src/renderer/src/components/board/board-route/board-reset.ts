@@ -31,11 +31,16 @@ export function boardResetPlan(cards: readonly BoardCard[]): BoardResetPlan {
  * gone. Why: a pinned tab asks for its own confirmation and may be kept, so a
  * live terminal is never left without its card.
  */
-export function closeConsoleCards(worktreeId: string, targets: readonly BoardKillTarget[]): void {
+export function closeConsoleCards(
+  worktreeId: string,
+  targets: readonly BoardKillTarget[],
+  options?: { stayOnBoard?: boolean }
+): void {
   // Snapshot first: closing tabs changes the store mid-loop.
   const snapshot = [...targets]
   for (const target of snapshot) {
-    closeTerminalTab(target.tabId)
+    // Never forced: a pinned console still asks for its own confirmation.
+    closeTerminalTab(target.tabId, { keepWorktreeActive: options?.stayOnBoard === true })
   }
   const sweep = (): boolean => {
     const state = useAppStore.getState()
@@ -62,14 +67,11 @@ export function closeConsoleCards(worktreeId: string, targets: readonly BoardKil
 export function resetBoard(worktreeId: string): void {
   const state = useAppStore.getState()
   const plan = boardResetPlan(getBoard(state, worktreeId).cards)
-  const wasActive = state.activeWorktreeId === worktreeId
   // Groups and connectors empty out with their cards (removeCards prunes them).
   state.removeCards(worktreeId, plan.otherCardIds)
-  closeConsoleCards(worktreeId, plan.consoles)
-  // Why: closing a workspace's last terminal deactivates it, which drops the
-  // user on Home; Reset means "an empty board", so stay on it.
-  const after = useAppStore.getState()
-  if (wasActive && after.activeWorktreeId === null) {
-    after.setActiveWorktree(worktreeId)
-  }
+  // Why: closing a workspace's last terminal normally switches to an open file
+  // or browser tab, or deactivates the workspace (which drops the user on
+  // Home). Reset means "an empty board", so the close leaves all of that
+  // alone, including for a pinned console confirmed later.
+  closeConsoleCards(worktreeId, plan.consoles, { stayOnBoard: true })
 }

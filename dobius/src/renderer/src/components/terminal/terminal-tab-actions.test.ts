@@ -441,6 +441,86 @@ describe('closeTerminalTab', () => {
   })
 })
 
+describe('closeTerminalTab last-terminal fallback', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    isWebRuntimeSessionActiveMock.mockReturnValue(false)
+  })
+
+  const lastTerminalState = (
+    extra: Record<string, unknown>
+  ): Record<string, ReturnType<typeof vi.fn>> => {
+    const actions = {
+      closeTab: vi.fn(),
+      setActiveFile: vi.fn(),
+      setActiveTabType: vi.fn(),
+      setActiveBrowserTab: vi.fn(),
+      setActiveWorktree: vi.fn()
+    }
+    getStateMock.mockReturnValue({
+      settings: { activeRuntimeEnvironmentId: null },
+      tabsByWorktree: { 'wt-1': [{ id: 'tab-1' }] },
+      unifiedTabsByWorktree: {},
+      openFiles: [],
+      browserTabsByWorktree: {},
+      activeWorktreeId: 'wt-1',
+      activeTabId: 'tab-1',
+      ...actions,
+      ...extra
+    })
+    return actions
+  }
+
+  it('deactivates the workspace when nothing else is open', () => {
+    const actions = lastTerminalState({})
+    closeTerminalTab('tab-1')
+    expect(actions.closeTab).toHaveBeenCalledWith('tab-1')
+    expect(actions.setActiveWorktree).toHaveBeenCalledWith(null)
+  })
+
+  it('switches to an open file, else an open browser tab', () => {
+    const withFile = lastTerminalState({ openFiles: [{ id: 'file-1', worktreeId: 'wt-1' }] })
+    closeTerminalTab('tab-1')
+    expect(withFile.setActiveFile).toHaveBeenCalledWith('file-1')
+    expect(withFile.setActiveTabType).toHaveBeenCalledWith('editor')
+
+    const withBrowser = lastTerminalState({ browserTabsByWorktree: { 'wt-1': [{ id: 'b-1' }] } })
+    closeTerminalTab('tab-1')
+    expect(withBrowser.setActiveBrowserTab).toHaveBeenCalledWith('b-1')
+    expect(withBrowser.setActiveTabType).toHaveBeenCalledWith('browser')
+  })
+
+  it('keepWorktreeActive closes the tab and leaves the workspace and view alone', () => {
+    const actions = lastTerminalState({
+      openFiles: [{ id: 'file-1', worktreeId: 'wt-1' }],
+      browserTabsByWorktree: { 'wt-1': [{ id: 'b-1' }] }
+    })
+    closeTerminalTab('tab-1', { keepWorktreeActive: true })
+    expect(actions.closeTab).toHaveBeenCalledWith('tab-1')
+    expect(actions.setActiveFile).not.toHaveBeenCalled()
+    expect(actions.setActiveBrowserTab).not.toHaveBeenCalled()
+    expect(actions.setActiveTabType).not.toHaveBeenCalled()
+    expect(actions.setActiveWorktree).not.toHaveBeenCalled()
+  })
+
+  it('a pinned tab still asks first, and the confirmed close keeps keepWorktreeActive', () => {
+    const requestPinnedTabCloseConfirm = vi.fn()
+    const actions = lastTerminalState({
+      unifiedTabsByWorktree: {
+        'wt-1': [{ id: 'u-1', entityId: 'tab-1', contentType: 'terminal', isPinned: true }]
+      },
+      requestPinnedTabCloseConfirm
+    })
+    closeTerminalTab('tab-1', { keepWorktreeActive: true })
+    expect(actions.closeTab).not.toHaveBeenCalled()
+    expect(requestPinnedTabCloseConfirm).toHaveBeenCalledTimes(1)
+
+    requestPinnedTabCloseConfirm.mock.calls[0][0].onConfirm()
+    expect(actions.closeTab).toHaveBeenCalledWith('tab-1')
+    expect(actions.setActiveWorktree).not.toHaveBeenCalled()
+  })
+})
+
 describe('closeOtherTerminalTabs', () => {
   beforeEach(() => {
     vi.clearAllMocks()

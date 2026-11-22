@@ -149,7 +149,17 @@ export function createNewTerminalTab(
   state.setTabBarOrder(activeWorktreeId, order)
 }
 
-export function closeTerminalTab(tabId: string, options?: { force?: boolean }): void {
+export type CloseTerminalTabOptions = {
+  /** Post-confirmation re-entry: skips the pinned-tab guard. */
+  force?: boolean
+  /**
+   * Closing the last terminal leaves the workspace and its view exactly as
+   * they are: no switch to an editor or browser tab, no deactivation.
+   */
+  keepWorktreeActive?: boolean
+}
+
+export function closeTerminalTab(tabId: string, options?: CloseTerminalTabOptions): void {
   const state = useAppStore.getState()
   const target = resolveCloseTerminalTabTarget(state, tabId)
   if (!target) {
@@ -163,7 +173,9 @@ export function closeTerminalTab(tabId: string, options?: { force?: boolean }): 
     guardPinnedTabClose({
       isPinned: true,
       tabLabel: resolvePinnedTabLabel(state, owningWorktreeId, terminalTabId),
-      onClose: () => closeTerminalTab(tabId, { force: true })
+      // Why: the confirmed close can run minutes later; it must behave like
+      // the close that was asked for, so the caller's options ride along.
+      onClose: () => closeTerminalTab(tabId, { ...options, force: true })
     })
     return
   }
@@ -199,7 +211,10 @@ export function closeTerminalTab(tabId: string, options?: { force?: boolean }): 
   const currentTerminalTabIds = getWorktreeTerminalTabIds(state, owningWorktreeId)
   if (currentTerminalTabIds.length <= 1) {
     closeLocalTerminalTabState(terminalTabId)
-    if (state.activeWorktreeId === owningWorktreeId) {
+    // Why: the Board's Reset empties the board the user is looking at. The
+    // fallback below would re-point the editor/browser underneath it or drop
+    // the user on Home, so that caller opts out of it.
+    if (state.activeWorktreeId === owningWorktreeId && !options?.keepWorktreeActive) {
       // Why: only deactivate the worktree when no tabs of any kind remain.
       // Editor files are a separate tab type; closing the last terminal tab
       // should switch to the editor view instead of tearing down the workspace.
