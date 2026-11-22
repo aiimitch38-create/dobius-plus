@@ -131,4 +131,25 @@ describe('closing board consoles against the real store', () => {
     expect(getBoard(store.getState(), WT).cards).toEqual([])
     expect(onTheBoard()).toBe(true)
   })
+
+  it('asks about every pinned console in turn, and keeps the ones the user cancels', () => {
+    seedBoard(['tab-1', 'pin-a', 'pin-b'], ['pin-a', 'pin-b'])
+    const liveTabs = (): string[] => (store.getState().tabsByWorktree[WT] ?? []).map((t) => t.id)
+
+    resetBoard(WT)
+
+    // Nothing pinned closes unasked; the first pinned console is the one on screen.
+    expect(liveTabs()).toEqual(['pin-a', 'pin-b'])
+    expect(store.getState().pinnedTabCloseConfirm?.tabLabel).toBe('pin-a')
+
+    store.getState().confirmPinnedTabClose()
+    expect(liveTabs()).toEqual(['pin-b'])
+    expect(store.getState().pinnedTabCloseConfirm?.tabLabel).toBe('pin-b')
+
+    store.getState().dismissPinnedTabClose()
+    expect(store.getState().pinnedTabCloseConfirm).toBeNull()
+    expect(liveTabs()).toEqual(['pin-b'])
+    expect(consoleTargets().map((t) => t.tabId)).toEqual(['pin-b'])
+    expect(onTheBoard()).toBe(true)
+  })
 })
