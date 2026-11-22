@@ -1,7 +1,28 @@
 import type { CloudJob } from '../../../../shared/cloud-jobs'
 import { CLOUD_JOB_LABELS } from '../../../../shared/cloud-job-projection'
 import { Button } from '@/components/ui/button'
-export function KanbanJobDetailPanel({ job, onClose }: { job: CloudJob; onClose: () => void }) {
+import { translate } from '@/i18n/i18n'
+import { canCancelCloudJob, canRetryCloudJob } from './cloud-job-actions'
+
+export type KanbanJobDetailActions = {
+  /** Which action on this job is in flight, if any; every action button disables while one runs. */
+  busy: 'cancel' | 'retry' | 'other' | null
+  onCancel: () => void
+  onRetry: () => void
+}
+
+export function KanbanJobDetailPanel({
+  job,
+  onClose,
+  actions
+}: {
+  job: CloudJob
+  onClose: () => void
+  /** Omitted for read-only sources: no lifecycle buttons are shown. */
+  actions?: KanbanJobDetailActions
+}) {
+  const showCancel = !!actions && canCancelCloudJob(job)
+  const showRetry = !!actions && canRetryCloudJob(job)
   return (
     <aside
       aria-label="Job details"
@@ -14,6 +35,29 @@ export function KanbanJobDetailPanel({ job, onClose }: { job: CloudJob; onClose:
         </Button>
       </div>
       <p className="mt-3 text-sm">{CLOUD_JOB_LABELS[job.state]}</p>
+      {actions && (showCancel || showRetry) ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {showRetry ? (
+            <Button size="sm" onClick={actions.onRetry} disabled={actions.busy !== null}>
+              {actions.busy === 'retry'
+                ? translate('auto.components.kanban.KanbanJobDetailPanel.76b0536916', 'Retrying…')
+                : translate('auto.components.kanban.KanbanJobDetailPanel.9c61963fa2', 'Retry job')}
+            </Button>
+          ) : null}
+          {showCancel ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={actions.onCancel}
+              disabled={actions.busy !== null}
+            >
+              {actions.busy === 'cancel'
+                ? translate('auto.components.kanban.KanbanJobDetailPanel.e8d63495b4', 'Cancelling…')
+                : translate('auto.components.kanban.KanbanJobDetailPanel.1dc9ab3828', 'Cancel job')}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <dl className="mt-3 min-w-0 space-y-2 text-xs">
         {[
           ['Job', job.id],
