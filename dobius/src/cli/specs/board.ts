@@ -38,24 +38,25 @@ export const BOARD_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'worktree'],
     notes: [
       '--worktree defaults to active (the worktree enclosing the current directory).',
-      'Text columns: tabId, terminal handle (or "not running"), agent, role, title.',
-      '--json rows: id, tabId, title, role, agent, handle, running, worktreeId, worktreePath.',
+      'Text columns: tabId, terminal handle (or "not running" / "pane unclear"), agent, role, title.',
+      '--json rows: id, tabId, title, role, agent, handle, running, paneUnclear, worktreeId, worktreePath.',
+      'paneUnclear means the card tab has several running panes and none is focused; handle is then null and sends are refused.',
       'The handle is looked up on every call: it changes when a console restarts, so do not store it. tabId and the card title are the stable names.'
     ],
     examples: ['dobius board consoles --json', 'dobius board consoles --worktree branch:main']
   },
   {
     path: ['board', 'send'],
-    summary: 'Type text into a Board console card, addressed by its title',
+    summary: 'Type text into a Board console card, addressed by its card id or title',
     usage:
-      'dobius board send --card <title> --text <text> [--enter] [--worktree <selector>] [--json]',
+      'dobius board send --card <id-or-title> --text <text> [--enter] [--worktree <selector>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'card', 'text', 'enter', 'worktree'],
     notes: [
-      '--card is the card title shown on the Board (exact match first, then ignoring letter case) or the card id. `dobius board consoles` lists them.',
+      '--card is the card id (preferred: it is unique; a console reads its own from $DOBIUS_BOARD_CARD_ID) or the card title shown on the Board (exact match first, then ignoring letter case). `dobius board consoles --json` lists both.',
       'The card is looked up at send time, so it keeps working after the console restarts.',
-      'Fails with board_card_not_found, board_card_ambiguous or board_card_not_running. It never falls back to the active terminal.',
+      'Fails with error code board_card_not_found, board_card_ambiguous, board_card_not_running or board_card_pane_unclear. It never falls back to the active terminal.',
       '--worktree defaults to active (the worktree enclosing the current directory).',
-      'The same address works elsewhere as card:<title>: `dobius terminal send --terminal card:<title>`, `dobius orchestration send --to card:<title>`, `dobius orchestration dispatch --to card:<title>`.'
+      'The same address works elsewhere as card:<id-or-title>: `dobius terminal send --terminal card:<id>`, `dobius orchestration send --to card:<id>`, `dobius orchestration dispatch --to card:<id>` (each takes --worktree too).'
     ],
     examples: [
       'dobius board send --card "Builder 1" --text "run the tests" --enter',

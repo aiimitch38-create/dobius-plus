@@ -7,7 +7,11 @@ export const BOARD_CARD_TITLE_ENV_MAX_CHARS = 200
  * their own address. These three names let a console say "I am card X on board
  * Y" and let others reach it with `dobius board send --card`. Boards are keyed
  * by worktree, so the board id is the worktree id. A tab with no console card
- * gets nothing: a plain terminal must not claim a card identity.
+ * gets nothing: a plain terminal must not claim a card identity. The card id
+ * is the address; the title is shortened for display and can repeat.
+ * Known gap: a console launched on a paired web runtime is created on the host
+ * before its card exists (createWebRuntimeSessionTerminal, then
+ * awaitMirroredConsoleTabs binds the card), so it gets none of these.
  */
 export function boardConsoleIdentityEnv(
   state: Pick<BoardSlice, 'boardsByWorktree'>,

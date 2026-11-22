@@ -21,6 +21,7 @@ type BoardConsole = {
   agent?: string | null
   handle?: string | null
   running?: boolean
+  paneUnclear?: boolean
   worktreePath?: string
 }
 type OpenTileResult = { requestId: string; worktreeId: string; cardId: string; browserPageId: string }
@@ -39,7 +40,13 @@ export function formatConsoles(consoles: BoardConsole[]): string {
   return consoles
     .map((c) => {
       const terminal =
-        c.running === undefined ? 'unknown' : c.running && c.handle ? c.handle : 'not running'
+        c.running === undefined
+          ? 'unknown'
+          : c.paneUnclear
+            ? 'pane unclear'
+            : c.running && c.handle
+              ? c.handle
+              : 'not running'
       return `${c.tabId}  ${terminal}  ${c.agent ?? '-'}  ${c.role ?? '-'}  ${c.title}`
     })
     .join('\n')

@@ -38,6 +38,19 @@ describe('resolveTerminalAddress', () => {
     })
   })
 
+  it('looks the card up on the Board named by --worktree', async () => {
+    await resolveTerminalAddress(
+      'card:card-9f2c',
+      flagsOf([['worktree', 'id:wt-9']]),
+      '/repo/src',
+      client
+    )
+    expect(callMock).toHaveBeenCalledWith('board.resolveConsole', {
+      worktree: 'id:wt-9',
+      card: 'card-9f2c'
+    })
+  })
+
   it('rejects card: with no title', async () => {
     await expect(resolveTerminalAddress('card:  ', flagsOf(), '/repo', client)).rejects.toThrow(
       'Missing card name'

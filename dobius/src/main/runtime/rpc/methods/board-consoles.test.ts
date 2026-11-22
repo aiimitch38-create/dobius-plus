@@ -24,9 +24,16 @@ type TestTerminal = {
   tabId: string
   ptyId: string | null
   connected: boolean
+  leafId?: string
+  originTabId?: string | null
 }
 
-function makeRuntime(cards: unknown[], delivered = true, terminals: TestTerminal[] = []) {
+function makeRuntime(
+  cards: unknown[],
+  delivered = true,
+  terminals: TestTerminal[] = [],
+  activeLeafByTab: Record<string, string> = {}
+) {
   const emitClientEvent = vi.fn((_event: RuntimeBoardSpawnConsoleEvent) => ({ delivered }))
   const runtime = {
     getRuntimeId: () => 'test-runtime',
@@ -41,6 +48,7 @@ function makeRuntime(cards: unknown[], delivered = true, terminals: TestTerminal
       totalCount: terminals.length,
       truncated: false
     })),
+    getTerminalTabActiveLeafId: (tabId: string) => activeLeafByTab[tabId] ?? null,
     getUIState: () => ({ boardsByWorktree: { [WT]: { cards, groups: [] } } }),
     // Why: spawnBoardConsole must go through the runtime's notify path (window
     // IPC + client event), never emitClientEvent alone.
@@ -303,8 +311,12 @@ describe('board.listConsoles', () => {
     })
   })
 
-  async function list(cards: unknown[], terminals: TestTerminal[]) {
-    const { runtime } = makeRuntime(cards, true, terminals)
+  async function list(
+    cards: unknown[],
+    terminals: TestTerminal[],
+    activeLeafByTab: Record<string, string> = {}
+  ) {
+    const { runtime } = makeRuntime(cards, true, terminals, activeLeafByTab)
     const dispatcher = new RpcDispatcher({ runtime, methods: BOARD_CONSOLE_METHODS })
     const response = await dispatcher.dispatch(
       makeRequest('board.listConsoles', { worktree: `id:${WT}` })
@@ -357,6 +369,53 @@ describe('board.listConsoles', () => {
     expect(response).toMatchObject({
       ok: true,
       result: [{ id: 'c1', handle: 'term_live', running: true }]
+    })
+  })
+
+  const twoLivePanes: TestTerminal[] = [
+    { handle: 'term_left', tabId: 'tab-1', leafId: 'leaf-l', ptyId: 'pty-1', connected: true },
+    { handle: 'term_right', tabId: 'tab-1', leafId: 'leaf-r', ptyId: 'pty-2', connected: true }
+  ]
+
+  it('picks the focused pane when a console tab has two live panes', async () => {
+    const { response } = await list([consoleCard(1, null)], twoLivePanes, { 'tab-1': 'leaf-r' })
+    expect(response).toMatchObject({
+      ok: true,
+      result: [{ id: 'c1', handle: 'term_right', running: true, paneUnclear: false }]
+    })
+  })
+
+  it('gives no handle when two panes are live and the focused one is unknown', async () => {
+    const { response } = await list([consoleCard(1, null)], twoLivePanes)
+    expect(response).toMatchObject({
+      ok: true,
+      result: [{ id: 'c1', handle: null, running: true, paneUnclear: true }]
+    })
+    const stale = await list([consoleCard(1, null)], twoLivePanes, { 'tab-1': 'leaf-gone' })
+    expect(stale.response).toMatchObject({ result: [{ handle: null, paneUnclear: true }] })
+  })
+
+  it('finds a running console listed from its PTY record (renderer graph unavailable)', async () => {
+    const { response } = await list(
+      [consoleCard(1, null), consoleCard(2, null)],
+      [
+        {
+          handle: 'term_pty',
+          tabId: 'pty:pty-7',
+          leafId: 'pty:pty-7',
+          originTabId: 'tab-1',
+          ptyId: 'pty-7',
+          connected: true
+        },
+        { handle: 'term_other', tabId: 'pty:pty-8', originTabId: null, ptyId: 'pty-8', connected: true }
+      ]
+    )
+    expect(response).toMatchObject({
+      ok: true,
+      result: [
+        { id: 'c1', handle: 'term_pty', running: true },
+        { id: 'c2', handle: null, running: false }
+      ]
     })
   })
 
@@ -417,9 +476,21 @@ describe('board.resolveConsole', () => {
     expect(response).toMatchObject({ ok: true, result: { id: 'c1', handle: 'term_1' } })
   })
 
+  it('fails with board_card_pane_unclear instead of picking one of two live panes', async () => {
+    const response = await resolve(
+      [consoleCard(1, null)],
+      [
+        { handle: 'term_left', tabId: 'tab-1', leafId: 'leaf-l', ptyId: 'pty-1', connected: true },
+        { handle: 'term_right', tabId: 'tab-1', leafId: 'leaf-r', ptyId: 'pty-2', connected: true }
+      ],
+      'Console 1'
+    )
+    expect(response).toMatchObject({ ok: false, error: { code: 'board_card_pane_unclear' } })
+  })
+
   it('fails with board_card_not_found for an unknown card and names the known ones', async () => {
     const response = await resolve([consoleCard(1, null)], [live(1)], 'Nope')
-    expect(response.ok).toBe(false)
+    expect(response).toMatchObject({ ok: false, error: { code: 'board_card_not_found' } })
     expect(JSON.stringify(response)).toContain('board_card_not_found')
     expect(JSON.stringify(response)).toContain('Console 1')
   })
@@ -430,8 +501,7 @@ describe('board.resolveConsole', () => {
       { ...consoleCard(2, null), title: 'Builder' }
     ]
     const response = await resolve(cards, [live(1), live(2)], 'Builder')
-    expect(response.ok).toBe(false)
-    expect(JSON.stringify(response)).toContain('board_card_ambiguous')
+    expect(response).toMatchObject({ ok: false, error: { code: 'board_card_ambiguous' } })
     expect(JSON.stringify(response)).toContain('c1, c2')
   })
 
@@ -443,8 +513,8 @@ describe('board.resolveConsole', () => {
       [{ handle: 'term_dead', tabId: 'tab-1', ptyId: null, connected: false }],
       'Console 1'
     )
-    expect(exited.ok).toBe(false)
-    expect(JSON.stringify(exited)).toContain('board_card_not_running')
+    expect(missing).toMatchObject({ ok: false, error: { code: 'board_card_not_running' } })
+    expect(exited).toMatchObject({ ok: false, error: { code: 'board_card_not_running' } })
   })
 
   it('rejects a missing or blank card name', async () => {

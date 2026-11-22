@@ -18,6 +18,8 @@ import {
 import type { RuntimeBoardSpawnConsoleEvent } from '../../../../shared/runtime-client-events'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import type { TuiAgent } from '../../../../shared/types'
+import type { RuntimeTerminalSummary } from '../../../../shared/runtime-types'
+import { BoardConsoleError } from '../../../../shared/board-console-errors'
 import type { DobiusRuntimeService } from '../../dobius-runtime'
 import { defineMethod, type RpcMethod } from '../core'
 
@@ -101,6 +103,11 @@ export type BoardConsoleRow = BoardConsoleSummary & {
   handle: string | null
   /** True only when the card's terminal has a connected PTY. */
   running: boolean
+  /**
+   * True when the card's tab has several live panes and none is known to be
+   * the focused one. handle is then null: nothing may be sent on a guess.
+   */
+  paneUnclear: boolean
   worktreeId: string
   worktreePath: string
 }
@@ -154,18 +161,46 @@ export async function listBoardConsoleRows(
     BOARD_TERMINAL_LIST_LIMIT
   )
   return cards.map((card) => {
-    const inTab = terminals.filter((t) => t.tabId === card.tabId)
-    const isLive = (t: (typeof terminals)[number]): boolean => t.connected && t.ptyId !== null
-    // Why: a split tab has several panes; a live one is the one worth addressing.
-    const terminal = inTab.find(isLive) ?? inTab[0]
+    // Why: while the renderer graph is unavailable, terminals are listed from
+    // PTY records with tabId `pty:<ptyId>`; originTabId keeps the card link so
+    // a running console is not reported as stopped.
+    const inTab = terminals.filter((t) => t.tabId === card.tabId || t.originTabId === card.tabId)
+    const picked = pickConsoleTerminal(inTab, runtime.getTerminalTabActiveLeafId(card.tabId))
     return {
       ...card,
-      handle: terminal?.handle ?? null,
-      running: terminal ? isLive(terminal) : false,
+      handle: picked.terminal?.handle ?? null,
+      running: picked.running,
+      paneUnclear: picked.paneUnclear,
       worktreeId: worktree.id,
       worktreePath: worktree.path
     }
   })
+}
+
+type ConsoleTerminal = Pick<RuntimeTerminalSummary, 'handle' | 'leafId' | 'connected' | 'ptyId'>
+const isLiveTerminal = (t: ConsoleTerminal): boolean => t.connected && t.ptyId !== null
+
+/**
+ * Chooses which pane of a console card's tab is "the console". One live pane is
+ * unambiguous. With several live panes only the tab's focused pane counts; if
+ * that is not known the card is reported as unclear rather than guessed at.
+ */
+export function pickConsoleTerminal<T extends ConsoleTerminal>(
+  inTab: T[],
+  activeLeafId: string | null
+): { terminal: T | null; running: boolean; paneUnclear: boolean } {
+  const live = inTab.filter(isLiveTerminal)
+  if (live.length === 0) {
+    const shown = inTab.find((t) => t.leafId === activeLeafId) ?? inTab[0] ?? null
+    return { terminal: shown, running: false, paneUnclear: false }
+  }
+  if (live.length === 1) {
+    return { terminal: live[0], running: true, paneUnclear: false }
+  }
+  const focused = live.find((t) => t.leafId === activeLeafId)
+  return focused
+    ? { terminal: focused, running: true, paneUnclear: false }
+    : { terminal: null, running: true, paneUnclear: true }
 }
 
 const quoted = (values: string[]): string => values.map((v) => `"${v}"`).join(', ')
@@ -187,21 +222,30 @@ export function resolveBoardConsole(
   const matches = byId.length > 0 ? byId : exact.length > 0 ? exact : loose
   if (matches.length === 0) {
     const known = rows.length > 0 ? ` Console cards here: ${quoted(rows.map((r) => r.title))}.` : ''
-    throw new Error(
-      `board_card_not_found: no console card named "${name}" on this Board.${known}`
+    throw new BoardConsoleError(
+      'board_card_not_found',
+      `no console card named "${name}" on this Board.${known}`
     )
   }
   if (matches.length > 1) {
-    throw new Error(
-      `board_card_ambiguous: ${matches.length} console cards are named "${name}" (card ids: ${matches
+    throw new BoardConsoleError(
+      'board_card_ambiguous',
+      `${matches.length} console cards are named "${name}" (card ids: ${matches
         .map((r) => r.id)
         .join(', ')}). Rename one on the Board, or use its card id.`
     )
   }
   const [row] = matches
+  if (row.paneUnclear) {
+    throw new BoardConsoleError(
+      'board_card_pane_unclear',
+      `console card "${row.title}" has several running panes and none is the focused one. Click the pane you mean on the Board (or close the extra pane), then send again.`
+    )
+  }
   if (!row.running || !row.handle) {
-    throw new Error(
-      `board_card_not_running: console card "${row.title}" has no running terminal. Restart it on the Board, then send again.`
+    throw new BoardConsoleError(
+      'board_card_not_running',
+      `console card "${row.title}" has no running terminal. Restart it on the Board, then send again.`
     )
   }
   return { ...row, handle: row.handle }

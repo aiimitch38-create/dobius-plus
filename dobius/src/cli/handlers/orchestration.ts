@@ -140,6 +140,14 @@ async function resolveOrchestrationTerminalHandle(
   return await getTerminalHandle(flags, cwd, client)
 }
 
+// Why: on send/dispatch --worktree names the Board a card: recipient is on. It
+// must not also move the sender to that worktree's active terminal.
+function senderFlags(flags: Map<string, string | boolean>): Map<string, string | boolean> {
+  const scoped = new Map(flags)
+  scoped.delete('worktree')
+  return scoped
+}
+
 function isDevCliInvocation(): boolean {
   return process.env.DOBIUS_USER_DATA_PATH?.includes('dobius-dev') ?? false
 }
@@ -178,7 +186,7 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
     rejectLifecycleGroupRecipient(type, rawTo)
     const to = await resolveTerminalAddress(rawTo, flags, cwd, client)
 
-    const from = await resolveOrchestrationTerminalHandle(flags, cwd, client, 'from')
+    const from = await resolveOrchestrationTerminalHandle(senderFlags(flags), cwd, client, 'from')
     const result = await client.call<
       { message: { id: string } } | { messages: { id: string }[]; recipients: number }
     >('orchestration.send', {
@@ -362,7 +370,7 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
   },
 
   'orchestration dispatch': async ({ flags, client, cwd, json }) => {
-    const from = await resolveOrchestrationTerminalHandle(flags, cwd, client, 'from')
+    const from = await resolveOrchestrationTerminalHandle(senderFlags(flags), cwd, client, 'from')
     const dryRun = flags.has('dry-run') ? true : undefined
     const returnPreamble = flags.has('return-preamble') ? true : undefined
     // Why: --to is only required for non-dry-run; the RPC handler re-enforces.

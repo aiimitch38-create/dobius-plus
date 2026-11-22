@@ -336,6 +336,28 @@ describe('orchestration card:<title> recipients', () => {
     )
   })
 
+  it.each(['orchestration send', 'orchestration dispatch'] as const)(
+    '%s uses --worktree for the card lookup only, not to pick the sender',
+    async (command) => {
+      delete process.env.DOBIUS_TERMINAL_HANDLE
+      callMock.mockResolvedValue({
+        result: { message: { id: 'msg_1' }, dispatch: { id: 'd1', task_id: 't1', status: 'dispatched' } }
+      })
+      getTerminalHandleMock.mockResolvedValue('term_sender')
+      resolveTerminalAddressMock.mockResolvedValue('term_live')
+      await run(command, [
+        ['to', 'card:card-9f2c'],
+        ['subject', 'hi'],
+        ['task', 't1'],
+        ['worktree', 'id:wt-9']
+      ])
+      const addressFlags = resolveTerminalAddressMock.mock.calls[0][1] as Map<string, unknown>
+      expect(addressFlags.get('worktree')).toBe('id:wt-9')
+      const senderFlagsSeen = getTerminalHandleMock.mock.calls[0][0] as Map<string, unknown>
+      expect(senderFlagsSeen.has('worktree')).toBe(false)
+    }
+  )
+
   it('dispatch resolves card:<title> to the live handle before dispatching', async () => {
     callMock.mockResolvedValue({
       result: { dispatch: { id: 'd1', task_id: 't1', status: 'dispatched' } }

@@ -36,6 +36,22 @@ describe('board consoles text output', () => {
     ).toBe('tab-2  not running  claude  -  Idle\ntab-3  not running  -  -  Exited')
   })
 
+  it('says "pane unclear" when several panes are live and none is focused', () => {
+    expect(
+      formatConsoles([
+        {
+          tabId: 'tab-5',
+          title: 'Split',
+          role: null,
+          agent: 'codex',
+          handle: null,
+          running: true,
+          paneUnclear: true
+        }
+      ])
+    ).toBe('tab-5  pane unclear  codex  -  Split')
+  })
+
   it('still prints rows from an older runtime that has no live fields', () => {
     expect(formatConsoles([{ tabId: 'tab-4', title: 'Old', role: null }])).toBe(
       'tab-4  unknown  -  -  Old'
@@ -103,6 +119,17 @@ describe('board send', () => {
       'terminal.send',
       expect.objectContaining({ terminal: 'term_live', enter: false })
     )
+  })
+
+  it('passes a card id through unchanged (the runtime matches ids before titles)', async () => {
+    await send([
+      ['card', 'card-9f2c'],
+      ['text', 'hello']
+    ])
+    expect(callMock).toHaveBeenCalledWith('board.resolveConsole', {
+      worktree: 'id:wt-1',
+      card: 'card-9f2c'
+    })
   })
 
   it('writes to no terminal when the card cannot be resolved', async () => {

@@ -109,7 +109,7 @@ export function renderSessionWorkspaceBrief(
     `- Branch: ${describeBranch(facts)}`,
     `- Working tree as of ${asOf}: ${describeDirty(facts.dirty)}`,
     `- Execution gate (Pause crew) as of ${asOf}: ${describeGate(facts.gate)}`,
-    '- Board console identity: if `DOBIUS_BOARD_CARD_ID` is set in your shell, you are the Board console card named in `DOBIUS_BOARD_CARD_TITLE` on board `DOBIUS_BOARD_ID`. Others reach you with `dobius board send --card "<title>"`; `dobius board consoles` lists your neighbours.',
+    '- Board console identity: if `DOBIUS_BOARD_CARD_ID` is set in your shell, you are that Board console card on board `DOBIUS_BOARD_ID`. Route by the card id, which is unique: others reach you with `dobius board send --card "$DOBIUS_BOARD_CARD_ID"`. `DOBIUS_BOARD_CARD_TITLE` is for display only (titles can repeat). `dobius board consoles --json` lists your neighbours with their ids.',
     '',
     ...(facts.isDobiusRepo ? dobiusSections() : genericSections(facts)),
     '',
