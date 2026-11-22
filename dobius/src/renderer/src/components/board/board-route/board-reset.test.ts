@@ -8,7 +8,7 @@ import {
   type BoardCard,
   type NewBoardCard
 } from '@/store/slices/board'
-import { boardResetPlan, resetBoard } from './board-reset'
+import { boardResetPlan, closeConsoleCards, resetBoard } from './board-reset'
 
 const { testStore } = vi.hoisted(() => ({ testStore: { current: null as unknown } }))
 vi.mock('@/store', () => ({
@@ -195,5 +195,21 @@ describe('resetBoard', () => {
     expect(store.getState().tabsByWorktree[WT]).toEqual([])
     expect(getBoard(store.getState(), WT).cards).toEqual([])
     expect(onTheBoard()).toBe(true)
+  })
+
+  // "Close all consoles" calls this directly: the other cards stay, and so does the user.
+  it('closing every console keeps the other cards and stays on the board', () => {
+    seedBoard(['tab-1', 'tab-2'])
+    store.setState({
+      openFiles: [{ id: 'file-1', worktreeId: WT }]
+    } as unknown as Partial<TestState>)
+
+    closeConsoleCards(WT, boardResetPlan(getBoard(store.getState(), WT).cards).consoles)
+
+    expect(store.getState().tabsByWorktree[WT]).toEqual([])
+    expect(getBoard(store.getState(), WT).cards.map((c) => c.kind)).toEqual(['note'])
+    expect(onTheBoard()).toBe(true)
+    expect(store.getState().activeTabType).toBe('terminal')
+    expect(store.getState().activeFileId).toBeNull()
   })
 })

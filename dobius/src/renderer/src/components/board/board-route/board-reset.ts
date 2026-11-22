@@ -30,17 +30,18 @@ export function boardResetPlan(cards: readonly BoardCard[]): BoardResetPlan {
  * Closes each console's terminal, then removes the card once its tab is really
  * gone. Why: a pinned tab asks for its own confirmation and may be kept, so a
  * live terminal is never left without its card.
+ *
+ * Why it keeps the workspace active: closing a workspace's last terminal
+ * normally switches to an open file or browser tab, or deactivates the
+ * workspace (which drops the user on Home). A close made from the board leaves
+ * the user on the board, including for a pinned console confirmed later.
  */
-export function closeConsoleCards(
-  worktreeId: string,
-  targets: readonly BoardKillTarget[],
-  options?: { stayOnBoard?: boolean }
-): void {
+export function closeConsoleCards(worktreeId: string, targets: readonly BoardKillTarget[]): void {
   // Snapshot first: closing tabs changes the store mid-loop.
   const snapshot = [...targets]
   for (const target of snapshot) {
     // Never forced: a pinned console still asks for its own confirmation.
-    closeTerminalTab(target.tabId, { keepWorktreeActive: options?.stayOnBoard === true })
+    closeTerminalTab(target.tabId, { keepWorktreeActive: true })
   }
   const sweep = (): boolean => {
     const state = useAppStore.getState()
@@ -69,9 +70,5 @@ export function resetBoard(worktreeId: string): void {
   const plan = boardResetPlan(getBoard(state, worktreeId).cards)
   // Groups and connectors empty out with their cards (removeCards prunes them).
   state.removeCards(worktreeId, plan.otherCardIds)
-  // Why: closing a workspace's last terminal normally switches to an open file
-  // or browser tab, or deactivates the workspace (which drops the user on
-  // Home). Reset means "an empty board", so the close leaves all of that
-  // alone, including for a pinned console confirmed later.
-  closeConsoleCards(worktreeId, plan.consoles, { stayOnBoard: true })
+  closeConsoleCards(worktreeId, plan.consoles)
 }
