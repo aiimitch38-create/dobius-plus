@@ -8,6 +8,7 @@ import type { AdamConversation } from './adam-conversation'
 import type { AdamThreadStore } from './adam-thread-store'
 import { LiveVoiceCalls } from './live-voice-calls'
 import { LiveVoiceMeter } from './live-voice-meter'
+import { logLiveVoiceProblem } from './live-voice-log'
 import { buildLiveVoiceInstructions } from './live-voice-prompt'
 import { createOpenAiLiveSession, liveVoiceFailure } from './openai-live-session'
 import type { OpenAiLiveSessionOptions } from './openai-live-session'
@@ -269,7 +270,14 @@ export function registerLiveVoiceIpc(store: Store, deps: LiveVoiceIpcDeps): void
         : undefined
     liveSessionInFlight = true
     try {
-      return await connectLiveSession(store, deps, calls, sender, offerSdp)
+      const result = await connectLiveSession(store, deps, calls, sender, offerSdp)
+      if (!result.ok) {
+        logLiveVoiceProblem('connect', `${result.kind}: ${result.error}`)
+      }
+      return result
+    } catch (error) {
+      logLiveVoiceProblem('connect', error instanceof Error ? error.message : String(error))
+      throw error
     } finally {
       liveSessionInFlight = false
     }
@@ -297,6 +305,17 @@ export function registerLiveVoiceIpc(store: Store, deps: LiveVoiceIpcDeps): void
     return ownerId === null
       ? { ok: false, error: 'No live call is open in this window.' }
       : calls.delegate(ownerId, payload)
+  })
+
+  ipcMain.removeHandler('jarvis:liveLog')
+  ipcMain.handle('jarvis:liveLog', (event, payload: unknown) => {
+    const text =
+      payload && typeof payload === 'object' ? (payload as { text?: unknown }).text : undefined
+    if (!deps.trustedSender(event) || typeof text !== 'string') {
+      return { ok: false }
+    }
+    logLiveVoiceProblem('window', text)
+    return { ok: true }
   })
 
   ipcMain.removeHandler('jarvis:liveCancel')

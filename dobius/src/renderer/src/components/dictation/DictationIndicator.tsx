@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { useAdamVoiceThread } from '../board/board-route/adam-voice-thread'
 import { useJarvisTurn } from '../jarvis/use-jarvis-turn'
@@ -67,6 +68,14 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
 
   const agentState = liveMode ? live.state : agent.state
   const agentErrorText = liveMode ? live.errorText : agent.errorText
+
+  // Why a toast: the orb caption shows only on the floating dock orb, so a
+  // failed call started from the Board orb otherwise fails silently.
+  useEffect(() => {
+    if (agentMode && agentState === 'error' && agentErrorText) {
+      toast.error(agentErrorText)
+    }
+  }, [agentMode, agentState, agentErrorText])
 
   const agentActive = agentMode
   const jarvisActive = !agentMode && jarvis.hudState !== 'idle'
