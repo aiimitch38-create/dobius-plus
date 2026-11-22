@@ -87,6 +87,8 @@ export type LiveVoiceApi = {
     callToken: string
   }) => Promise<LiveDelegateResult>
   liveCancel: (payload: { callToken: string }) => Promise<{ ok: boolean }>
+  /** Writes a failure to the voice error log in main; optional so test doubles may omit it. */
+  liveLog?: (payload: { text: string }) => Promise<{ ok: boolean }>
   liveTranscript: (line: LiveTranscriptLine & { callToken: string }) => Promise<{ ok: boolean }>
 }
 

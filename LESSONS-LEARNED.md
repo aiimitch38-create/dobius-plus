@@ -418,3 +418,8 @@ that is one plain command and passes every time.
 - Tried: subagents launching a separate Electron copy of the worktree build for QA/UX screenshots.
 - Failed because: the session ended mid-run and the copy (pid 97704 + 9 shells) kept running unattended; later launches exited silently while another agent ran vitest in the same worktree; the copy still read the real ~/.dobius communications identity and collided with ports 8421/3300.
 - Works instead: follow skill `learned-dobius-isolated-test-copy` — short /tmp DOBIUS_E2E_USER_DATA_DIR, record every PID and kill only those (trap on exit), no tests in the same worktree during the run, and check for orphaned worktree Electron processes after any interrupted test agent.
+
+## 2026-11-22 — Voice engine change in Settings never reached the orb (2.3.7)
+- Symptom: after choosing OpenAI Live (or Hermes) in Settings > Voice, the orb and Cmd+T kept running the engine chosen at launch.
+- Cause: main sends `settings:changed` to every window EXCEPT the one that made the change (`main/ipc/settings.ts`, `isOrigin` skip). `useJarvisVoiceSettings` only listened to that IPC event, and Settings lives in the same main window, so it never heard the change.
+- Rule: a renderer hook that mirrors settings must also follow the Zustand store (`useAppStore.subscribe`), or it misses same-window edits. Prove engine switches in a running copy without a reload.

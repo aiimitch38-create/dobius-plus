@@ -259,6 +259,7 @@ export class LiveVoiceCall {
   /** The call ended without Carson hanging up. */
   private dropped(why: string): void {
     console.warn(`[live-voice] call dropped: ${why}`)
+    this.logProblem(`dropped: ${why}`)
     this.reconnect.dropped()
   }
 
@@ -321,7 +322,15 @@ export class LiveVoiceCall {
     this.fail(errorText)
   }
 
+  private logProblem(text: string): void {
+    void this.deps.api
+      .liveLog?.({ text })
+      .catch((error: unknown) => console.warn('[live-voice] log failed', error))
+  }
+
   private fail(errorText: string): void {
+    console.error(`[live-voice] call failed: ${errorText}`)
+    this.logProblem(`failed: ${errorText}`)
     this.teardown()
     this.starting = false
     this.update({ state: 'error', errorText })

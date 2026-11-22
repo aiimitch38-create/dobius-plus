@@ -210,7 +210,9 @@ export function registerSettingsHandlers(
       })
     }
 
-    return withoutElevenLabsKey(result)
+    // Why: the awaits above (UI language, proxy) let another save land first;
+    // returning the captured `result` would hand the renderer stale settings.
+    return withoutElevenLabsKey(store.getSettings())
   })
 
   ipcMain.handle('settings:listFonts', () => {

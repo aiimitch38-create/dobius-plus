@@ -3426,6 +3426,7 @@ export type PreloadApi = {
       callToken: string
     }) => Promise<LiveDelegateResult>
     /** Carson said stop: cancel the ADAM turn this call started. */
+    liveLog: (payload: { text: string }) => Promise<{ ok: boolean }>
     liveCancel: (payload: { callToken: string }) => Promise<{ ok: boolean }>
     /** Keeps a spoken line ADAM never saw (small talk) in his thread. */
     liveTranscript: (line: {

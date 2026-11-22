@@ -19,7 +19,7 @@ const storeActions = vi.hoisted(() => ({
 
 vi.mock('sonner', () => ({ toast: toastMock }))
 vi.mock('@/store', () => ({
-  useAppStore: { getState: () => storeActions }
+  useAppStore: { getState: () => storeActions, subscribe: () => () => undefined }
 }))
 
 let root: Root | null = null

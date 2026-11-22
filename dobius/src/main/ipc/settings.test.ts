@@ -273,8 +273,11 @@ describe('registerSettingsHandlers', () => {
   })
 
   it('settings:set returns settings without the ElevenLabs key (#24 F4)', async () => {
-    store.getSettings.mockReturnValue({ voice: { elevenlabsApiKey: 'sk_fake_legacy' } })
-    store.updateSettings.mockReturnValue({ voice: { enabled: false, elevenlabsApiKey: 'sk_fake_legacy' } })
+    const after = { voice: { enabled: false, elevenlabsApiKey: 'sk_fake_legacy' } }
+    store.getSettings
+      .mockReturnValueOnce({ voice: { elevenlabsApiKey: 'sk_fake_legacy' } })
+      .mockReturnValue(after)
+    store.updateSettings.mockReturnValue(after)
     registerSettingsHandlers(store as never)
     const handler = handleMock.mock.calls.find((call) => call[0] === 'settings:set')?.[1] as (
       _event: unknown,

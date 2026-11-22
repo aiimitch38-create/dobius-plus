@@ -4694,6 +4694,8 @@ const api = {
       callLines: string[]
       callToken: string
     }): Promise<LiveDelegateResult> => ipcRenderer.invoke('jarvis:liveDelegate', request),
+    liveLog: (payload: { text: string }): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('jarvis:liveLog', payload),
     liveCancel: (payload: { callToken: string }): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('jarvis:liveCancel', payload),
     liveTranscript: (line: {
