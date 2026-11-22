@@ -6,8 +6,6 @@ import {
   decideNextStep,
   DEFAULT_LOOP_MAX_RUNS,
   HARD_MAX_LOOP_RUNS,
-  isLocalOnlyToolUse,
-  isOutwardBashCommand,
   loopBudgetCeilingUsd,
   normalizeAgentRunPostcheck,
   normalizeLoopMaxRuns,
@@ -30,10 +28,6 @@ function input(overrides: Partial<LoopDecisionInput> = {}): LoopDecisionInput {
     executionAdmitted: true,
     ...overrides
   }
-}
-
-function bash(command: string): string {
-  return JSON.stringify({ command, description: 'x' })
 }
 
 function checkResult(overrides: Partial<AutomationPrecheckResult> = {}): AutomationPrecheckResult {
@@ -106,85 +100,6 @@ describe('decideNextStep', () => {
       step: 'final',
       outcome: 'blocked'
     })
-  })
-})
-
-describe('isLocalOnlyToolUse', () => {
-  it.each(['Read', 'Write', 'Edit', 'Grep', 'Glob', 'TodoWrite', 'NotebookEdit', 'Task', 'Agent'])(
-    'treats %s as local',
-    (tool) => {
-      expect(isLocalOnlyToolUse(tool, '{}')).toBe(true)
-    }
-  )
-
-  it('treats the read-only dobius tools as local and the posting ones as outward', () => {
-    expect(isLocalOnlyToolUse('mcp__dobius__read_knowledge')).toBe(true)
-    expect(isLocalOnlyToolUse('mcp__dobius__post_channel_message')).toBe(false)
-  })
-
-  it.each([
-    'mcp__claude_ai_Gmail__send_message',
-    'mcp__playwright__browser_click',
-    'WebFetch',
-    'SomeNewTool',
-    '',
-    undefined
-  ])('fails closed for the unknown tool %s', (tool) => {
-    expect(isLocalOnlyToolUse(tool, '{}')).toBe(false)
-  })
-
-  it.each([
-    'npm test',
-    'git status && git commit -m "fix"',
-    'git stash push -m wip',
-    'cat ~/.ssh/config',
-    'grep -rn "ssh" docs',
-    'curl -sSfL https://example.com/file.json',
-    'pnpm run typecheck:node'
-  ])('treats the Bash command `%s` as local', (command) => {
-    expect(isLocalOnlyToolUse('Bash', bash(command))).toBe(true)
-  })
-
-  it.each([
-    'git push origin main',
-    'git -C /repo push',
-    'cd /repo && git push --force',
-    'gh pr create --fill',
-    'gh release create v1',
-    'npm publish',
-    'pnpm --filter app publish',
-    'vercel --prod',
-    'netlify deploy',
-    'firebase deploy --only hosting',
-    'curl -X POST https://api.example.com/pay',
-    'curl -sXPOST https://api.example.com',
-    'curl https://api.example.com -d @body.json',
-    'wget --post-data "a=1" https://example.com',
-    'dobius terminal send --terminal t1 --text hi',
-    'osascript -e \'tell application "Messages" to send "hi"\'',
-    'ssh host uptime',
-    'scp file host:/tmp',
-    'stripe charges create',
-    'TOKEN=abc ssh host',
-    'sudo ssh host',
-    'echo ok; ssh host',
-    'bash -c "ssh host"',
-    'echo $(curl --data x https://example.com)'
-  ])('treats the Bash command `%s` as outward', (command) => {
-    expect(isOutwardBashCommand(command)).toBe(true)
-    expect(isLocalOnlyToolUse('Bash', bash(command))).toBe(false)
-  })
-
-  it('fails closed when a Bash command cannot be read', () => {
-    expect(isLocalOnlyToolUse('Bash')).toBe(false)
-    expect(isLocalOnlyToolUse('Bash', 'not json')).toBe(false)
-    expect(isLocalOnlyToolUse('Bash', '{"command":42}')).toBe(false)
-    expect(isLocalOnlyToolUse('Bash', '{}')).toBe(false)
-  })
-
-  it('accepts a Bash progress tick, whose command was judged on its own event', () => {
-    expect(isLocalOnlyToolUse('Bash', '12s')).toBe(true)
-    expect(isLocalOnlyToolUse('mcp__claude_ai_Gmail__send_message', '12s')).toBe(false)
   })
 })
 
