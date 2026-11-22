@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useConfirmationDialog } from '@/components/confirmation-dialog'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
 import { consoleDeliveryState } from '../board-delivery/board-delivery'
 import { onMissionEvent } from '../board-delivery/mission-tracker'
 import type { BoardConductor } from '../board-route/use-board-conductor'
 import type { BoardRouteData } from '../board-route/use-board-route-data'
+import { hermesAdamTransport, talkToAdam } from './adam-thread'
 import { missionReport } from './mission-report'
 import { concernText } from './plan-concern-text'
 import { boardEffects, type BoardEffectsContext } from './plan-effects-board'
@@ -21,15 +23,19 @@ import { validatePlan } from './plan-validate'
 /**
  * Board command path: utterance -> typed plan (validated, one retry, fallback
  * parser) -> app safety screen with confirmation -> execute -> per-step results
- * in the thread. Replaces sending free text to the conductor.
+ * in the thread. Anything that is not a board order (no plan steps, or no
+ * planner to ask) is conversation, and goes to ADAM's Hermes agent.
  */
 export function useBoardPlanner(input: {
   data: BoardRouteData
   conductor: BoardConductor
   context: Omit<BoardEffectsContext, 'worktreeId' | 'workspaces' | 'confirm'>
+  /** Shown in the thread header; tells ADAM which project he is in. */
+  projectName: string
 }): (text: string) => Promise<void> {
-  const { data, conductor, context } = input
-  const { append, appendReport } = conductor
+  const { data, conductor, context, projectName } = input
+  const { append, appendReport, showThinking } = conductor
+  const adamBusy = useRef(false)
   // Read at event time so the mission subscription isn't rebuilt on every card change.
   const consolesRef = useRef(data.consoles)
   consolesRef.current = data.consoles
@@ -94,26 +100,37 @@ export function useBoardPlanner(input: {
         worktreeId,
         stateOf: consoleDeliveryState
       })
+      const turns = conductor.messages.flatMap((m) =>
+        !m.transient && (m.role === 'user' || m.role === 'assistant')
+          ? [{ role: m.role, text: m.text }]
+          : []
+      )
+      const askAdam = (): Promise<void> =>
+        talkToAdam({
+          transport: hermesAdamTransport(),
+          context: {
+            projectName,
+            folder: useAppStore.getState().getKnownWorktreeById(worktreeId)?.path ?? null,
+            board
+          },
+          turns,
+          utterance: text,
+          busy: adamBusy,
+          append,
+          showThinking
+        })
       const outcome = await runPlanner({
         transport: conductorPlannerTransport(),
         breaker: breaker.current,
         board,
-        turns: conductor.messages.flatMap((m) =>
-          m.role === 'user' || m.role === 'assistant' ? [{ role: m.role, text: m.text }] : []
-        ),
+        turns,
         utterance: text,
         replyLanguage: navigator.language || 'en',
         now: () => Date.now()
       })
+      // Why: with no planner to ask and no built-in command matched, this is talk, not a dead end.
       if (outcome.kind === 'needs-planner') {
-        append({
-          role: 'system',
-          tone: 'error',
-          text: translate(
-            'board.plan.needsPlanner',
-            'The planner is not answering, and without it I can’t write or split instructions. Say who and what plainly, for example “@Codex 1 run the tests”.'
-          )
-        })
+        await askAdam()
         return
       }
       if (outcome.kind === 'rejected') {
@@ -172,6 +189,11 @@ export function useBoardPlanner(input: {
         })
         return
       }
+      // Why: a plan with nothing to do is the planner making conversation; the thread's voice is ADAM's.
+      if (plan.steps.length === 0) {
+        await askAdam()
+        return
+      }
       if (plan.say) {
         append({ role: 'assistant', text: plan.say })
       }
@@ -199,6 +221,16 @@ export function useBoardPlanner(input: {
         append({ role: 'system', ...(r.ok ? {} : { tone: 'error' as const }), text: r.text })
       }
     },
-    [append, confirm, conductor.messages, context, data.board, data.workspaces, data.worktreeId]
+    [
+      append,
+      confirm,
+      conductor.messages,
+      context,
+      data.board,
+      data.workspaces,
+      data.worktreeId,
+      projectName,
+      showThinking
+    ]
   )
 }

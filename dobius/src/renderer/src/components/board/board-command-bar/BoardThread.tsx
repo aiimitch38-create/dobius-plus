@@ -128,8 +128,10 @@ export function BoardThread({
                     message.role === 'assistant' && 'self-start',
                     message.role === 'system' &&
                       'self-center text-[12px] text-[var(--board-text-muted)]',
-                    message.tone === 'error' && 'text-[var(--board-danger-text)]'
+                    message.tone === 'error' && 'text-[var(--board-danger-text)]',
+                    message.transient && 'animate-pulse text-[var(--board-text-muted)]'
                   )}
+                  role={message.transient ? 'status' : undefined}
                 >
                   {message.text}
                   {message.action ? (

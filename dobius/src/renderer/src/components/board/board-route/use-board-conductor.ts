@@ -22,6 +22,8 @@ export type BoardConductor = {
   appendReport: (report: BoardThreadReport) => void
   /** Empties the active repo's thread, local to this repo only. */
   clearThread: () => void
+  /** Shows a waiting row (never saved); call the returned function to take it away. */
+  showThinking: (text: string) => () => void
 }
 
 /** Best-effort: a storage failure (private window, quota, hardened context) must never break the thread. */
@@ -97,6 +99,12 @@ export function useBoardConductor(
     setMessages([])
   }, [])
 
+  const showThinking = useCallback((text: string) => {
+    const id = crypto.randomUUID()
+    setMessages((prev) => [...prev, { id, role: 'assistant', text, transient: true }])
+    return () => setMessages((prev) => prev.filter((message) => message.id !== id))
+  }, [])
+
   const poll = useCallback(
     (requestId: string) => {
       const startedAt = Date.now()
@@ -162,5 +170,5 @@ export function useBoardConductor(
     [append, poll]
   )
 
-  return { messages, busy, append, ask, appendReport, clearThread }
+  return { messages, busy, append, ask, appendReport, clearThread, showThinking }
 }

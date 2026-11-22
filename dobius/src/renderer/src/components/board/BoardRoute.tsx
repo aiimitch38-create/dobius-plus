@@ -122,7 +122,13 @@ export default function BoardRoute(): React.JSX.Element {
     }),
     [closeStudio, freeCenter, history.undo, history.redo]
   )
-  const planner = useBoardPlanner({ data, conductor, context: plannerContext })
+  const topBar = useBoardTopBarProps(data, setStudio)
+  const planner = useBoardPlanner({
+    data,
+    conductor,
+    context: plannerContext,
+    projectName: topBar.projectName
+  })
   const onCommand = useBoardCommand(data, conductor, planner)
   // Why: leaving the Board must never leave a paused agent frozen in the background.
   useEffect(
@@ -160,7 +166,6 @@ export default function BoardRoute(): React.JSX.Element {
       setDraft('')
     }
   })
-  const topBar = useBoardTopBarProps(data, setStudio)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const focusMode = useBoardFocusMode({
     worktreeId,
