@@ -4,7 +4,10 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
 import { VoiceOrb } from '@/components/dictation/VoiceOrb'
-import { startAdamVoiceTurnFromOrb } from '@/components/dictation/voice-orb-live-level'
+import {
+  endAdamVoiceFromOrb,
+  startAdamVoiceTurnFromOrb
+} from '@/components/dictation/voice-orb-live-level'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
@@ -235,6 +238,7 @@ export function BoardCommandBar({
                 // Same orb, same slot — while Adam's out roaming this is
                 // empty, and clicking it calls him back rather than
                 // starting a second voice turn.
+                endAdamVoiceFromOrb()
                 useAppStore.getState().requestAdamDock()
                 return
               }

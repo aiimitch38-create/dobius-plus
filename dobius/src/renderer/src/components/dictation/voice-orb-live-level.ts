@@ -30,6 +30,28 @@ export function publishVoiceOrbPresentation(next: VoiceOrbPresentation): void {
  * thinking, stops capture or ends a live call), and waking the body is not
  * the same as the voice being idle.
  */
+let adamVoiceHangUp: (() => void) | null = null
+
+/** The voice coordinator registers how to end its call; returns the unregister. */
+export function setAdamVoiceHangUp(hangUp: () => void): () => void {
+  adamVoiceHangUp = hangUp
+  return () => {
+    if (adamVoiceHangUp === hangUp) {
+      adamVoiceHangUp = null
+    }
+  }
+}
+
+/**
+ * A click on an awake Adam's orb ends the voice call. Why not pressPtt: in
+ * push-to-talk mode a press mutes the call instead of hanging up.
+ */
+export function endAdamVoiceFromOrb(): void {
+  if (presentation.state !== 'idle') {
+    adamVoiceHangUp?.()
+  }
+}
+
 export function startAdamVoiceTurnFromOrb(pressPtt: () => Promise<unknown>): boolean {
   if (presentation.state !== 'idle') {
     return false

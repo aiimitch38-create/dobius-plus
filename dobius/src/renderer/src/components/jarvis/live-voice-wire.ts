@@ -106,7 +106,9 @@ export function parseLiveEvent(data: unknown): LiveEvent | null {
 export function commentaryEvent(say: string, delegationId: string | null): string {
   return JSON.stringify({
     type: LIVE_EVENT.commentary,
-    text: say.slice(0, LIVE_COMMENTARY_MAX_CHARS),
+    // Why `content`: the Live API reference names the text field `content`;
+    // the earlier `text` was silently ignored, so answers were never spoken.
+    content: say.slice(0, LIVE_COMMENTARY_MAX_CHARS),
     ...(delegationId ? { delegation_id: delegationId } : {})
   })
 }

@@ -6,7 +6,11 @@ import { useJarvisTurn } from '../jarvis/use-jarvis-turn'
 import { useJarvisVoiceSettings } from '../jarvis/use-jarvis-voice-settings'
 import { useVoiceAgent } from '../jarvis/use-voice-agent'
 import { useLiveVoice, type LiveVoice } from '../jarvis/use-live-voice'
-import { voiceOrbLevelSource, publishVoiceOrbPresentation } from './voice-orb-live-level'
+import {
+  voiceOrbLevelSource,
+  publishVoiceOrbPresentation,
+  setAdamVoiceHangUp
+} from './voice-orb-live-level'
 import { resolveVoiceOrbPresentation } from './voice-orb-state'
 
 /** What the orb says during an OpenAI Live call, for the states only it has. */
@@ -65,6 +69,8 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
     }
     return window.api.jarvis.onPttPressed(pressLive)
   }, [pressLive, hangUpLive, liveMode])
+
+  useEffect(() => (liveMode ? setAdamVoiceHangUp(hangUpLive) : undefined), [hangUpLive, liveMode])
 
   const agentState = liveMode ? live.state : agent.state
   const agentErrorText = liveMode ? live.errorText : agent.errorText

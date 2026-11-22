@@ -232,7 +232,7 @@ describe('delegation bridge', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(peer().channel.sent.at(-1)).toEqual({
       type: 'session.commentary.append',
-      text: 'Two agents are running.',
+      content: 'Two agents are running.',
       delegation_id: 'd1'
     })
     expect(call.getSnapshot().state).toBe('listening')
@@ -334,7 +334,7 @@ describe('spending cap', () => {
     call.notice({ kind: 'cap-warning', text: 'eighty percent' })
     expect(sentTypes().filter((type) => type === 'session.commentary.append')).toHaveLength(1)
     call.notice({ kind: 'cap-reached', text: 'cap reached' })
-    expect(peer().channel.sent.at(-1)).toMatchObject({ text: 'cap reached' })
+    expect(peer().channel.sent.at(-1)).toMatchObject({ content: 'cap reached' })
     await vi.advanceTimersByTimeAsync(LIVE_CAP_HANG_UP_GRACE_MS + 10)
     expect(call.getSnapshot()).toMatchObject({ state: 'error', errorText: 'cap reached' })
     expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed', callToken: 'call-1' })
@@ -446,7 +446,7 @@ describe('reconnect edge cases', () => {
 })
 
 describe('review round 2', () => {
-  const said = (): unknown[] => peer().channel.sent.map((event) => event.text)
+  const said = (): unknown[] => peer().channel.sent.map((event) => event.content)
 
   it('a reply that lands after "stop" is never spoken', async () => {
     const call = makeCall()

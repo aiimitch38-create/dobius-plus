@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { useConfirmationDialog } from '@/components/confirmation-dialog'
 import { VoiceOrb } from '@/components/dictation/VoiceOrb'
 import {
+  endAdamVoiceFromOrb,
   startAdamVoiceTurnFromOrb,
   voiceOrbLevelSource
 } from '@/components/dictation/voice-orb-live-level'
@@ -316,6 +317,7 @@ export default function BoardHome(): React.JSX.Element {
           className="mb-6 flex size-[112px] shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full transition-transform hover:scale-105 active:scale-95"
           onClick={(event) => {
             if (useAppStore.getState().adamAwake) {
+              endAdamVoiceFromOrb()
               useAppStore.getState().requestAdamDock()
               return
             }
