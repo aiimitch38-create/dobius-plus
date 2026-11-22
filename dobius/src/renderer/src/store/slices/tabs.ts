@@ -104,7 +104,11 @@ export type TabsSlice = {
   activateTab: (tabId: string, opts?: { preservePreview?: boolean }) => void
   closeUnifiedTab: (
     tabId: string,
-    opts?: { recordInteraction?: boolean }
+    opts?: {
+      recordInteraction?: boolean
+      /** The workspace stays selected even when this closes its last tab of any kind. */
+      keepWorktreeActive?: boolean
+    }
   ) => { closedTabId: string; wasLastTab: boolean; worktreeId: string } | null
   reorderUnifiedTabs: (
     groupId: string,
@@ -949,6 +953,7 @@ export const createTabsSlice: StateCreator<AppState, [], [], TabsSlice> = (set, 
         nextActiveGroupIdByWorktree = collapsedState.activeGroupIdByWorktree
       }
       const shouldDeactivateWorktree =
+        !opts?.keepWorktreeActive &&
         current.activeWorktreeId === worktreeId &&
         nextTabs.length === 0 &&
         (current.tabsByWorktree[worktreeId] ?? []).length === 0 &&

@@ -65,12 +65,18 @@ function getWorktreeTerminalTabIds(state: TerminalTabActionState, worktreeId: st
   return [...ids]
 }
 
-function closeLocalTerminalTabState(terminalTabId: string): void {
+function closeLocalTerminalTabState(terminalTabId: string, keepWorktreeActive?: boolean): void {
   const state = useAppStore.getState()
+  // Why: the store's own close deactivates a workspace left with no tabs at
+  // all, so the caller's wish to stay put has to reach it too.
+  // An ordinary close keeps its one-argument call, as before.
+  const args: [] | [{ keepWorktreeActive: true }] = keepWorktreeActive
+    ? [{ keepWorktreeActive: true }]
+    : []
   if (
     Object.values(state.tabsByWorktree).some((tabs) => tabs.some((tab) => tab.id === terminalTabId))
   ) {
-    state.closeTab(terminalTabId)
+    state.closeTab(terminalTabId, ...args)
     return
   }
 
@@ -81,7 +87,7 @@ function closeLocalTerminalTabState(terminalTabId: string): void {
         (tab.entityId === terminalTabId || tab.id === terminalTabId)
     )
     if (unified) {
-      state.closeUnifiedTab(unified.id)
+      state.closeUnifiedTab(unified.id, ...args)
       return
     }
   }
@@ -149,7 +155,17 @@ export function createNewTerminalTab(
   state.setTabBarOrder(activeWorktreeId, order)
 }
 
-export function closeTerminalTab(tabId: string, options?: { force?: boolean }): void {
+export type CloseTerminalTabOptions = {
+  /** Post-confirmation re-entry: skips the pinned-tab guard. */
+  force?: boolean
+  /**
+   * Closing the last terminal leaves the workspace and its view exactly as
+   * they are: no switch to an editor or browser tab, no deactivation.
+   */
+  keepWorktreeActive?: boolean
+}
+
+export function closeTerminalTab(tabId: string, options?: CloseTerminalTabOptions): void {
   const state = useAppStore.getState()
   const target = resolveCloseTerminalTabTarget(state, tabId)
   if (!target) {
@@ -163,7 +179,9 @@ export function closeTerminalTab(tabId: string, options?: { force?: boolean }): 
     guardPinnedTabClose({
       isPinned: true,
       tabLabel: resolvePinnedTabLabel(state, owningWorktreeId, terminalTabId),
-      onClose: () => closeTerminalTab(tabId, { force: true })
+      // Why: the confirmed close can run minutes later; it must behave like
+      // the close that was asked for, so the caller's options ride along.
+      onClose: () => closeTerminalTab(tabId, { ...options, force: true })
     })
     return
   }
@@ -187,7 +205,7 @@ export function closeTerminalTab(tabId: string, options?: { force?: boolean }): 
       }) ?? toHostSessionTabId(terminalTabId)
     // Why: prune local mirrors immediately so close feels responsive while the
     // host session snapshot catches up.
-    closeLocalTerminalTabState(terminalTabId)
+    closeLocalTerminalTabState(terminalTabId, options?.keepWorktreeActive)
     void closeWebRuntimeSessionTab({
       worktreeId: owningWorktreeId,
       tabId: hostBackedTabId,
@@ -198,8 +216,11 @@ export function closeTerminalTab(tabId: string, options?: { force?: boolean }): 
 
   const currentTerminalTabIds = getWorktreeTerminalTabIds(state, owningWorktreeId)
   if (currentTerminalTabIds.length <= 1) {
-    closeLocalTerminalTabState(terminalTabId)
-    if (state.activeWorktreeId === owningWorktreeId) {
+    closeLocalTerminalTabState(terminalTabId, options?.keepWorktreeActive)
+    // Why: the Board's Reset empties the board the user is looking at. The
+    // fallback below would re-point the editor/browser underneath it or drop
+    // the user on Home, so that caller opts out of it.
+    if (state.activeWorktreeId === owningWorktreeId && !options?.keepWorktreeActive) {
       // Why: only deactivate the worktree when no tabs of any kind remain.
       // Editor files are a separate tab type; closing the last terminal tab
       // should switch to the editor view instead of tearing down the workspace.
@@ -229,7 +250,7 @@ export function closeTerminalTab(tabId: string, options?: { force?: boolean }): 
     }
   }
 
-  closeLocalTerminalTabState(terminalTabId)
+  closeLocalTerminalTabState(terminalTabId, options?.keepWorktreeActive)
 }
 
 export function closeOtherTerminalTabs(tabId: string, activeWorktreeId: string | null): void {

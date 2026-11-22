@@ -127,49 +127,47 @@ export class CloudBackupController {
             : 'Backup configuration could not be read. Check its file permissions.'
       return { ...empty, health: 'failed', detail }
     }
-    {
-      const repository = typeof config.repository === 'string' ? config.repository : ''
-      const bucket = /^s3:https:\/\/[^/]+\/([^/]+)\//.exec(repository)?.[1] ?? ''
-      const status: CloudBackupStatus = {
-        ...empty,
-        configured: Boolean(repository),
-        enabled: Boolean(repository) && config.enabled !== false,
-        repository,
-        bucket,
-        region: typeof config.region === 'string' ? config.region : empty.region,
-        sources: Array.isArray(config.sources)
-          ? config.sources.flatMap((s) => (typeof s?.path === 'string' ? [s.path] : []))
-          : [],
-        lastBackupAt: typeof state.last_backup_at === 'string' ? state.last_backup_at : undefined,
-        lastRestoreAt:
-          typeof state.last_restore_at === 'string' ? state.last_restore_at : undefined,
-        lastCheckAt: typeof state.last_check_at === 'string' ? state.last_check_at : undefined
-      }
-      if (this.failure) {
-        return { ...status, health: 'failed', detail: this.failure }
-      }
-      if (this.pending) {
-        return { ...status, health: 'connecting', detail: this.pending }
-      }
-      if (config.enabled === false) {
-        return {
-          ...status,
-          health: 'paused',
-          detail: 'Automatic AWS backups are paused. Existing cloud snapshots are kept.'
-        }
-      }
-      const allowed = ['connecting', 'running', 'healthy', 'failed', 'paused'] as const
-      status.health = allowed.find((health) => health === state.health) ?? 'not_configured'
-      status.detail = typeof state.detail === 'string' ? state.detail : empty.detail
-      if (
-        (status.health === 'connecting' || status.health === 'running') &&
-        !isBackupWorkerAlive(state.pid)
-      ) {
-        status.health = 'failed'
-        status.detail = 'The backup was interrupted. Run it again to complete verification.'
-      }
-      return status
+    const repository = typeof config.repository === 'string' ? config.repository : ''
+    const bucket = /^s3:https:\/\/[^/]+\/([^/]+)\//.exec(repository)?.[1] ?? ''
+    const status: CloudBackupStatus = {
+      ...empty,
+      configured: Boolean(repository),
+      enabled: Boolean(repository) && config.enabled !== false,
+      repository,
+      bucket,
+      region: typeof config.region === 'string' ? config.region : empty.region,
+      sources: Array.isArray(config.sources)
+        ? config.sources.flatMap((s) => (typeof s?.path === 'string' ? [s.path] : []))
+        : [],
+      lastBackupAt: typeof state.last_backup_at === 'string' ? state.last_backup_at : undefined,
+      lastRestoreAt:
+        typeof state.last_restore_at === 'string' ? state.last_restore_at : undefined,
+      lastCheckAt: typeof state.last_check_at === 'string' ? state.last_check_at : undefined
     }
+    if (this.failure) {
+      return { ...status, health: 'failed', detail: this.failure }
+    }
+    if (this.pending) {
+      return { ...status, health: 'connecting', detail: this.pending }
+    }
+    if (config.enabled === false) {
+      return {
+        ...status,
+        health: 'paused',
+        detail: 'Automatic AWS backups are paused. Existing cloud snapshots are kept.'
+      }
+    }
+    const allowed = ['connecting', 'running', 'healthy', 'failed', 'paused'] as const
+    status.health = allowed.find((health) => health === state.health) ?? 'not_configured'
+    status.detail = typeof state.detail === 'string' ? state.detail : empty.detail
+    if (
+      (status.health === 'connecting' || status.health === 'running') &&
+      !isBackupWorkerAlive(state.pid)
+    ) {
+      status.health = 'failed'
+      status.detail = 'The backup was interrupted. Run it again to complete verification.'
+    }
+    return status
   }
 
   connect(input: unknown): Promise<CloudBackupStatus> {

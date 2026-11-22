@@ -8,6 +8,7 @@ function makeStore() {
     Pick<
       AppState,
       | 'pinnedTabCloseConfirm'
+      | 'pinnedTabCloseConfirmQueue'
       | 'requestPinnedTabCloseConfirm'
       | 'confirmPinnedTabClose'
       | 'dismissPinnedTabClose'
@@ -88,5 +89,31 @@ describe('createPinnedTabCloseConfirmSlice', () => {
 
     expect(onCancel).toHaveBeenCalledTimes(1)
     expect(store.getState().pinnedTabCloseConfirm).toBeNull()
+  })
+
+  it('queues a request made while another is showing instead of replacing it', () => {
+    const store = makeStore()
+    const first = { tabLabel: 'One', onConfirm: vi.fn(), onCancel: vi.fn() }
+    const second = { tabLabel: 'Two', onConfirm: vi.fn(), onCancel: vi.fn() }
+    const third = { tabLabel: 'Three', onConfirm: vi.fn(), onCancel: vi.fn() }
+    store.getState().requestPinnedTabCloseConfirm(first)
+    store.getState().requestPinnedTabCloseConfirm(second)
+    store.getState().requestPinnedTabCloseConfirm(third)
+    expect(store.getState().pinnedTabCloseConfirm).toBe(first)
+
+    // Confirming shows the next one; cancelling that shows the one after.
+    store.getState().confirmPinnedTabClose()
+    expect(first.onConfirm).toHaveBeenCalledTimes(1)
+    expect(store.getState().pinnedTabCloseConfirm).toBe(second)
+
+    store.getState().dismissPinnedTabClose()
+    expect(second.onCancel).toHaveBeenCalledTimes(1)
+    expect(second.onConfirm).not.toHaveBeenCalled()
+    expect(store.getState().pinnedTabCloseConfirm).toBe(third)
+
+    store.getState().confirmPinnedTabClose()
+    expect(third.onConfirm).toHaveBeenCalledTimes(1)
+    expect(store.getState().pinnedTabCloseConfirm).toBeNull()
+    expect(store.getState().pinnedTabCloseConfirmQueue).toEqual([])
   })
 })

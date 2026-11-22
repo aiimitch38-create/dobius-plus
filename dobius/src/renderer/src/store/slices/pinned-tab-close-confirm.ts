@@ -11,9 +11,18 @@ export type PinnedTabCloseConfirmRequest = {
 
 export type PinnedTabCloseConfirmSlice = {
   pinnedTabCloseConfirm: PinnedTabCloseConfirmRequest | null
+  /** Requests made while one is showing; each is shown once the one before it is answered. */
+  pinnedTabCloseConfirmQueue: PinnedTabCloseConfirmRequest[]
   requestPinnedTabCloseConfirm: (request: PinnedTabCloseConfirmRequest) => void
   confirmPinnedTabClose: () => void
   dismissPinnedTabClose: () => void
+}
+
+function showNextRequest(
+  state: PinnedTabCloseConfirmSlice
+): Pick<PinnedTabCloseConfirmSlice, 'pinnedTabCloseConfirm' | 'pinnedTabCloseConfirmQueue'> {
+  const [next = null, ...rest] = state.pinnedTabCloseConfirmQueue
+  return { pinnedTabCloseConfirm: next, pinnedTabCloseConfirmQueue: rest }
 }
 
 export const createPinnedTabCloseConfirmSlice: StateCreator<
@@ -23,8 +32,17 @@ export const createPinnedTabCloseConfirmSlice: StateCreator<
   PinnedTabCloseConfirmSlice
 > = (set, get) => ({
   pinnedTabCloseConfirm: null,
+  pinnedTabCloseConfirmQueue: [],
 
-  requestPinnedTabCloseConfirm: (request) => set({ pinnedTabCloseConfirm: request }),
+  // Why a queue: one action can ask about several pinned tabs at once (the
+  // Board's Reset). Replacing the showing request dropped the earlier ones
+  // without an answer, so their tabs stayed open and their onCancel never ran.
+  requestPinnedTabCloseConfirm: (request) =>
+    set((state) =>
+      state.pinnedTabCloseConfirm
+        ? { pinnedTabCloseConfirmQueue: [...state.pinnedTabCloseConfirmQueue, request] }
+        : { pinnedTabCloseConfirm: request }
+    ),
 
   confirmPinnedTabClose: () => {
     const request = get().pinnedTabCloseConfirm
@@ -33,7 +51,7 @@ export const createPinnedTabCloseConfirmSlice: StateCreator<
     }
     // Why: clear before running onConfirm so a re-entrant close path can't see
     // the stale request and re-open the dialog.
-    set({ pinnedTabCloseConfirm: null })
+    set(showNextRequest)
     request.onConfirm()
   },
 
@@ -43,7 +61,7 @@ export const createPinnedTabCloseConfirmSlice: StateCreator<
       return
     }
     // Why: CLI close requests wait for a response even when the user cancels.
-    set({ pinnedTabCloseConfirm: null })
+    set(showNextRequest)
     request.onCancel?.()
   }
 })
