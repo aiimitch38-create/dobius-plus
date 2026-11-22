@@ -5,9 +5,10 @@ const {
   readFileSync,
   readdirSync,
   realpathSync,
-  rmSync
+  rmSync,
+  statSync
 } = require('node:fs')
-const { dirname, join, resolve } = require('node:path')
+const { basename, dirname, join, resolve } = require('node:path')
 const { builtinModules, createRequire } = require('node:module')
 
 const projectDir = resolve(__dirname, '..')
@@ -212,6 +213,160 @@ function findAsarEntry(entries, expectedPath) {
   return entries.find((entry) => normalizeAsarEntryPath(entry) === expectedPath)
 }
 
+function isFileOnDisk(path) {
+  try {
+    return statSync(path).isFile()
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+      return false
+    }
+    throw error
+  }
+}
+
+// Condition sets Node matches for a package root: require() and import.
+const EXPORT_CONDITION_SETS = [
+  new Set(['node', 'require', 'default']),
+  new Set(['node', 'import', 'default'])
+]
+
+// The file `exports` maps the package root to under one condition set: a
+// string, or the "." entry, taking the first matching condition in the
+// manifest's own key order, as Node does (arrays: first entry). null when the
+// root is not exported under these conditions (subpath-only maps).
+function exportsRootEntry(exportsField, conditions) {
+  if (Array.isArray(exportsField)) {
+    return exportsRootEntry(exportsField[0], conditions)
+  }
+  if (typeof exportsField === 'string') {
+    return exportsField
+  }
+  if (!exportsField || typeof exportsField !== 'object') {
+    return null
+  }
+  const keys = Object.keys(exportsField)
+  if (keys.some((key) => key.startsWith('.'))) {
+    return '.' in exportsField ? exportsRootEntry(exportsField['.'], conditions) : null
+  }
+  for (const key of keys) {
+    if (conditions.has(key)) {
+      return exportsRootEntry(exportsField[key], conditions)
+    }
+  }
+  return null
+}
+
+// A package's entry file, Node's way: the root of `exports` when it has one
+// (judged under require() and import conditions; either loading is enough),
+// else `main` (as a file, with .js/.json/.node added, or a folder's index),
+// else index.js. Returns the missing entry, or null when it is there or cannot
+// be judged (subpath-only exports, or a dependency with no main and no
+// index.js). A package the packaged code imports by its bare name must have a
+// default index.js when it declares neither (requireDefaultIndex).
+function missingPackageEntry(packageDir, manifest, { requireDefaultIndex = false } = {}) {
+  if (manifest.exports !== undefined) {
+    const entries = EXPORT_CONDITION_SETS.map((conditions) =>
+      exportsRootEntry(manifest.exports, conditions)
+    ).filter((entry) => entry != null)
+    if (entries.length === 0) {
+      return null
+    }
+    return entries.some((entry) => isFileOnDisk(join(packageDir, entry))) ? null : entries[0]
+  }
+  if (
+    manifest.main === undefined &&
+    !requireDefaultIndex &&
+    !isFileOnDisk(join(packageDir, 'index.js'))
+  ) {
+    return null
+  }
+  const entry = manifest.main ?? 'index.js'
+  const main = join(packageDir, entry)
+  const candidates = [
+    main,
+    `${main}.js`,
+    `${main}.json`,
+    `${main}.node`,
+    join(main, 'index.js'),
+    join(main, 'index.json'),
+    join(main, 'index.node')
+  ]
+  return candidates.some(isFileOnDisk) ? null : entry
+}
+
+// Node's lookup from a copied package directory: <dir>/node_modules/<name>,
+// then each ancestor's node_modules, never above resourcesDir.
+function resolveCopiedPackageDir(resourcesDir, packageName, fromDir) {
+  const root = resolve(resourcesDir)
+  for (let dir = resolve(fromDir); ; dir = dirname(dir)) {
+    if (basename(dir) !== 'node_modules') {
+      const candidate = join(dir, 'node_modules', ...packageName.split('/'))
+      if (existsSync(join(candidate, 'package.json'))) {
+        return candidate
+      }
+    }
+    if (dir === root || dirname(dir) === dir) {
+      return null
+    }
+  }
+}
+
+/**
+ * Port of Line A #22 (2.2.34 shipped without its scoped packages and died at
+ * launch with ERR_MODULE_NOT_FOUND). From each package the packaged code
+ * imports, follow `dependencies` (not optional ones) the way Node resolves them
+ * inside Resources, and require each package's manifest and entry file to be
+ * real files there. Returns the problems found (empty when complete).
+ */
+function findPackagedRuntimeClosureProblems(
+  resourcesDir,
+  packageNames,
+  { rootImported = new Set() } = {}
+) {
+  const problems = []
+  const seen = new Set()
+  const queue = packageNames.map((name) => ({ name, from: resourcesDir, via: 'packaged code' }))
+  while (queue.length > 0) {
+    const { name, from, via } = queue.shift()
+    if (name === 'electron') {
+      continue
+    }
+    const packageDir = resolveCopiedPackageDir(resourcesDir, name, from)
+    if (!packageDir) {
+      // Why: serve-sim declares inspect-webkit, but current installs omit it
+      // (same narrow escape hatch as collectPackagedRuntimePackages).
+      if (!(name === 'inspect-webkit' && via === 'serve-sim')) {
+        problems.push(`${name} (needed by ${via}): not in the app`)
+      }
+      continue
+    }
+    if (seen.has(packageDir)) {
+      continue
+    }
+    seen.add(packageDir)
+    let manifest
+    try {
+      manifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'))
+    } catch (error) {
+      problems.push(`${name} (needed by ${via}): unreadable package.json (${error.code || error.message})`)
+      continue
+    }
+    const entry = missingPackageEntry(packageDir, manifest, {
+      requireDefaultIndex: via === 'packaged code' && rootImported.has(name)
+    })
+    if (entry) {
+      problems.push(`${name} (needed by ${via}): its entry file ${entry} is not in the app`)
+    }
+    const optional = manifest.optionalDependencies ?? {}
+    for (const dependency of Object.keys(manifest.dependencies ?? {})) {
+      if (!(dependency in optional)) {
+        queue.push({ name: dependency, from: packageDir, via: name })
+      }
+    }
+  }
+  return problems
+}
+
 function verifyPackagedMainRuntimeDeps(resourcesDir, asar = require('@electron/asar')) {
   const asarPath = join(resourcesDir, 'app.asar')
   if (!existsSync(asarPath)) {
@@ -232,6 +387,8 @@ function verifyPackagedMainRuntimeDeps(resourcesDir, asar = require('@electron/a
     /^out\/(?:main|cli|shared)\/.*\.js$/.test(normalizeAsarEntryPath(entry))
   )
   const missing = new Set()
+  const imported = new Set()
+  const rootImported = new Set()
   for (const entry of runtimeEntries) {
     // Why: @electron/asar lists entries with host separators; Windows returns
     // backslashes, and extractFile expects that same host-style path.
@@ -243,6 +400,10 @@ function verifyPackagedMainRuntimeDeps(resourcesDir, asar = require('@electron/a
         continue
       }
       const packageName = packageNameFromSpecifier(specifier)
+      imported.add(packageName)
+      if (specifier === packageName) {
+        rootImported.add(packageName)
+      }
       if (!existsSync(join(resourcesDir, 'node_modules', ...packageName.split('/')))) {
         missing.add(packageName)
       }
@@ -254,6 +415,15 @@ function verifyPackagedMainRuntimeDeps(resourcesDir, asar = require('@electron/a
       `Packaged main bundle has bare runtime imports without copied node_modules: ${[
         ...missing
       ].join(', ')}`
+    )
+  }
+
+  const problems = findPackagedRuntimeClosureProblems(resourcesDir, [...imported].sort(), {
+    rootImported
+  })
+  if (problems.length > 0) {
+    throw new Error(
+      `Packaged app is missing ${problems.length} runtime dependencies:\n  ${problems.join('\n  ')}`
     )
   }
 }
@@ -430,6 +600,7 @@ module.exports = {
   PACKAGED_RUNTIME_PACKAGE_ROOTS,
   createPackagedRuntimeNodeModuleResources,
   findAsarEntry,
+  findPackagedRuntimeClosureProblems,
   isPackagedExternalSpecifier,
   packageNameFromSpecifier,
   prunePackagedNodePty,

@@ -186,6 +186,7 @@ import { CrashReportStore } from './crash-reporting/crash-report-store'
 import {
   shouldRecordProcessGoneCrash,
   shouldRecoverRendererAfterProcessGone,
+  shouldRepaintWindowsAfterGpuGone,
   type ExpectedTeardownScope
 } from './crash-reporting/process-gone-classification'
 import {
@@ -849,10 +850,12 @@ function openMainWindow(): BrowserWindow {
         reason: details.reason,
         expectedTeardown: getExpectedTeardownScope(webContentsId)
       }),
-    onRendererRecoveryExhausted: ({ details, recentRecoveryCount }) => {
+    shouldRecoverFailedLoad: (webContentsId) =>
+      !isQuittingForUpdate() && getExpectedTeardownScope(webContentsId) !== 'app-shutdown',
+    onRendererRecoveryExhausted: ({ details, loadFailure, recentRecoveryCount }) => {
       recordCrashBreadcrumb('renderer_recovery_circuit_breaker_open', {
-        reason: details.reason,
-        exitCode: details.exitCode ?? null,
+        reason: details?.reason ?? 'did-fail-load',
+        exitCode: details?.exitCode ?? loadFailure?.errorCode ?? null,
         recentRecoveryCount
       })
       void presentRendererRecoveryPrompt(recentRecoveryCount)
@@ -2026,6 +2029,16 @@ app.whenReady().then(async () => {
       serviceName: details.serviceName,
       type: details.type
     })
+    if (
+      !isQuitting &&
+      shouldRepaintWindowsAfterGpuGone({ processType: details.type, reason: details.reason })
+    ) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.invalidate()
+        }
+      }
+    }
     if (
       isGpuFallbackCrashCandidate({
         platform: process.platform,
