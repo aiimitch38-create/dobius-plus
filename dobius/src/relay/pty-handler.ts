@@ -3,6 +3,7 @@ import type { IPty } from 'node-pty'
 import type * as NodePty from 'node-pty'
 import { resolveWindowsGitBashShellPath } from '../main/git-bash'
 import {
+  continueStoppedGroupForShell,
   isForegroundSignal,
   signalForegroundProcessGroup
 } from '../main/providers/foreground-process-group'
@@ -87,6 +88,8 @@ function disposeManagedPty(managed: ManagedPty): void {
     return
   }
   managed.disposed = true
+  // Why: a paused agent must not outlive its terminal frozen, and the record must go with it.
+  continueStoppedGroupForShell(managed.pty.pid)
   // Why: clear any pending 5s SIGKILL fallback timer. If graceful-shutdown
   // armed a killTimer and the child then exited cleanly (firing onExit →
   // disposeManagedPty), the timer would otherwise fire later and attempt
@@ -742,6 +745,7 @@ export class PtyHandler {
       this.clearPtyFlowState(id)
     } else {
       this.releaseStartupCommand(managed)
+      continueStoppedGroupForShell(managed.pty.pid)
       managed.pty.kill('SIGTERM')
 
       // Why: Some processes ignore SIGTERM (e.g. a hung child, a custom signal
@@ -793,9 +797,12 @@ export class PtyHandler {
     }
     if (isForegroundSignal(signal)) {
       // Board pause/resume: suspend the agent job on the remote host, not the shell.
-      await signalForegroundProcessGroup(managed.pty.pid, signal, {
+      const result = await signalForegroundProcessGroup(managed.pty.pid, signal, {
         write: (data) => managed.pty.write(data)
       })
+      if (result === 'handoff-failed') {
+        throw new Error(`Could not resume the agent in PTY "${id}"`)
+      }
       return
     }
     managed.pty.kill(signal)
