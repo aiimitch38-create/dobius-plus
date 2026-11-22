@@ -337,4 +337,4 @@ Findings (verified):
 | 9.4 | Stable address per console: accept `tab:<tabId>` as a handle everywhere | terminal handle resolver | S |
 | 9.5 | Show dead consoles honestly: card badge "not running" + a Restart button; orchestrator list says "Exited", not "Done" | board console card + OrchestratorCard | S |
 | 9.6 | CLI path into a board orchestrator: `dobius orchestration send --to board:<orchestratorCardId>` fans out to its wired consoles, same as typing in the card | main-side relay | M |
-| 9.7 | Keep a card's tabId stable across console restart, or have the card own a stable id the CLI can resolve. | card restart path + terminal handle resolver | S |
+| 9.7 | LAST ITEM (Carson 2026-11-22): when the plan is done the release is Dobius 2.9.2. Keep a card's tabId stable across console restart, or have the card own a stable id the CLI can resolve. | card restart path + terminal handle resolver | S |
