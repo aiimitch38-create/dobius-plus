@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Image as ImageIcon } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronRight, Image as ImageIcon } from 'lucide-react'
 import CommentMarkdown, {
   type CommentMarkdownLinkClickHandler
 } from '@/components/sidebar/CommentMarkdown'
@@ -15,6 +15,7 @@ import type { NativeChatLiveSession } from './use-native-chat-live-session'
 import { orderNativeChatMessages } from './native-chat-message-grouping'
 import { stripNoiseMessages } from './native-chat-noise'
 import { foldToolMessages, splitNativeChatBlocks } from './native-chat-tool-fold'
+import { foldOlderNativeChatTurns } from './native-chat-turn-fold'
 import { isNearBottom, shouldShowJumpToLatest, type ScrollGeometry } from './native-chat-autoscroll'
 import { isNativeChatPastedImagePath } from './native-chat-image-paste'
 import { NativeChatToolRun } from './NativeChatToolRun'
@@ -167,7 +168,14 @@ function MessageRow({
     // transcript caught up.)
     return (
       <div ref={rowRef} className="flex flex-col items-end gap-0.5">
-        <div className="max-w-[85%] rounded-xl rounded-tr-sm border border-border bg-card px-3 py-2 text-sm text-card-foreground">
+        {/* Why data-surface: the accent tokens are defined on the board surface
+            only. Your own words get the accent's blue box so they stand apart
+            from Claude's replies (Line A #24, "Arctic Blue box"). */}
+        <div
+          data-surface="board"
+          data-testid="native-chat-user-bubble"
+          className="max-w-[85%] rounded-xl rounded-tr-sm border border-[var(--board-accent)] bg-[var(--board-accent-tint)] px-3 py-2 text-sm text-[var(--board-text)]"
+        >
           {markdown ? (
             <>
               <ImageAttachmentRefs blocks={prose} />
@@ -231,6 +239,49 @@ function MessageRow({
   )
 }
 
+/** An older turn folded to Claude's last reply plus one "Show N steps" toggle.
+ *  Open, it renders the turn's rows exactly as they render live. */
+function FoldedTurn({
+  steps,
+  summary,
+  open,
+  onToggle,
+  children
+}: {
+  steps: number
+  /** Claude's last reply, already rendered as a message row (null: none). */
+  summary: React.ReactNode
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}): React.JSX.Element {
+  const label = open
+    ? translate('components.native-chat.turnFold.hide', 'Hide steps')
+    : steps === 1
+      ? translate('components.native-chat.turnFold.showOne', 'Show 1 step')
+      : translate('components.native-chat.turnFold.showMany', 'Show {{value0}} steps', {
+          value0: steps
+        })
+  return (
+    <div className="flex flex-col gap-3">
+      {open ? (
+        children
+      ) : (
+        summary
+      )}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-fit items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ChevronRight className={cn('size-3 transition-transform', open && 'rotate-90')} />
+        <span>{label}</span>
+      </button>
+    </div>
+  )
+}
+
 export function NativeChatMessageList({
   session,
   isWorking,
@@ -273,6 +324,27 @@ export function NativeChatMessageList({
   )
   const showTypingIndicator =
     isWorking && !messages.some((message) => message.id === NATIVE_CHAT_STREAMING_ID)
+  // Older turns fold to their last reply; only the exchange after the newest
+  // message you sent stays fully open.
+  const segments = useMemo(() => foldOlderNativeChatTurns(messages), [messages])
+  // Turns you opened, keyed by the sent message after each. Only clicks add to
+  // it, and a toggle prunes keys no longer on screen, so it stays bounded.
+  const [openTurns, setOpenTurns] = useState<ReadonlySet<string>>(() => new Set())
+  const toggleTurn = useCallback(
+    (key: string) => {
+      setOpenTurns((prev) => {
+        const visible = new Set(segments.flatMap((s) => (s.kind === 'turn' ? [s.key] : [])))
+        const next = new Set([...prev].filter((k) => visible.has(k)))
+        if (prev.has(key)) {
+          next.delete(key)
+        } else {
+          next.add(key)
+        }
+        return next
+      })
+    },
+    [segments]
+  )
 
   // When an older page prepends, the scroll content grows above the viewport.
   // Capture the pre-render scroll height so the layout effect can restore the
@@ -374,17 +446,43 @@ export function NativeChatMessageList({
               </button>
             </div>
           ) : null}
-          {messages.map((message) => (
-            <MessageRow
-              key={message.id}
-              message={message}
-              expandSignal={expandSignal}
-              onScrollMessageToTop={scrollMessageToTop}
-              onLinkClick={onLinkClick}
-              allowFileUriLinks={allowFileUriLinks}
-              deliveryFailed={failedDeliveryMessageIds?.has(message.id) === true}
-            />
-          ))}
+          {segments.map((segment) => {
+            const renderRow = (message: NativeChatMessage): React.JSX.Element => (
+              <MessageRow
+                key={message.id}
+                message={message}
+                expandSignal={expandSignal}
+                onScrollMessageToTop={scrollMessageToTop}
+                onLinkClick={onLinkClick}
+                allowFileUriLinks={allowFileUriLinks}
+                deliveryFailed={failedDeliveryMessageIds?.has(message.id) === true}
+              />
+            )
+            if (segment.kind === 'message') {
+              return renderRow(segment.message)
+            }
+            return (
+              <FoldedTurn
+                key={segment.key}
+                steps={segment.steps}
+                summary={
+                  segment.summary === null
+                    ? null
+                    : renderRow({
+                        id: `${segment.key}:summary`,
+                        role: 'assistant',
+                        blocks: [{ type: 'text', text: segment.summary }],
+                        timestamp: null,
+                        source: 'transcript'
+                      })
+                }
+                open={openTurns.has(segment.key)}
+                onToggle={() => toggleTurn(segment.key)}
+              >
+                {segment.messages.map(renderRow)}
+              </FoldedTurn>
+            )
+          })}
           {showTypingIndicator ? <TypingIndicatorRow /> : null}
         </div>
       </div>

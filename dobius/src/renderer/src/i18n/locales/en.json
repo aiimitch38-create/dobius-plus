@@ -12513,6 +12513,11 @@
         "allow": "Allow",
         "deny": "Deny"
       },
+      "turnFold": {
+        "showOne": "Show 1 step",
+        "showMany": "Show {{value0}} steps",
+        "hide": "Hide steps"
+      },
       "launchPromptNotDelivered": "Not delivered — check the terminal"
     },
     "tab": {

@@ -12513,6 +12513,11 @@
         "allow": "允许",
         "deny": "拒绝"
       },
+      "turnFold": {
+        "showOne": "显示 1 个步骤",
+        "showMany": "显示 {{value0}} 个步骤",
+        "hide": "隐藏步骤"
+      },
       "launchPromptNotDelivered": "Not delivered — check the terminal"
     },
     "tab": {

@@ -12513,6 +12513,11 @@
         "allow": "허용하다",
         "deny": "부인하다"
       },
+      "turnFold": {
+        "showOne": "단계 1개 보기",
+        "showMany": "단계 {{value0}}개 보기",
+        "hide": "단계 숨기기"
+      },
       "launchPromptNotDelivered": "Not delivered — check the terminal"
     },
     "tab": {

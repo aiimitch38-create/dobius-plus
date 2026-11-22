@@ -12513,6 +12513,11 @@
         "allow": "許可する",
         "deny": "拒否"
       },
+      "turnFold": {
+        "showOne": "1 件のステップを表示",
+        "showMany": "{{value0}} 件のステップを表示",
+        "hide": "ステップを隠す"
+      },
       "launchPromptNotDelivered": "Not delivered — check the terminal"
     },
     "tab": {

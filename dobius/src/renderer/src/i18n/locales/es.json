@@ -12513,6 +12513,11 @@
         "allow": "Permitir",
         "deny": "Denegar"
       },
+      "turnFold": {
+        "showOne": "Mostrar 1 paso",
+        "showMany": "Mostrar {{value0}} pasos",
+        "hide": "Ocultar pasos"
+      },
       "launchPromptNotDelivered": "Not delivered — check the terminal"
     },
     "tab": {
