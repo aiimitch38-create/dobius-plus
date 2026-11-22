@@ -1,6 +1,7 @@
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import {
   existsSync,
+  renameSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -21,11 +22,29 @@ const control = vi.hoisted(() => ({
   }
 }))
 
+// Passthrough spies: lets tests prove the brief path does no sync I/O on the
+// brief file and no git work for a fresh brief.
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...actual,
+    default: actual,
+    readFileSync: vi.fn(actual.readFileSync),
+    writeFileSync: vi.fn(actual.writeFileSync),
+    renameSync: vi.fn(actual.renameSync)
+  }
+})
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>()
+  return { ...actual, default: actual, execFile: vi.fn(actual.execFile) }
+})
+
 vi.mock('./agents-config-store', () => ({
   getAgentsControlState: () => ({ ...control.state, filePath: '/data/agents-config.json' })
 }))
 
 import {
+  primeTerminalWorkspaceBrief,
   refreshSessionWorkspaceBrief,
   scheduleSessionWorkspaceBriefRefresh,
   WORKSPACE_BRIEF_REFRESH_TTL_MS,
@@ -62,12 +81,18 @@ function briefPath(root: string): string {
   return path.join(root, 'CLAUDE.local.md')
 }
 
+const realHome = process.env.HOME
+
 beforeEach(() => {
   scratch = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'workspace-brief-')))
   control.state = { paused: false, status: 'ok', detail: null }
+  // Why: the pre-flight reads ~/.claude.json for MCP names; never the real one.
+  process.env.HOME = path.join(scratch, 'home')
+  mkdirSync(process.env.HOME)
 })
 
 afterEach(() => {
+  process.env.HOME = realHome
   rmSync(scratch, { recursive: true, force: true })
   vi.restoreAllMocks()
 })
@@ -405,5 +430,201 @@ describe('scheduleSessionWorkspaceBriefRefresh (review F3)', () => {
     await expect(
       scheduleSessionWorkspaceBriefRefresh(path.join(scratch, 'nope'), noAdam)
     ).resolves.toEqual({ status: 'skipped', reason: 'not-a-git-worktree' })
+  })
+})
+
+describe('primeTerminalWorkspaceBrief (agent pre-flight primer)', () => {
+  const LONG_WAIT = { waitMs: 60_000 }
+
+  function primerDeps(
+    overrides: Partial<SessionWorkspaceBriefDeps> = {},
+    terminals = vi.fn((_id: string) => 2)
+  ): { deps: SessionWorkspaceBriefDeps; terminals: typeof terminals } {
+    return {
+      terminals,
+      deps: {
+        ...noAdam,
+        preflightSources: () => ({
+          liveTerminals: terminals,
+          spend: () => ({
+            enabled: true,
+            countedAt: FIXED_NOW.getTime() - 3 * 60_000,
+            sessions: 3,
+            estimatedCostUsd: 1.5
+          })
+        }),
+        ...overrides
+      }
+    }
+  }
+
+  it('writes the brief with every pre-flight section before the shell starts', async () => {
+    const repo = makeRepo()
+    writeFileSync(path.join(repo, 'LESSONS-LEARNED.md'), '### Never trim porcelain\n- The first column is the index.\n')
+    writeFileSync(
+      path.join(repo, '.mcp.json'),
+      JSON.stringify({ mcpServers: { playwright: { env: { API_KEY: 'sk-live-0123456789abcdef' } } } })
+    )
+    writeFileSync(path.join(repo, 'README.md'), 'changed\n')
+    const { deps, terminals } = primerDeps()
+
+    const outcome = await primeTerminalWorkspaceBrief(repo, 'repo-1::wt', { ...LONG_WAIT, deps })
+
+    expect(outcome).toEqual({ status: 'written', filePath: briefPath(repo) })
+    expect(terminals).toHaveBeenCalledWith('repo-1::wt')
+    const text = readFileSync(briefPath(repo), 'utf-8')
+    expect(text).toContain('dirty: 1 changed tracked file(s), 2 untracked (0 staged, 1 with unstaged changes)')
+    expect(text).toContain('Upstream as of 2026-09-25T12:00:00.000Z: none (this branch tracks no remote branch)')
+    expect(text).toContain('## Pre-flight')
+    expect(text).toContain('Other Dobius+ terminals in this worktree: 2 when this brief was written.')
+    expect(text).toContain('  - "Never trim porcelain"')
+    expect(text).not.toContain('The first column is the index.')
+    expect(text).toContain('(names only): `playwright`.')
+    expect(text).toContain('about $1.50 over 3 session(s)')
+    expect(text).not.toContain('sk-live')
+  })
+
+  it('never writes the shared CLAUDE.md or any tracked file', async () => {
+    const repo = makeRepo()
+    writeFileSync(path.join(repo, 'CLAUDE.md'), '# Shared project instructions\n')
+    git(repo, 'add', 'CLAUDE.md')
+    git(repo, 'commit', '-q', '-m', 'shared instructions')
+    const { deps } = primerDeps()
+
+    await primeTerminalWorkspaceBrief(repo, 'repo-1::wt', { ...LONG_WAIT, deps })
+
+    expect(readFileSync(path.join(repo, 'CLAUDE.md'), 'utf-8')).toBe('# Shared project instructions\n')
+    // Nothing tracked changed and the brief itself is ignored, so status stays clean.
+    expect(git(repo, 'status', '--porcelain', '--untracked-files=all')).toBe('')
+    expect(existsSync(briefPath(repo))).toBe(true)
+  })
+
+  it('runs once for tabs opening together in one worktree (single-flight)', async () => {
+    const repo = makeRepo()
+    const { deps, terminals } = primerDeps()
+
+    const results = await Promise.all([
+      primeTerminalWorkspaceBrief(repo, 'repo-1::wt', { ...LONG_WAIT, deps }),
+      primeTerminalWorkspaceBrief(repo, 'repo-1::wt', { ...LONG_WAIT, deps }),
+      primeTerminalWorkspaceBrief(path.join(repo, 'pkg'), 'repo-1::wt', { ...LONG_WAIT, deps })
+    ])
+
+    expect(results.every((result) => result.status === 'written')).toBe(true)
+    expect(terminals).toHaveBeenCalledTimes(1)
+  })
+
+  it('never holds a tab past the wait cap; the slow refresh still lands afterwards', async () => {
+    const repo = makeRepo()
+    let releasePack: (value: null) => void = () => {}
+    const packGate = new Promise<null>((resolve) => {
+      releasePack = resolve
+    })
+    const { deps } = primerDeps({ contextPack: () => packGate })
+
+    const started = Date.now()
+    const outcome = await primeTerminalWorkspaceBrief(repo, 'repo-1::wt', { waitMs: 100, deps })
+
+    expect(outcome).toEqual({ status: 'timed-out' })
+    expect(Date.now() - started).toBeLessThan(1500)
+    releasePack(null)
+    // The same in-flight refresh is joined, not started again.
+    await expect(
+      primeTerminalWorkspaceBrief(repo, 'repo-1::wt', { ...LONG_WAIT, deps })
+    ).resolves.toMatchObject({ status: 'written' })
+    expect(readFileSync(briefPath(repo), 'utf-8')).toContain('## Pre-flight')
+  })
+
+  it('refreshes a recent brief written without the worktree, then honours the TTL', async () => {
+    const repo = makeRepo()
+    const { deps, terminals } = primerDeps()
+
+    await scheduleSessionWorkspaceBriefRefresh(repo, deps)
+    expect(readFileSync(briefPath(repo), 'utf-8')).toContain('terminals in this worktree: unknown.')
+    await expect(
+      primeTerminalWorkspaceBrief(repo, 'repo-1::wt', { ...LONG_WAIT, deps })
+    ).resolves.toMatchObject({ status: 'written' })
+    await expect(
+      primeTerminalWorkspaceBrief(repo, 'repo-1::wt', { ...LONG_WAIT, deps })
+    ).resolves.toEqual({ status: 'skipped', reason: 'recently-refreshed' })
+    expect(terminals).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-runs once when it joined a refresh started without the worktree (review)', async () => {
+    const repo = makeRepo()
+    const { deps, terminals } = primerDeps()
+
+    const [fromAgent, fromTerminal] = await Promise.all([
+      refreshSessionWorkspaceBrief(repo, deps),
+      primeTerminalWorkspaceBrief(repo, 'repo-1::wt', { ...LONG_WAIT, deps })
+    ])
+
+    expect(fromAgent.status).toBe('written')
+    expect(fromTerminal.status).toBe('written')
+    expect(terminals).toHaveBeenCalledTimes(1)
+    expect(readFileSync(briefPath(repo), 'utf-8')).toContain('terminals in this worktree: 2 when')
+  })
+
+  it('resolves without writing for a folder that is not a git worktree', async () => {
+    const plain = path.join(scratch, 'plain')
+    mkdirSync(plain)
+    const { deps } = primerDeps()
+
+    await expect(
+      primeTerminalWorkspaceBrief(plain, 'w', { ...LONG_WAIT, deps })
+    ).resolves.toEqual({ status: 'skipped', reason: 'not-a-git-worktree' })
+    expect(existsSync(path.join(plain, 'CLAUDE.local.md'))).toBe(false)
+  })
+})
+
+describe('workspace brief Codex round 2', () => {
+  it('never reads or publishes the brief with synchronous fs calls (P2 #2)', async () => {
+    const repo = makeRepo()
+    await refreshSessionWorkspaceBrief(repo, noAdam)
+    const brief = briefPath(repo)
+    vi.mocked(readFileSync).mockClear()
+    vi.mocked(writeFileSync).mockClear()
+    vi.mocked(renameSync).mockClear()
+
+    await expect(refreshSessionWorkspaceBrief(repo, noAdam)).resolves.toMatchObject({
+      status: 'written'
+    })
+
+    const touchesBrief = (call: unknown[]) => String(call[0]).startsWith(brief) || String(call[1]).startsWith(brief)
+    expect(vi.mocked(readFileSync).mock.calls.filter(touchesBrief)).toEqual([])
+    expect(vi.mocked(writeFileSync).mock.calls.filter((c) => String(c[0]).startsWith(path.dirname(brief) + path.sep + 'CLAUDE.local.md'))).toEqual([])
+    expect(vi.mocked(renameSync).mock.calls.filter(touchesBrief)).toEqual([])
+  })
+
+  it('rechecks tracked/ignored right before writing (P2 #3)', async () => {
+    const repo = makeRepo()
+    await refreshSessionWorkspaceBrief(repo, noAdam)
+    const before = readFileSync(briefPath(repo), 'utf-8')
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const deps: SessionWorkspaceBriefDeps = {
+      contextPack: async () => {
+        // Someone starts tracking the brief while facts are collected.
+        git(repo, 'add', '-f', 'CLAUDE.local.md')
+        return null
+      },
+      now: () => new Date(FIXED_NOW.getTime() + 1000)
+    }
+
+    await expect(refreshSessionWorkspaceBrief(repo, deps)).resolves.toMatchObject({
+      status: 'skipped',
+      reason: 'not-ignorable'
+    })
+    expect(readFileSync(briefPath(repo), 'utf-8')).toBe(before)
+  })
+
+  it('costs no git at all for a brief still inside its TTL (P2 #4)', async () => {
+    const repo = makeRepo()
+    await scheduleSessionWorkspaceBriefRefresh(repo, noAdam)
+    vi.mocked(execFile).mockClear()
+
+    await expect(scheduleSessionWorkspaceBriefRefresh(repo, noAdam)).resolves.toEqual({
+      status: 'skipped',
+      reason: 'recently-refreshed'
+    })
+    expect(vi.mocked(execFile)).not.toHaveBeenCalled()
   })
 })

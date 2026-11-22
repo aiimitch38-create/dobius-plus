@@ -1,13 +1,6 @@
-import {
-  appendFileSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  realpathSync
-} from 'node:fs'
+import { promises as fsp, realpathSync } from 'node:fs'
 import path from 'node:path'
-import { writeFileAtomic } from '../storage/safe-json-file'
+import { uniqueTmpPath } from '../storage/safe-json-file'
 import {
   renderSessionWorkspaceBrief,
   WORKSPACE_BRIEF_FILENAME,
@@ -20,6 +13,13 @@ import {
   runWorkspaceGit,
   type WorkspaceRootInfo
 } from './session-workspace-facts'
+import {
+  collectWorkspacePreflight,
+  getWorkspacePreflightSources,
+  type PreflightReaders,
+  type WorkspacePreflightContext,
+  type WorkspacePreflightSources
+} from './session-workspace-preflight'
 
 // Generates CLAUDE.local.md (Claude Code's per-checkout, uncommitted memory
 // file) describing the session's worktree. Codex gets nothing: its
@@ -58,6 +58,10 @@ const unavailableAdamContextPack: WorkspaceContextPackProvider = async () => {
 export type SessionWorkspaceBriefDeps = {
   contextPack: WorkspaceContextPackProvider
   now: () => Date
+  // Defaults to the sources main/index.ts registered.
+  preflightSources?: () => WorkspacePreflightSources
+  preflightGatherMs?: number
+  preflightReaders?: PreflightReaders
 }
 
 const defaultDeps: SessionWorkspaceBriefDeps = {
@@ -69,22 +73,47 @@ const defaultDeps: SessionWorkspaceBriefDeps = {
 // is still accurate enough, so scheduled refreshes skip the git work.
 export const WORKSPACE_BRIEF_REFRESH_TTL_MS = 60_000
 
+// Why: a new terminal tab never waits longer than this for its brief; a
+// slower refresh keeps going and lands for the next session.
+export const TERMINAL_BRIEF_WAIT_MS = 1500
+
 const EXCLUDE_RULE = `/${WORKSPACE_BRIEF_FILENAME}`
 
 // All keyed by worktree root, so different cwds inside one worktree share them.
-const inFlight = new Map<string, Promise<WorkspaceBriefResult>>()
+const inFlight = new Map<string, { run: Promise<WorkspaceBriefResult>; hasWorktree: boolean }>()
 const lastWrittenAt = new Map<string, number>()
+// Roots whose last brief knew its Dobius worktree (terminal count, spend).
+const lastWrittenWithWorktree = new Set<string>()
 // Why: a root whose ignore rules defeat ours (a `!CLAUDE.local.md` re-include,
 // or a tracked file) would otherwise get the exclude rule appended on every run.
 const notIgnorableRoots = new Set<string>()
 const loggedUserAuthored = new Set<string>()
+// cwd -> its worktree root, so a brief still inside its TTL costs no git.
+// Only the fast path reads it; every real refresh resolves the root again.
+const rootByCwd = new Map<string, WorkspaceRootInfo>()
+const MAX_CACHED_CWDS = 256
+
+function rememberRoot(cwd: string, root: WorkspaceRootInfo): void {
+  rootByCwd.delete(cwd)
+  rootByCwd.set(cwd, root)
+  if (rootByCwd.size > MAX_CACHED_CWDS) {
+    const oldest = rootByCwd.keys().next().value
+    if (oldest !== undefined) {
+      rootByCwd.delete(oldest)
+    }
+  }
+}
 
 type ExistingBrief = 'absent' | 'generated' | 'user-authored'
 
-function readExistingBrief(filePath: string): ExistingBrief {
-  let stat: ReturnType<typeof lstatSync>
+const MARKER_BYTES = Buffer.byteLength(WORKSPACE_BRIEF_MARKER)
+
+// Async and reads only the marker's bytes: the main thread never blocks on a
+// big file at this name, so the terminal wait cap can always fire.
+async function readExistingBrief(filePath: string): Promise<ExistingBrief> {
+  let stat: Awaited<ReturnType<typeof fsp.lstat>>
   try {
-    stat = lstatSync(filePath)
+    stat = await fsp.lstat(filePath)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return 'absent'
@@ -95,9 +124,37 @@ function readExistingBrief(filePath: string): ExistingBrief {
   if (!stat.isFile()) {
     return 'user-authored'
   }
-  return readFileSync(filePath, 'utf-8').startsWith(WORKSPACE_BRIEF_MARKER)
-    ? 'generated'
-    : 'user-authored'
+  const handle = await fsp.open(filePath, 'r')
+  try {
+    const prefix = Buffer.alloc(MARKER_BYTES)
+    const { bytesRead } = await handle.read(prefix, 0, MARKER_BYTES, 0)
+    return bytesRead === MARKER_BYTES && prefix.toString('utf-8') === WORKSPACE_BRIEF_MARKER
+      ? 'generated'
+      : 'user-authored'
+  } finally {
+    await handle.close()
+  }
+}
+
+async function writeBriefAtomic(target: string, data: string): Promise<void> {
+  const tmp = uniqueTmpPath(target)
+  try {
+    await fsp.writeFile(tmp, data, 'utf-8')
+    await fsp.rename(tmp, target)
+  } catch (error) {
+    await fsp.unlink(tmp).catch(() => undefined)
+    throw error
+  }
+}
+
+async function isBriefIgnored(worktreeRoot: string): Promise<boolean> {
+  const check = await runWorkspaceGit(worktreeRoot, [
+    'check-ignore',
+    '-q',
+    '--',
+    WORKSPACE_BRIEF_FILENAME
+  ])
+  return check.ok
 }
 
 // Why: the file must never be committed. Repos that do not already ignore it
@@ -127,12 +184,17 @@ async function ensureBriefIgnored(worktreeRoot: string): Promise<boolean> {
     return false
   }
   const target = excludePath.stdout.trim()
-  const existing = existsSync(target) ? readFileSync(target, 'utf-8') : ''
+  const existing = await fsp.readFile(target, 'utf-8').catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') {
+      return ''
+    }
+    throw error
+  })
   if (existing.split(/\r?\n/).some((line) => line.trim() === EXCLUDE_RULE)) {
     return false
   }
-  mkdirSync(path.dirname(target), { recursive: true })
-  appendFileSync(
+  await fsp.mkdir(path.dirname(target), { recursive: true })
+  await fsp.appendFile(
     target,
     `\n# Dobius+ generated session workspace brief (local only)\n${EXCLUDE_RULE}\n`
   )
@@ -172,13 +234,14 @@ async function hasNestedLinkedWorktrees(root: WorkspaceRootInfo): Promise<boolea
 
 async function refreshBrief(
   root: WorkspaceRootInfo,
-  deps: SessionWorkspaceBriefDeps
+  deps: SessionWorkspaceBriefDeps,
+  context: WorkspacePreflightContext
 ): Promise<WorkspaceBriefResult> {
   const filePath = path.join(root.worktreeRoot, WORKSPACE_BRIEF_FILENAME)
   if (notIgnorableRoots.has(root.worktreeRoot)) {
     return { status: 'skipped', reason: 'not-ignorable', filePath }
   }
-  if (readExistingBrief(filePath) === 'user-authored') {
+  if ((await readExistingBrief(filePath)) === 'user-authored') {
     if (!loggedUserAuthored.has(filePath)) {
       loggedUserAuthored.add(filePath)
       console.info(`[workspace-brief] left ${filePath} alone: it is not a Dobius-generated file`)
@@ -193,48 +256,89 @@ async function refreshBrief(
     console.warn(`[workspace-brief] skipped ${filePath}: git could not confirm it is ignored`)
     return { status: 'skipped', reason: 'not-ignorable', filePath }
   }
-  const [facts, contextPack] = await Promise.all([
+  const [facts, contextPack, preflight] = await Promise.all([
     collectSessionWorkspaceFacts(root),
-    deps.contextPack(root.worktreeRoot)
+    deps.contextPack(root.worktreeRoot),
+    collectWorkspacePreflight(
+      root.worktreeRoot,
+      context,
+      (deps.preflightSources ?? getWorkspacePreflightSources)(),
+      { gatherMs: deps.preflightGatherMs, readers: deps.preflightReaders }
+    )
   ])
-  // Why: re-check right before the write so a file the user created while the
-  // facts were collected is still never overwritten.
-  if (readExistingBrief(filePath) === 'user-authored') {
+  // Why: re-check right before the write so a file the user created, or a
+  // brief someone started tracking (or un-ignored) while the facts were
+  // collected, is still never overwritten. Not cached: the next run retries.
+  if (!(await isBriefIgnored(root.worktreeRoot))) {
+    console.warn(`[workspace-brief] skipped ${filePath}: it stopped being ignored during the refresh`)
+    return { status: 'skipped', reason: 'not-ignorable', filePath }
+  }
+  if ((await readExistingBrief(filePath)) === 'user-authored') {
     return { status: 'skipped', reason: 'user-authored', filePath }
   }
   const now = deps.now()
-  writeFileAtomic(filePath, renderSessionWorkspaceBrief(facts, now, contextPack))
+  await writeBriefAtomic(filePath, renderSessionWorkspaceBrief(facts, now, contextPack, preflight))
   lastWrittenAt.set(root.worktreeRoot, now.getTime())
+  if (context.worktreeId) {
+    lastWrittenWithWorktree.add(root.worktreeRoot)
+  } else {
+    lastWrittenWithWorktree.delete(root.worktreeRoot)
+  }
   return { status: 'written', filePath }
 }
 
 async function refreshForCwd(
   cwd: string,
   deps: SessionWorkspaceBriefDeps,
-  honorTtl: boolean
+  honorTtl: boolean,
+  context: WorkspacePreflightContext = {}
 ): Promise<WorkspaceBriefResult> {
   try {
-    const root = await resolveWorkspaceRoot(path.resolve(cwd))
+    const resolvedCwd = path.resolve(cwd)
+    const isFresh = (key: string): boolean => {
+      const writtenAt = lastWrittenAt.get(key)
+      return (
+        honorTtl &&
+        writtenAt !== undefined &&
+        // Why: a brief written without the worktree (agent run, worktree
+        // creation) lacks the terminal count and spend a terminal can add.
+        (!context.worktreeId || lastWrittenWithWorktree.has(key)) &&
+        deps.now().getTime() - writtenAt < WORKSPACE_BRIEF_REFRESH_TTL_MS
+      )
+    }
+    // Fast path before any git: a fresh brief for a known cwd costs nothing.
+    const cachedRoot = rootByCwd.get(resolvedCwd)
+    if (cachedRoot && isFresh(cachedRoot.worktreeRoot)) {
+      return { status: 'skipped', reason: 'recently-refreshed' }
+    }
+    const root = await resolveWorkspaceRoot(resolvedCwd)
     if (!root) {
+      rootByCwd.delete(resolvedCwd)
       return { status: 'skipped', reason: 'not-a-git-worktree' }
     }
+    rememberRoot(resolvedCwd, root)
     const key = root.worktreeRoot
-    const writtenAt = lastWrittenAt.get(key)
-    if (
-      honorTtl &&
-      writtenAt !== undefined &&
-      deps.now().getTime() - writtenAt < WORKSPACE_BRIEF_REFRESH_TTL_MS
-    ) {
+    if (isFresh(key)) {
       return { status: 'skipped', reason: 'recently-refreshed' }
     }
     const pending = inFlight.get(key)
     if (pending) {
-      return await pending
+      const joined = await pending.run
+      // Why: a refresh started without the worktree (agent run, worktree
+      // creation) lacks the terminal count and spend; a terminal waiting on it
+      // asks for one more run, which later terminals then share.
+      if (!context.worktreeId || pending.hasWorktree || joined.status !== 'written') {
+        return joined
+      }
+      const next = inFlight.get(key)
+      if (next) {
+        return await next.run
+      }
     }
-    const run = refreshBrief(root, deps).finally(() => {
+    const run = refreshBrief(root, deps, context).finally(() => {
       inFlight.delete(key)
     })
-    inFlight.set(key, run)
+    inFlight.set(key, { run, hasWorktree: Boolean(context.worktreeId) })
     return await run
   } catch (error) {
     console.warn(
@@ -261,4 +365,24 @@ export function scheduleSessionWorkspaceBriefRefresh(
   deps: SessionWorkspaceBriefDeps = defaultDeps
 ): Promise<WorkspaceBriefResult> {
   return refreshForCwd(cwd, deps, true)
+}
+
+export type TerminalBriefOutcome = WorkspaceBriefResult | { status: 'timed-out' }
+
+// Awaited by pty:spawn before a local shell starts, so a Claude session in the
+// new tab reads a current brief. Waits at most waitMs, never rejects; a
+// refresh still running then finishes in the background (single-flight per
+// worktree root, so a window restoring many tabs runs it once).
+export function primeTerminalWorkspaceBrief(
+  cwd: string,
+  worktreeId: string | undefined,
+  options: { waitMs?: number; deps?: SessionWorkspaceBriefDeps } = {}
+): Promise<TerminalBriefOutcome> {
+  const refresh = refreshForCwd(cwd, options.deps ?? defaultDeps, true, { worktreeId })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<TerminalBriefOutcome>((resolve) => {
+    timer = setTimeout(() => resolve({ status: 'timed-out' }), options.waitMs ?? TERMINAL_BRIEF_WAIT_MS)
+    timer.unref?.()
+  })
+  return Promise.race([refresh, timeout]).finally(() => clearTimeout(timer))
 }

@@ -5324,6 +5324,17 @@ export class DobiusRuntimeService {
     this.recordPtyWorktree(ptyId, worktreeId, { connected: true, connectionId })
   }
 
+  // The workspace brief's "other terminals here" count, read before a new PTY spawns.
+  countConnectedPtysForWorktree(worktreeId: string): number {
+    let count = 0
+    for (const pty of this.ptysById.values()) {
+      if (pty.connected && pty.worktreeId === worktreeId) {
+        count += 1
+      }
+    }
+    return count
+  }
+
   /**
    * Handles incoming data from a PTY process, running agent detection,
    * updating terminal tail buffers, and triggering foreground agent refreshes.

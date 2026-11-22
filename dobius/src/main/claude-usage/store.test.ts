@@ -155,6 +155,53 @@ describe('ClaudeUsageStore', () => {
     expect(recentSessions[0]?.sessionId).toBe('session-1')
   })
 
+  it('reports cached per-worktree spend for the workspace brief without waiting on a scan', () => {
+    const day = (worktreeId: string | null, inputTokens: number) => ({
+      day: '2026-04-09',
+      model: 'claude-sonnet-4-6',
+      projectKey: `worktree:${worktreeId}`,
+      projectLabel: 'repo',
+      repoId: 'repo-1',
+      worktreeId,
+      turnCount: 1,
+      zeroCacheReadTurnCount: 0,
+      inputTokens,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0
+    })
+    const session = (sessionId: string, primaryWorktreeId: string) =>
+      ({ sessionId, primaryWorktreeId }) as ClaudeUsagePersistedState['sessions'][number]
+    const store = createStoreWithState({
+      sessions: [session('a', 'repo-1::wt'), session('b', 'repo-1::other')],
+      dailyAggregates: [day('repo-1::wt', 100_000), day('repo-1::other', 150_000)],
+      scanState: {
+        enabled: true,
+        lastScanStartedAt: 1,
+        lastScanCompletedAt: 2,
+        lastScanError: null
+      }
+    })
+    const refresh = vi.spyOn(store, 'refresh').mockResolvedValue(store.getScanState())
+
+    const spend = store.getCachedWorktreeSpend('repo-1::wt')
+    expect(spend).toMatchObject({ enabled: true, countedAt: 2, sessions: 1 })
+    // 100k Sonnet input tokens at $3 per million; the other worktree is not counted.
+    expect(spend.estimatedCostUsd).toBeCloseTo(0.3, 6)
+    expect(refresh).toHaveBeenCalledWith(false)
+
+    refresh.mockClear()
+    const off = createStoreWithState({})
+    const offRefresh = vi.spyOn(off, 'refresh')
+    expect(off.getCachedWorktreeSpend('repo-1::wt')).toEqual({
+      enabled: false,
+      countedAt: null,
+      sessions: 0,
+      estimatedCostUsd: null
+    })
+    expect(offRefresh).not.toHaveBeenCalled()
+  })
+
   it('reports zero-cache-read turns from daily aggregates', async () => {
     const store = createStoreWithState({
       dailyAggregates: [

@@ -1,4 +1,5 @@
 import type { SessionWorkspaceFacts } from './session-workspace-facts'
+import { renderPreflightSection, type WorkspacePreflight } from './session-workspace-preflight'
 import {
   DOBIUS_COMMANDS,
   DOBIUS_FEATURE_MAP,
@@ -25,7 +26,20 @@ function describeDirty(dirty: SessionWorkspaceFacts['dirty']): string {
   if (dirty.tracked === 0 && dirty.untracked === 0) {
     return 'clean'
   }
-  return `dirty: ${dirty.tracked} changed tracked file(s), ${dirty.untracked} untracked`
+  return `dirty: ${dirty.tracked} changed tracked file(s), ${dirty.untracked} untracked (${dirty.staged} staged, ${dirty.unstaged} with unstaged changes)`
+}
+
+function describeUpstream(upstream: SessionWorkspaceFacts['upstream']): string {
+  if (upstream === undefined) {
+    return 'unknown (git status failed or timed out)'
+  }
+  if (upstream === null) {
+    return 'none (this branch tracks no remote branch)'
+  }
+  if (upstream.gone) {
+    return `${codeSpan(upstream.name)}, which no longer exists (ahead/behind unknown)`
+  }
+  return `${codeSpan(upstream.name)}, ${upstream.ahead} ahead / ${upstream.behind} behind`
 }
 
 function describeGate(gate: SessionWorkspaceFacts['gate']): string {
@@ -91,7 +105,8 @@ function genericSections(facts: SessionWorkspaceFacts): string[] {
 export function renderSessionWorkspaceBrief(
   facts: SessionWorkspaceFacts,
   generatedAt: Date,
-  contextPack: WorkspaceContextPack | null
+  contextPack: WorkspaceContextPack | null,
+  preflight: WorkspacePreflight | null = null
 ): string {
   const asOf = generatedAt.toISOString()
   const lines = [
@@ -108,11 +123,13 @@ export function renderSessionWorkspaceBrief(
     `- Repository: ${codeSpan(facts.repoName)}`,
     `- Branch: ${describeBranch(facts)}`,
     `- Working tree as of ${asOf}: ${describeDirty(facts.dirty)}`,
+    `- Upstream as of ${asOf}: ${describeUpstream(facts.upstream)}`,
     `- Execution gate (Pause crew) as of ${asOf}: ${describeGate(facts.gate)}`,
     '- Board console identity: if `DOBIUS_BOARD_CARD_ID` is set in your shell, you are that Board console card on board `DOBIUS_BOARD_ID`. Route by the card id, which is unique: others reach you with `dobius board send --card "$DOBIUS_BOARD_CARD_ID"`. `DOBIUS_BOARD_CARD_TITLE` is for display only (titles can repeat). `dobius board consoles --json` lists your neighbours with their ids.',
     '',
     ...(facts.isDobiusRepo ? dobiusSections() : genericSections(facts)),
     '',
+    ...(preflight ? [...renderPreflightSection(preflight, generatedAt), ''] : []),
     '## ADAM context pack',
     '',
     contextPack

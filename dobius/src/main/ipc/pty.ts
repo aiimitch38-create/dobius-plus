@@ -125,6 +125,7 @@ import {
   rendererWindowContents
 } from '../window/renderer-window-registry'
 import { getUserDataRoot } from '../storage/user-data-root'
+import { primeTerminalWorkspaceBrief } from '../agents/session-workspace-brief'
 
 // ─── Provider Registry ──────────────────────────────────────────────
 // Routes PTY operations by connectionId. null = local provider.
@@ -3165,6 +3166,13 @@ export function registerPtyHandlers(
             )
           }
           spawnTiming.mark('options')
+          // Why: Claude reads CLAUDE.local.md when it starts in this tab, so the
+          // workspace brief (with its pre-flight) is refreshed first. Held inside
+          // the pane reservation so a concurrent spawn of this pane joins it;
+          // waits at most 1.5 s and never throws; local shells only.
+          if (!args.connectionId && cwd) {
+            await primeTerminalWorkspaceBrief(cwd, args.worktreeId)
+          }
           if (
             resumeClaim &&
             (!agentResumeSpawnTargetMatchesArgs(resumeClaim, args.worktreeId, args.connectionId) ||
