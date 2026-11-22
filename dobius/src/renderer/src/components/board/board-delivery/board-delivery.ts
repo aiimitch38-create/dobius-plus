@@ -9,7 +9,7 @@ import { recordOrder, updateOrderLane } from './board-orders'
 import { DeliveryGate, type ConsoleDeliveryState, type DeliveryOutcome } from './delivery-gate'
 import { summarizeDelivery } from './delivery-summary'
 import { newMission } from './mission-state'
-import { trackMission } from './mission-tracker'
+import { pinOrderMissions, trackMission } from './mission-tracker'
 
 function ownerWorktree(tabId: string): string | null {
   const byWorktree = useAppStore.getState().tabsByWorktree
@@ -96,13 +96,19 @@ export async function deliverOrder(input: {
   worktreeId: string
   summary: string
   lanes: readonly OrderLaneInput[]
+  /** Keep this order's missions until the caller's `unpin` runs, even past registry eviction. */
+  pinMissions?: boolean
 }): Promise<{
   orderId: string
   ok: boolean
   text: string
   outcomes: { name: string; tabId: string; outcome: DeliveryOutcome }[]
+  unpin?: () => void
 }> {
   const orderId = crypto.randomUUID()
+  // Why: pinned before any lane is delivered, so a delivery held in the gate
+  // while 50 newer orders arrive still records its mission for the caller.
+  const unpin = input.pinMissions ? pinOrderMissions(orderId) : undefined
   recordOrder({
     id: orderId,
     worktreeId: input.worktreeId,
@@ -141,5 +147,5 @@ export async function deliverOrder(input: {
       return { name: lane.name, tabId: lane.tabId, outcome }
     })
   )
-  return { orderId, outcomes, ...summarizeDelivery(outcomes) }
+  return { orderId, outcomes, ...summarizeDelivery(outcomes), unpin }
 }

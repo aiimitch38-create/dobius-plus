@@ -1,6 +1,6 @@
 import { getConnectionId } from '@/lib/connection-context'
 import { useAppStore } from '@/store'
-import { latestOrder } from './board-orders'
+import { isOrderRetained, latestOrder, onOrdersChanged } from './board-orders'
 import {
   advanceMission,
   latestEntryForTab,
@@ -19,7 +19,11 @@ export type MissionEvent =
   | { kind: 'settled'; orderId: string; finished: number }
 
 const TIMEOUT_SWEEP_MS = 30_000
+// Missions (each holding the agent's full last reply) live as long as their
+// order is in the orders registry (board-orders.ts keeps the last 50), or while
+// a forward/handoff wait pins them.
 const missions = new Map<string, Mission>()
+const pinnedOrders = new Map<string, number>()
 const listeners = new Set<(event: MissionEvent) => void>()
 const settledOrders = new Set<string>()
 let watching = false
@@ -72,11 +76,61 @@ function ensureWatching(): void {
     }
   })
   setInterval(() => missions.size > 0 && sweep(), TIMEOUT_SWEEP_MS)
+  onOrdersChanged(pruneEvictedOrders)
+}
+
+function isOrderKept(orderId: string): boolean {
+  return pinnedOrders.has(orderId) || isOrderRetained(orderId)
+}
+
+function pruneEvictedOrders(): void {
+  for (const [key, m] of missions) {
+    if (!isOrderKept(m.orderId)) {
+      missions.delete(key)
+    }
+  }
+  for (const orderId of settledOrders) {
+    if (!isOrderKept(orderId)) {
+      settledOrders.delete(orderId)
+    }
+  }
 }
 
 export function trackMission(m: Mission): void {
   ensureWatching()
+  // Why: a lane that finishes delivering after its order left the registry has
+  // nothing left to show it; keeping it would leak.
+  if (!isOrderKept(m.orderId)) {
+    return
+  }
   missions.set(`${m.orderId}:${m.tabId}`, m)
+}
+
+/**
+ * Keeps an order's missions past registry eviction while something waits on
+ * them (forward/handoff). Returns the release; released orders not in the
+ * registry are dropped.
+ */
+export function pinOrderMissions(orderId: string): () => void {
+  pinnedOrders.set(orderId, (pinnedOrders.get(orderId) ?? 0) + 1)
+  let released = false
+  return () => {
+    if (released) {
+      return
+    }
+    released = true
+    const left = (pinnedOrders.get(orderId) ?? 1) - 1
+    if (left > 0) {
+      pinnedOrders.set(orderId, left)
+    } else {
+      pinnedOrders.delete(orderId)
+      pruneEvictedOrders()
+    }
+  }
+}
+
+export function trackedMissionCountForTest(): { missions: number; settledOrders: number } {
+  return { missions: missions.size, settledOrders: settledOrders.size }
 }
 
 /** Missions (one per lane that received it) of one order, current state. */
