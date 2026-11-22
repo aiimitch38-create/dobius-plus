@@ -20,6 +20,7 @@ import { TASK_COMMAND_SPECS } from './tasks'
 import { BOARD_COMMAND_SPECS } from './board'
 import { BOARD_CARD_COMMAND_SPECS } from './board-cards'
 import { BOARD_SNAPSHOT_COMMAND_SPECS } from './board-snapshots'
+import { TABS_SNOOZE_COMMAND_SPECS } from './tabs-snooze'
 import { LEAD_COMMAND_SPECS } from './lead'
 import { CREW_COMMAND_SPECS } from './crew'
 import { GIT_COMMAND_SPECS } from './git'
@@ -47,6 +48,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
   ...BOARD_COMMAND_SPECS,
   ...BOARD_CARD_COMMAND_SPECS,
   ...BOARD_SNAPSHOT_COMMAND_SPECS,
+  ...TABS_SNOOZE_COMMAND_SPECS,
   ...LEAD_COMMAND_SPECS,
   ...CREW_COMMAND_SPECS,
   ...GIT_COMMAND_SPECS,

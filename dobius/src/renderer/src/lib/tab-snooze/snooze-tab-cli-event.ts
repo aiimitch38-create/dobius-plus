@@ -3,7 +3,6 @@
 // conversation first, then the tab closes). Why a separate entry point: the
 // menu opens a confirm dialog for a tab whose agent is mid-turn; a CLI caller
 // gets a refusal instead (or passes --force), so nothing pops up on screen.
-import { useAppStore } from '@/store'
 import type { TabSnoozeCliReply, TabSnoozeCliRequest } from '../../../../shared/tab-snooze-cli'
 import type { SnoozeTabDeps, SnoozeTabOutcome } from './snooze-terminal-tab'
 import { runTabSnooze, snoozeTerminalTabDeps } from './snooze-terminal-tab'
@@ -42,8 +41,8 @@ function firstTime(requestId: string): boolean {
   return true
 }
 
-function worktreeOfTab(tabId: string): string | null {
-  for (const [worktreeId, tabs] of Object.entries(useAppStore.getState().tabsByWorktree)) {
+function worktreeOfTab(state: ReturnType<SnoozeTabDeps['getState']>, tabId: string): string | null {
+  for (const [worktreeId, tabs] of Object.entries(state.tabsByWorktree)) {
     if (tabs.some((tab) => tab.id === tabId)) {
       return worktreeId
     }
@@ -59,7 +58,7 @@ export async function handleTabSnoozeCliEvent(
   if (!firstTime(requestId)) {
     return { requestId, ok: false, code: 'tab_snooze_refused', message: 'This request was already handled.' }
   }
-  const worktreeId = worktreeOfTab(tabId)
+  const worktreeId = worktreeOfTab(deps.getState(), tabId)
   const until = typeof event.until === 'number' && Number.isFinite(event.until) ? event.until : null
   // Why a no-op confirm: a CLI caller must never open a dialog on Carson's screen.
   const quiet: SnoozeTabDeps = {
