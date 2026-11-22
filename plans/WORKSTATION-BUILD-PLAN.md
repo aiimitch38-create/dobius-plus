@@ -9,6 +9,8 @@ Written 2026-11-21. Owner: Carson. Status: IN PROGRESS. Done: -1.1, -1.2, -1.12,
 > - Phases 2-7 duplicate Phase 8 (2.2=8.1, 3.1=8.2, 4.3=8.3, 4.4=8.4, 4.6=8.5, 5.6=8.6, 6.6=8.7, 7.2=8.8, 7.3=8.9, 4.5->8.10, 7.4=8.11 ... 7.8->8.15). The "Later" table's 8.1-8.4 are different items: ignore that table.
 > - 3.3 blocked: `dobius/design/` submodule not downloaded. 6.x: a Telegram module already exists (`main/telegram-account/`), decide reuse first. 7.7/8.14: drop (unused file, live UI already covers it).
 > - 2.3, 4.1, 4.2, 4.3 all edit `main/agents/agent-runner.ts`: run in sequence, never in parallel.
+> - NEW -1.16 (Codex, pre-existing): hibernation can strand a resumable pane if it is revealed within ~150 ms of the kill; main rejects the resume claim because the sleeping record's debounced save (`session-write-subscriber.ts:163`) has not landed (`pty.ts:1397`), and no retry follows. Fix: wait for main's acknowledgement of the sleeping record before killing. Size S-M.
+> - Live voice ADAM: research in `plans/research/REALTIME-VOICE-ADAM.md` (`gpt-live-1.1`, 8 tasks, about $13/day estimate).
 > - Next order: Wave 1 = -1.13, 0.7, -1.4 hibernation merge; Wave 2 = 9.1, -1.15 + -1.14, 0.5 voice research (fork branch too); Wave 3 = 9.2 + 9.3, 2.3, -1.3 live Restart test.
 
 ## The one rule for this plan
