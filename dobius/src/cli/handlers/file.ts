@@ -1,7 +1,15 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { GitStatusEntry, GitStatusResult } from '../../shared/git-status-types'
-import type { RuntimeFileOpenResult } from '../../shared/runtime-types'
+import type { RuntimeFileOpenResult, RuntimeFileReadResult } from '../../shared/runtime-types'
+import type { SearchResult } from '../../shared/types'
 import type { CommandHandler, HandlerContext } from '../dispatch'
-import { getOptionalStringFlag, getRequiredStringFlag } from '../flags'
+import {
+  getOptionalPositiveIntegerFlag,
+  getOptionalStringFlag,
+  getRequiredStringFlag,
+  getRequiredStringFlagAllowingEmpty
+} from '../flags'
 import { printResult } from '../format'
 import { RuntimeClientError } from '../runtime-client'
 import { getOptionalWorktreeSelector, resolveCurrentWorktreeSelector } from '../selectors'
@@ -135,6 +143,70 @@ function formatFileDiff(result: RuntimeFileOpenResult): string {
     : `Did not open diff for ${result.relativePath}: ${result.kind} file.`
 }
 
+type FileWriteResult = { relativePath: string; bytes: number }
+type FileSearchResult = SearchResult & { hiddenFiles: number }
+
+const MAX_SEARCH_LIMIT = 2000
+
+async function readStdinText(): Promise<string> {
+  if (process.stdin.isTTY) {
+    throw new RuntimeClientError('invalid_argument', '--stdin was passed but stdin is a terminal')
+  }
+  const chunks: Buffer[] = []
+  for await (const chunk of process.stdin) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)))
+  }
+  return Buffer.concat(chunks).toString('utf8')
+}
+
+/** Exactly one source: --content (may be empty on purpose), --stdin, or --from-file. */
+async function getWriteContent(ctx: HandlerContext): Promise<string> {
+  const sources = ['content', 'stdin', 'from-file'].filter((name) => ctx.flags.has(name))
+  if (sources.length !== 1) {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      'Pass exactly one of --content <text>, --stdin or --from-file <path>.'
+    )
+  }
+  if (ctx.flags.has('content')) {
+    return getRequiredStringFlagAllowingEmpty(ctx.flags, 'content')
+  }
+  if (ctx.flags.has('stdin')) {
+    if (ctx.flags.get('stdin') !== true) {
+      throw new RuntimeClientError('invalid_argument', '--stdin takes no value')
+    }
+    return await readStdinText()
+  }
+  const file = getRequiredStringFlag(ctx.flags, 'from-file')
+  try {
+    return readFileSync(resolve(ctx.cwd, file), 'utf8')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new RuntimeClientError('invalid_argument', `Could not read --from-file: ${message}`)
+  }
+}
+
+function formatSearch(result: FileSearchResult): string {
+  if (result.files.length === 0) {
+    return result.hiddenFiles > 0
+      ? `No matches (${result.hiddenFiles} secret-looking files hidden).`
+      : 'No matches.'
+  }
+  const lines: string[] = []
+  for (const file of result.files) {
+    for (const match of file.matches) {
+      lines.push(`${file.relativePath}:${match.line}: ${match.lineContent.trim()}`)
+    }
+  }
+  if (result.truncated) {
+    lines.push('(more matches not shown; raise --limit or narrow --include)')
+  }
+  if (result.hiddenFiles > 0) {
+    lines.push(`(${result.hiddenFiles} secret-looking files hidden)`)
+  }
+  return lines.join('\n')
+}
+
 export const FILE_HANDLERS: Record<string, CommandHandler> = {
   'file open': async (ctx) => {
     const relativePath = getRequiredStringFlag(ctx.flags, 'path')
@@ -155,6 +227,45 @@ export const FILE_HANDLERS: Record<string, CommandHandler> = {
       staged
     })
     printResult(result, ctx.json, formatFileDiff)
+  },
+  'file read': async (ctx) => {
+    const relativePath = getRequiredStringFlag(ctx.flags, 'path')
+    const worktree = await getFileWorktreeSelector(ctx)
+    const result = await ctx.client.call<RuntimeFileReadResult>('files.agentRead', {
+      worktree,
+      relativePath
+    })
+    printResult(result, ctx.json, (value) => value.content)
+  },
+  'file write': async (ctx) => {
+    const relativePath = getRequiredStringFlag(ctx.flags, 'path')
+    const content = await getWriteContent(ctx)
+    const worktree = await getFileWorktreeSelector(ctx)
+    const result = await ctx.client.call<FileWriteResult>('files.agentWrite', {
+      worktree,
+      relativePath,
+      content
+    })
+    printResult(result, ctx.json, (value) => `Wrote ${value.bytes} bytes to ${value.relativePath}.`)
+  },
+  'file search': async (ctx) => {
+    const query = getRequiredStringFlag(ctx.flags, 'query')
+    const limit = getOptionalPositiveIntegerFlag(ctx.flags, 'limit')
+    if (limit !== undefined && limit > MAX_SEARCH_LIMIT) {
+      throw new RuntimeClientError('invalid_argument', `--limit is at most ${MAX_SEARCH_LIMIT}`)
+    }
+    const worktree = await getFileWorktreeSelector(ctx)
+    const result = await ctx.client.call<FileSearchResult>('files.agentSearch', {
+      worktree,
+      query,
+      useRegex: ctx.flags.get('regex') === true,
+      caseSensitive: ctx.flags.get('case-sensitive') === true,
+      wholeWord: ctx.flags.get('whole-word') === true,
+      includePattern: getOptionalStringFlag(ctx.flags, 'include'),
+      excludePattern: getOptionalStringFlag(ctx.flags, 'exclude'),
+      ...(limit !== undefined ? { maxResults: limit } : {})
+    })
+    printResult(result, ctx.json, formatSearch)
   },
   'file open-changed': async (ctx) => {
     const mode = getOpenChangedMode(ctx.flags)

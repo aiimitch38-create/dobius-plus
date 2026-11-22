@@ -20,6 +20,7 @@ export const GLOBAL_FLAGS = ['help', 'json', 'pairing-code', 'environment']
 export const BOOLEAN_FLAGS = new Set([
   'all',
   'attachments',
+  'case-sensitive',
   'children',
   'comments',
   'connect',
@@ -43,6 +44,7 @@ export const BOOLEAN_FLAGS = new Set([
   'provision',
   'ready',
   'recipe-json',
+  'regex',
   'request-stdin',
   'relations',
   'reinstall',
@@ -50,12 +52,15 @@ export const BOOLEAN_FLAGS = new Set([
   'return-preamble',
   'run-hooks',
   'show-profile',
+  'sleeping',
   'staged',
+  'stdin',
   'tasks',
   'text-stdin',
   'unread',
   'value-stdin',
-  'wait'
+  'wait',
+  'whole-word'
 ])
 
 export const REPEATED_FLAG_SEPARATOR = '\u0000'
