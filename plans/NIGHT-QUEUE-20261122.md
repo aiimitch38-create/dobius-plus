@@ -32,3 +32,9 @@ NOT tonight, needs Carson: install, live voice test call, the OpenAI key, the He
 - Started: 1.1 + 5.1/5.2/5.4 bug button (wb/bug-button)
 - 9.8 batch C merged (c8db0350)
 - Started: 1.6 port fixes (wb/port-fixes)
+- ADAM live voice call merged (6d77261e): ready for Carson's test call (needs his OpenAI key)
+- 1.6/1.7 port fixes merged (e8347435)
+- 0.6/0.7 found already done (e960c7ce), plan just unmarked
+- 9.8 batches D and E built, in Codex review
+- Started: 1.8 Pre-Flight Primer, 1.5 Chat improvements, 7.5-7.7 UI trio
+- Disk dropped to ~1.8 GB; agents told to run targeted tests only
