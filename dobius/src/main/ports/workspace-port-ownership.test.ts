@@ -81,3 +81,25 @@ describe('killWorkspacePort', () => {
     expect(kill).not.toHaveBeenCalled()
   })
 })
+
+describe('killWorkspacePort repoId', () => {
+  it('attributes against every worktree and refuses a listener owned by another repo', async () => {
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true)
+    const nested = { id: 'other::/w/a/nested', repoId: 'other', displayName: 'nested', path: '/w/a/nested' }
+    scanWith([
+      {
+        ...base,
+        id: 'p',
+        port: 5173,
+        pid: 4242,
+        kind: 'workspace',
+        owner: { ...owner('other::/w/a/nested'), repoId: 'other' }
+      }
+    ])
+    await expect(
+      killWorkspacePort([probe, nested], { repoId: 'repo', pid: 4242, port: 5173 })
+    ).resolves.toEqual({ ok: false, reason: 'The port belongs to a different repository.' })
+    expect(scanMock).toHaveBeenCalledWith([probe, nested])
+    expect(kill).not.toHaveBeenCalled()
+  })
+})

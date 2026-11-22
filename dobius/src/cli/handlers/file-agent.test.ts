@@ -44,7 +44,7 @@ vi.mock('../runtime-client', () => {
   }
 })
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -107,6 +107,18 @@ describe('dobius file read / write / search', () => {
       content: '# Draft'
     })
     expect(logged()).toBe('Wrote 7 bytes to n.md.')
+  })
+
+  it('file write --from-file refuses a secret source, also behind a symlink', async () => {
+    writeFileSync(join(localDir, '.env'), 'SECRET=1')
+    symlinkSync(join(localDir, '.env'), join(localDir, 'notes.txt'))
+    for (const source of ['.env', 'notes.txt']) {
+      process.exitCode = undefined
+      await main(['file', 'write', 'copy.txt', '--from-file', source, '--worktree', 'id:wt'], localDir)
+      expect(process.exitCode).toBe(1)
+      expect(errored()).toMatch(/--from-file names a secret-looking file/)
+    }
+    expect(callMock).not.toHaveBeenCalled()
   })
 
   it('file write --stdin before the positional path still reads stdin', async () => {

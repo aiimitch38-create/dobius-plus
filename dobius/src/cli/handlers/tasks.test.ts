@@ -213,3 +213,34 @@ describe('dobius tasks move', () => {
     expect(process.exitCode).toBe(3)
   })
 })
+
+describe('dobius tasks update labels', () => {
+  it('refuses a bare or empty --label instead of wiping every label', async () => {
+    const cases: Map<string, string | boolean>[] = [
+      new Map<string, string | boolean>([['id', 't1'], ['by', 'adam'], ['label', true]]),
+      new Map<string, string | boolean>([['id', 't1'], ['by', 'adam'], ['label', '']]),
+      new Map<string, string | boolean>([
+        ['id', 't1'],
+        ['by', 'adam'],
+        ['label', ['auth', ''].join(REPEATED_FLAG_SEPARATOR)]
+      ])
+    ]
+    for (const flags of cases) {
+      await expect(
+        TASK_HANDLERS['tasks update']({ flags, client: { call: callMock, isRemote: false }, cwd, json: true } as never)
+      ).rejects.toThrow(/Every --label needs a value/)
+    }
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
+  it('--clear-labels sends an empty list; with --label it is refused', async () => {
+    callMock.mockResolvedValueOnce({ result: { ok: true, task: okTask } })
+    const flags = new Map<string, string | boolean>([['id', 't1'], ['by', 'adam'], ['clear-labels', true]])
+    await TASK_HANDLERS['tasks update']({ flags, client: { call: callMock, isRemote: false }, cwd, json: true } as never)
+    expect(callMock.mock.calls[0]?.[1]).toMatchObject({ labels: [] })
+    flags.set('label', 'x')
+    await expect(
+      TASK_HANDLERS['tasks update']({ flags, client: { call: callMock, isRemote: false }, cwd, json: true } as never)
+    ).rejects.toThrow(/either --label or --clear-labels/)
+  })
+})

@@ -23,6 +23,7 @@ export const BOOLEAN_FLAGS = new Set([
   'attachments',
   'case-sensitive',
   'children',
+  'clear-labels',
   'comments',
   'connect',
   'current',

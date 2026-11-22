@@ -5161,6 +5161,20 @@ export class DobiusRuntimeService {
 
   // Why: mobile write guards (mobile-write-path-guard.ts) check targets
   // relative to the real worktree root, and skip disk checks over SSH.
+  // Why: agent file methods resolve the selector once and then address the
+  // concrete id, so a selector that changes meaning mid-call (rename, new
+  // branch) cannot point the access at a different worktree than the check.
+  async resolveAgentFileTarget(
+    worktreeSelector: string
+  ): Promise<{ worktreeId: string; root: string; connectionId?: string }> {
+    const target = await this.resolveRuntimeFileTarget(worktreeSelector)
+    return {
+      worktreeId: target.worktree.id,
+      root: target.worktree.path,
+      connectionId: target.connectionId
+    }
+  }
+
   async resolveMobileWriteRoot(
     worktreeSelector: string
   ): Promise<{ root: string; connectionId?: string }> {
@@ -12337,7 +12351,9 @@ export class DobiusRuntimeService {
   }
 
   async killWorkspacePort(args: WorkspacePortKillRequest): Promise<WorkspacePortKillResult> {
-    return killWorkspacePort(await this.getWorkspacePortProbes(args.repoId), args)
+    // Why every worktree: a repo filter hides nested worktrees of other repos,
+    // whose listeners would then be credited to the parent worktree.
+    return killWorkspacePort(await this.getWorkspacePortProbes(), args)
   }
 
   // Why: remote clients may invoke this over RPC, so the runtime derives

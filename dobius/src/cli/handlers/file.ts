@@ -1,7 +1,8 @@
-import { readFileSync, statSync } from 'node:fs'
+import { readFileSync, realpathSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { GitStatusEntry, GitStatusResult } from '../../shared/git-status-types'
 import type { RuntimeFileOpenResult, RuntimeFileReadResult } from '../../shared/runtime-types'
+import { isSecretLookingPath } from '../../shared/secret-file-names'
 import type { SearchResult } from '../../shared/types'
 import type { CommandHandler, HandlerContext } from '../dispatch'
 import {
@@ -190,19 +191,30 @@ async function getWriteContent(ctx: HandlerContext): Promise<string> {
     }
     return await readStdinText()
   }
-  const file = resolve(ctx.cwd, getRequiredStringFlag(ctx.flags, 'from-file'))
+  const requested = getRequiredStringFlag(ctx.flags, 'from-file')
+  const file = resolve(ctx.cwd, requested)
   let size: number
+  let real: string
   try {
-    size = statSync(file).size
+    real = realpathSync(file)
+    size = statSync(real).size
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     throw new RuntimeClientError('invalid_argument', `Could not read --from-file: ${message}`)
+  }
+  // Why: otherwise `--from-file .env` copies a secret under an allowed name.
+  // Checked on what was typed and on where symlinks lead.
+  if (isSecretLookingPath(requested) || isSecretLookingPath(file) || isSecretLookingPath(real)) {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      'Refused: --from-file names a secret-looking file (env, key, token, credential).'
+    )
   }
   if (size > MAX_WRITE_BYTES) {
     tooLarge()
   }
   try {
-    return readFileSync(file, 'utf8')
+    return readFileSync(real, 'utf8')
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     throw new RuntimeClientError('invalid_argument', `Could not read --from-file: ${message}`)

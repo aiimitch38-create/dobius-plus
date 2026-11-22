@@ -5,6 +5,7 @@ import {
   type VertexTask,
   type VertexTaskAttachment
 } from '../../shared/vertex-task-types'
+import { REPEATED_FLAG_SEPARATOR } from '../args'
 import type { CommandHandler, HandlerContext } from '../dispatch'
 import {
   getOptionalPositiveIntegerFlag,
@@ -253,6 +254,26 @@ const LIST_STATUSES = [
   'done'
 ] as const
 
+/** Why: a bare or empty --label used to arrive as "no labels" and wipe them
+ *  all; clearing is now only the explicit --clear-labels. */
+function getUpdateLabels(flags: Map<string, string | boolean>): string[] | undefined {
+  const clear = flags.get('clear-labels') === true
+  if (!flags.has('label')) {
+    return clear ? [] : undefined
+  }
+  if (clear) {
+    throw new RuntimeClientError('invalid_argument', 'Choose either --label or --clear-labels.')
+  }
+  const raw = flags.get('label')
+  if (typeof raw !== 'string' || raw.split(REPEATED_FLAG_SEPARATOR).some((v) => !v.trim())) {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      'Every --label needs a value. Use --clear-labels to remove all labels.'
+    )
+  }
+  return getRepeatedStringFlag(flags, 'label')
+}
+
 // Why: done and in-progress have their own commands (complete, claim).
 const MOVE_STATUSES = ['backlog', 'todo', 'blocked', 'review', 'testing'] as const
 
@@ -407,7 +428,7 @@ export const TASK_HANDLERS: Record<string, CommandHandler> = {
         '--assignee-kind and --assignee-name need --assignee'
       )
     }
-    const labels = flags.has('label') ? getRepeatedStringFlag(flags, 'label') : undefined
+    const labels = getUpdateLabels(flags)
     await runOp(
       ctx,
       'tasks.update',

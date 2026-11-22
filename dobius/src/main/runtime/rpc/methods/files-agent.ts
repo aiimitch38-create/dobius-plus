@@ -70,26 +70,28 @@ export const AGENT_FILE_METHODS: RpcMethod[] = [
     name: 'files.agentRead',
     params: AgentFilePath,
     handler: async (params, { runtime }) => {
-      const { root, connectionId } = await runtime.resolveMobileWriteRoot(params.worktree)
+      const { worktreeId, root, connectionId } = await runtime.resolveAgentFileTarget(params.worktree)
+      const worktree = `id:${worktreeId}`
       await assertAgentReadAllowed({
         worktreeRoot: root,
         relativePath: params.relativePath,
         connectionId
       })
-      return runtime.readMobileFile(params.worktree, params.relativePath)
+      return runtime.readMobileFile(worktree, params.relativePath)
     }
   }),
   defineMethod({
     name: 'files.agentWrite',
     params: AgentFileWrite,
     handler: async (params, { runtime }) => {
-      const { root, connectionId } = await runtime.resolveMobileWriteRoot(params.worktree)
+      const { worktreeId, root, connectionId } = await runtime.resolveAgentFileTarget(params.worktree)
+      const worktree = `id:${worktreeId}`
       await assertAgentWriteAllowed({
         worktreeRoot: root,
         relativePath: params.relativePath,
         connectionId
       })
-      await runtime.writeFileExplorerFile(params.worktree, params.relativePath, params.content)
+      await runtime.writeFileExplorerFile(worktree, params.relativePath, params.content)
       return {
         relativePath: params.relativePath,
         bytes: Buffer.byteLength(params.content, 'utf8')
@@ -100,14 +102,15 @@ export const AGENT_FILE_METHODS: RpcMethod[] = [
     name: 'files.agentSearch',
     params: AgentFileSearch,
     handler: async (params, { runtime }) => {
-      const { connectionId } = await runtime.resolveMobileWriteRoot(params.worktree)
+      const { worktreeId, connectionId } = await runtime.resolveAgentFileTarget(params.worktree)
+      const worktree = `id:${worktreeId}`
       // Why: the SSH relay may predate caseInsensitiveExcludeGlobs and would
       // then search secret files; refuse rather than rely on the post-filter.
       if (connectionId) {
         throw new AgentFileRefusedError("file search isn't available for remote worktrees yet")
       }
       const maxResults = params.maxResults ?? 200
-      const result = await runtime.searchRuntimeFiles(params.worktree, {
+      const result = await runtime.searchRuntimeFiles(worktree, {
         query: params.query,
         caseSensitive: params.caseSensitive,
         wholeWord: params.wholeWord,

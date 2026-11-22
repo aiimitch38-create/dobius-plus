@@ -178,7 +178,7 @@ export const TASK_COMMAND_SPECS: CommandSpec[] = [
     path: ['tasks', 'update'],
     summary: 'Change the title, body, labels, priority or assignee of a card',
     usage:
-      'dobius tasks update --id <task-id> --by <id> [--title <text>] [--body <text> | --body-file <path>] [--label <text>]... [--priority <low|medium|high|urgent>] [--assignee <id> [--assignee-kind <hermes-profile|console|human>] [--assignee-name <text>]] [--json]',
+      'dobius tasks update --id <task-id> --by <id> [--title <text>] [--body <text> | --body-file <path>] [--label <text>... | --clear-labels] [--priority <low|medium|high|urgent>] [--assignee <id> [--assignee-kind <hermes-profile|console|human>] [--assignee-name <text>]] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'id',
@@ -187,6 +187,7 @@ export const TASK_COMMAND_SPECS: CommandSpec[] = [
       'body',
       'body-file',
       'label',
+      'clear-labels',
       'priority',
       'assignee',
       'assignee-kind',
@@ -195,7 +196,7 @@ export const TASK_COMMAND_SPECS: CommandSpec[] = [
     positionalArgs: ['id'],
     notes: [
       'A card held by someone else can only be changed by its holder (refused as held-by:<id>).',
-      '--label replaces all labels; repeat it for several. Kind agent is not accepted as assignee.',
+      '--label replaces all labels; repeat it for several. Each --label needs a value; --clear-labels removes them all. Kind agent is not accepted as assignee.',
       'To change the column use dobius tasks move.',
       EXIT_3_NOTE
     ],

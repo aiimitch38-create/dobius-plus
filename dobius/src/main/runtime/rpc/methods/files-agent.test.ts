@@ -22,7 +22,7 @@ beforeEach(() => {
   writeFileSync(join(root, '.env'), 'SECRET=1')
   runtime = {
     getRuntimeId: vi.fn().mockReturnValue('rt'),
-    resolveMobileWriteRoot: vi.fn().mockResolvedValue({ root }),
+    resolveAgentFileTarget: vi.fn().mockResolvedValue({ worktreeId: 'wt', root }),
     readMobileFile: vi.fn().mockResolvedValue({ content: 'ok' }),
     writeFileExplorerFile: vi.fn().mockResolvedValue({ ok: true }),
     searchRuntimeFiles: vi.fn()
@@ -42,6 +42,20 @@ async function call(method: string, params: Record<string, unknown>): Promise<Rp
   return dispatcher.dispatch(request)
 }
 
+describe('the selector is resolved once', () => {
+  it('read, write and search all address the concrete id, not the selector again', async () => {
+    runtime.resolveAgentFileTarget.mockResolvedValue({ worktreeId: 'repo::/w/feat', root })
+    runtime.searchRuntimeFiles.mockResolvedValue({ files: [], totalMatches: 0, truncated: false })
+    await call('files.agentRead', { worktree: 'branch:feat', relativePath: 'src/app.ts' })
+    await call('files.agentWrite', { worktree: 'branch:feat', relativePath: 'src/n.ts', content: 'x' })
+    await call('files.agentSearch', { worktree: 'branch:feat', query: 'x' })
+    expect(runtime.resolveAgentFileTarget).toHaveBeenCalledTimes(3)
+    expect(runtime.readMobileFile).toHaveBeenCalledWith('id:repo::/w/feat', 'src/app.ts')
+    expect(runtime.writeFileExplorerFile).toHaveBeenCalledWith('id:repo::/w/feat', 'src/n.ts', 'x')
+    expect(runtime.searchRuntimeFiles.mock.calls[0]?.[0]).toBe('id:repo::/w/feat')
+  })
+})
+
 describe('files.agentRead', () => {
   it('reads a worktree file through the runtime', async () => {
     const response = await call('files.agentRead', { worktree: 'id:wt', relativePath: 'src/app.ts' })
@@ -60,7 +74,11 @@ describe('files.agentRead', () => {
 
 describe('remote (SSH) worktrees', () => {
   it('refuses files.agentRead and files.agentWrite without touching the runtime file commands', async () => {
-    runtime.resolveMobileWriteRoot.mockResolvedValue({ root: '/remote/wt', connectionId: 'ssh-1' })
+    runtime.resolveAgentFileTarget.mockResolvedValue({
+      worktreeId: 'wt',
+      root: '/remote/wt',
+      connectionId: 'ssh-1'
+    })
     const read = await call('files.agentRead', { worktree: 'id:wt', relativePath: 'src/app.ts' })
     const write = await call('files.agentWrite', {
       worktree: 'id:wt',
@@ -153,7 +171,11 @@ describe('files.agentSearch', () => {
       const response = await call('files.agentSearch', { worktree: 'id:wt', query: 'x', ...params })
       expect(response).toMatchObject({ ok: false, error: { message: expect.stringContaining('backslash') } })
     }
-    runtime.resolveMobileWriteRoot.mockResolvedValue({ root: '/remote/wt', connectionId: 'ssh-1' })
+    runtime.resolveAgentFileTarget.mockResolvedValue({
+      worktreeId: 'wt',
+      root: '/remote/wt',
+      connectionId: 'ssh-1'
+    })
     const remote = await call('files.agentSearch', { worktree: 'id:wt', query: 'x' })
     expect(remote).toMatchObject({
       ok: false,
