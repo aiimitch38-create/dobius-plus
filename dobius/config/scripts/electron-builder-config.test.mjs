@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { accessSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -9,8 +9,10 @@ const require = createRequire(import.meta.url)
 const electronBuilderConfig = require('../electron-builder.config.cjs')
 const electronBuilderNativeRebuild = require('./electron-builder-native-rebuild.cjs')
 const {
+  PACKAGED_RUNTIME_PACKAGE_ROOTS,
   createPackagedRuntimeNodeModuleResources,
   findAsarEntry,
+  findPackagedRuntimeClosureProblems,
   prunePackagedNodePty,
   prunePackagedParcelWatcher,
   prunePackagedSherpaOnnx,
@@ -18,6 +20,17 @@ const {
   prunePackagedZodSources,
   verifyPackagedMainRuntimeDeps
 } = require('../packaged-runtime-node-modules.cjs')
+
+async function writeCopiedPackage(resourcesDir, name, manifest = {}, files = ['index.js']) {
+  const dir = join(resourcesDir, 'node_modules', ...name.split('/'))
+  await mkdir(dir, { recursive: true })
+  await writeFile(join(dir, 'package.json'), JSON.stringify({ name, ...manifest }), 'utf8')
+  for (const file of files) {
+    await mkdir(dirname(join(dir, file)), { recursive: true })
+    await writeFile(join(dir, file), '', 'utf8')
+  }
+  return dir
+}
 
 function packageNameFromResourceTarget(target) {
   const parts = target.split(sep)
@@ -222,8 +235,8 @@ describe('electron-builder config', () => {
     const resourcesDir = await mkdtemp(join(tmpdir(), 'dobius-runtime-deps-'))
     try {
       await writeFile(join(resourcesDir, 'app.asar'), '', 'utf8')
-      await mkdir(join(resourcesDir, 'node_modules', 'yaml'), { recursive: true })
-      await mkdir(join(resourcesDir, 'node_modules', 'zod'), { recursive: true })
+      await writeCopiedPackage(resourcesDir, 'yaml')
+      await writeCopiedPackage(resourcesDir, 'zod')
 
       const sources = new Map([
         ['out\\main\\index.js', 'const z = require("zod")'],
@@ -238,6 +251,90 @@ describe('electron-builder config', () => {
     } finally {
       await rm(resourcesDir, { recursive: true, force: true })
     }
+  })
+
+  // Port of Line A #22: a copied package must bring its own runtime
+  // dependencies and entry file, not just its folder.
+  describe('packaged runtime dependency closure', () => {
+    const verifyWithMainImport = (resourcesDir, specifier) => {
+      const sources = new Map([
+        ['out/main/index.js', `require("${specifier}")`],
+        ['out/main/agent-hooks/managed-agent-hook-controls.js', 'require("node:fs")']
+      ])
+      const asar = {
+        listPackage: () => [...sources.keys()],
+        extractFile: (_asarPath, internalPath) => Buffer.from(sources.get(internalPath), 'utf8')
+      }
+      return () => verifyPackagedMainRuntimeDeps(resourcesDir, asar)
+    }
+    const withResources = async (run) => {
+      const resourcesDir = await mkdtemp(join(tmpdir(), 'dobius-runtime-closure-'))
+      try {
+        await writeFile(join(resourcesDir, 'app.asar'), '', 'utf8')
+        await run(resourcesDir)
+      } finally {
+        await rm(resourcesDir, { recursive: true, force: true })
+      }
+    }
+
+    it('accepts a package whose dependencies and entry files are all copied', async () => {
+      await withResources(async (resourcesDir) => {
+        await writeCopiedPackage(resourcesDir, '@scope/app-dep', {
+          exports: { '.': { require: './dist/index.cjs' } },
+          dependencies: { shared: '^1.0.0' },
+          optionalDependencies: { 'not-installed': '^1.0.0' }
+        }, ['dist/index.cjs'])
+        // Why: a nested copy wins over the flat one, the way Node resolves it.
+        await writeCopiedPackage(
+          join(resourcesDir, 'node_modules', '@scope', 'app-dep'),
+          'shared',
+          { main: 'lib/main' },
+          ['lib/main.js']
+        )
+        expect(verifyWithMainImport(resourcesDir, '@scope/app-dep/sub')).not.toThrow()
+      })
+    })
+
+    it('rejects a missing transitive dependency', async () => {
+      await withResources(async (resourcesDir) => {
+        await writeCopiedPackage(resourcesDir, 'chokidar', { dependencies: { readdirp: '^4.0.0' } })
+        expect(verifyWithMainImport(resourcesDir, 'chokidar')).toThrow(
+          'readdirp (needed by chokidar): not in the app'
+        )
+      })
+    })
+
+    it('rejects a copied package whose entry file is missing', async () => {
+      await withResources(async (resourcesDir) => {
+        await writeCopiedPackage(resourcesDir, '@xterm/headless', { main: 'lib/headless.js' }, [])
+        expect(verifyWithMainImport(resourcesDir, '@xterm/headless')).toThrow(
+          '@xterm/headless (needed by packaged code): its entry file lib/headless.js is not in the app'
+        )
+      })
+    })
+
+    it('rejects an exports root that points at a folder instead of a file', async () => {
+      await withResources(async (resourcesDir) => {
+        const dir = await writeCopiedPackage(resourcesDir, 'pkg', { exports: './dist' }, [])
+        await mkdir(join(dir, 'dist'), { recursive: true })
+        expect(verifyWithMainImport(resourcesDir, 'pkg')).toThrow(
+          'its entry file ./dist is not in the app'
+        )
+      })
+    })
+
+    it('finds no gaps in the real runtime closure staged as Resources', async () => {
+      await withResources(async (resourcesDir) => {
+        for (const resource of createPackagedRuntimeNodeModuleResources()) {
+          const destination = join(resourcesDir, resource.to)
+          await mkdir(dirname(destination), { recursive: true })
+          await symlink(resource.from, destination)
+        }
+        expect(
+          findPackagedRuntimeClosureProblems(resourcesDir, [...PACKAGED_RUNTIME_PACKAGE_ROOTS])
+        ).toEqual([])
+      })
+    })
   })
 
   it('rejects a bare main runtime import when its package was not copied', async () => {
