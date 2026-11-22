@@ -265,7 +265,13 @@ export function createDesktopTelegramAccountApi(): TelegramAccountApi {
           detail: draft.body
         })
         return response === 1
-      })
+      }),
+    replies: {
+      start: () => api.startReplies(),
+      stop: () => api.stopReplies(),
+      pause: () => api.pause(),
+      resume: () => api.resume()
+    }
   })
   return api
 }
