@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LiveDelegateResult, OpenAiLiveSessionResult } from '../../../../shared/speech-types'
 import {
+  LIVE_RECYCLE_FORCE_AFTER_MS,
+  LIVE_RECYCLE_MIN_MS
+} from './live-voice-reconnect'
+import {
+  LIVE_DROPPED_TEXT,
   LIVE_CAP_HANG_UP_GRACE_MS,
   LIVE_IDLE_HANGUP_MS,
   LiveVoiceCall,
@@ -325,5 +330,72 @@ describe('spending cap', () => {
     await vi.advanceTimersByTimeAsync(LIVE_CAP_HANG_UP_GRACE_MS + 10)
     expect(call.getSnapshot()).toMatchObject({ state: 'error', errorText: 'cap reached' })
     expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed' })
+  })
+})
+
+describe('reconnect', () => {
+  it('reopens a dropped call with a fresh session, then gives up after three tries', async () => {
+    const call = makeCall()
+    await connected(call)
+    peer().channel.emit({ type: 'session.closed', reason: 'expired' })
+    expect(call.getSnapshot().state).toBe('connecting')
+    expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed' })
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(peers).toHaveLength(2)
+    expect(api.liveSessionConnect).toHaveBeenCalledTimes(2)
+    // Drops without a successful start keep counting toward the limit.
+    peer().channel.onclose?.()
+    await vi.advanceTimersByTimeAsync(3_000)
+    peer().channel.onclose?.()
+    await vi.advanceTimersByTimeAsync(8_000)
+    expect(peers).toHaveLength(4)
+    peer().channel.onclose?.()
+    expect(call.getSnapshot()).toMatchObject({ state: 'error', errorText: LIVE_DROPPED_TEXT })
+  })
+
+  it('a press while waiting to reconnect hangs up instead', async () => {
+    const call = makeCall()
+    await connected(call)
+    peer().channel.onclose?.()
+    call.press('push-to-talk')
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(peers).toHaveLength(1)
+    expect(call.getSnapshot().state).toBe('idle')
+  })
+
+  it('waits for ADAM to finish before recycling, but not past the forced deadline', async () => {
+    const call = makeCall()
+    void call.start()
+    await vi.advanceTimersByTimeAsync(0)
+    connect.resolve(OK)
+    await vi.advanceTimersByTimeAsync(0)
+    // Expires in 6 minutes: recycle is due in 1 minute (the minimum).
+    peer().channel.emit({ type: 'session.started', expires_at: (Date.now() + 6 * 60_000) / 1000 })
+    peer().channel.emit({ type: 'session.input_transcript.delta', delta: 'Run the build' })
+    peer().channel.emit({ type: 'session.delegation.created' })
+    await vi.advanceTimersByTimeAsync(LIVE_RECYCLE_MIN_MS + 1_000)
+    expect(peers).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(LIVE_RECYCLE_FORCE_AFTER_MS)
+    expect(peers).toHaveLength(2)
+    expect(api.liveCancel).toHaveBeenCalled()
+  })
+
+  it('recycles right away when the call is quiet', async () => {
+    const call = makeCall()
+    void call.start()
+    await vi.advanceTimersByTimeAsync(0)
+    connect.resolve(OK)
+    await vi.advanceTimersByTimeAsync(0)
+    peer().channel.emit({ type: 'session.input_transcript.delta', delta: 'Can you hear me?' })
+    peer().channel.emit({ type: 'session.output_transcript.delta', delta: 'Yes.' })
+    peer().channel.emit({ type: 'session.started', expires_at: (Date.now() + 6 * 60_000) / 1000 })
+    await vi.advanceTimersByTimeAsync(LIVE_RECYCLE_MIN_MS + 1_000)
+    expect(peers).toHaveLength(2)
+    const saved = api.liveTranscript.mock.invocationCallOrder[0]
+    const closed = api.liveSessionReport.mock.invocationCallOrder[0]
+    expect(saved).toBeLessThan(closed)
+    expect(call.getSnapshot().state).toBe('connecting')
+    peer().channel.emit({ type: 'session.started' })
+    expect(call.getSnapshot().state).toBe('listening')
   })
 })

@@ -16,6 +16,7 @@ import {
 import { closeLivePeer, openLivePeer } from './live-voice-peer'
 import { NamedTimers } from './live-voice-timers'
 import { LiveDelegations } from './live-voice-delegation'
+import { LiveReconnectPolicy, LIVE_RECYCLE_RETRY_MS } from './live-voice-reconnect'
 import { LiveTranscript } from './live-voice-transcript'
 import { commentaryEvent, muteEvent, parseLiveEvent, type LiveEvent } from './live-voice-wire'
 
@@ -40,8 +41,8 @@ export class LiveVoiceCall {
   private readonly timers: NamedTimers
   private readonly delegations: LiveDelegations
   private lastInputAt = 0
-  private capReached = false
   private capWarned = false
+  private readonly reconnect: LiveReconnectPolicy
   private inputLevel: LevelReader | null = null
   private outputLevel: LevelReader | null = null
 
@@ -63,14 +64,22 @@ export class LiveVoiceCall {
       send: (data) => this.send(data),
       settle: () => this.settleState()
     })
+    this.reconnect = new LiveReconnectPolicy({
+      timers: this.timers,
+      now: () => this.now(),
+      isQuiet: () =>
+        (this.snapshot.state === 'listening' || this.snapshot.state === 'standby') &&
+        this.delegations.count === 0 &&
+        this.now() - this.lastInputAt > LIVE_RECYCLE_RETRY_MS,
+      reopen: (delayMs) => this.reopen(delayMs),
+      giveUp: () => void this.hangUp(LIVE_DROPPED_TEXT)
+    })
   }
 
-  getSnapshot(): LiveVoiceSnapshot {
-    return this.snapshot
-  }
+  getSnapshot = (): LiveVoiceSnapshot => this.snapshot
 
   get active(): boolean {
-    return this.call !== null || this.starting
+    return this.call !== null || this.starting || this.timers.has('reconnect')
   }
 
   getInputLevel = (): number => (this.snapshot.muted ? 0 : (this.inputLevel?.read() ?? 0))
@@ -93,42 +102,31 @@ export class LiveVoiceCall {
     if (this.active) {
       return
     }
+    this.timers.clear('reconnect')
     this.starting = true
-    this.capReached = false
     const generation = ++this.generation
     const isCurrent = (): boolean => this.generation === generation
     this.update({ state: 'connecting', errorText: null })
     try {
-      const mic = await this.deps.getMicrophone()
-      if (!isCurrent()) {
-        mic.getTracks().forEach((track) => track.stop())
-        return
-      }
-      const { call, offerSdp } = await openLivePeer(this.deps, mic, this.snapshot.muted, {
+      const opened = await openLivePeer(this.deps, this.snapshot.muted, isCurrent, {
         onMessage: (data) => {
-          const event = isCurrent() ? parseLiveEvent(data) : null
+          const event = parseLiveEvent(data)
           if (event) {
             this.handle(event)
           }
         },
-        onDropped: (why) => {
-          if (isCurrent()) {
-            this.dropped(why)
-          }
-        },
+        onDropped: (why) => this.dropped(why),
         onRemoteStream: (stream) => {
-          if (isCurrent()) {
-            this.outputLevel?.dispose()
-            this.outputLevel = this.deps.levelOf?.(stream) ?? null
-          }
+          this.outputLevel?.dispose()
+          this.outputLevel = this.deps.levelOf?.(stream) ?? null
         }
       })
-      if (!isCurrent()) {
-        closeLivePeer(call)
+      if (!opened) {
         return
       }
+      const { call, offerSdp } = opened
       this.call = call
-      this.inputLevel = this.deps.levelOf?.(mic) ?? null
+      this.inputLevel = this.deps.levelOf?.(call.mic) ?? null
       const result = await this.deps.api.liveSessionConnect(offerSdp)
       if (!isCurrent()) {
         // Why report: main already counts this session as this window's
@@ -164,6 +162,7 @@ export class LiveVoiceCall {
   async hangUp(errorText: string | null = null): Promise<void> {
     this.generation += 1
     this.starting = false
+    this.reconnect.reset()
     this.delegations.cancel()
     this.teardown()
     this.update({ state: errorText ? 'error' : 'idle', errorText, muted: false })
@@ -186,25 +185,23 @@ export class LiveVoiceCall {
     if (!this.call) {
       return
     }
-    if (notice.kind === 'cap-warning') {
-      if (!this.capWarned) {
-        this.capWarned = true
-        this.send(commentaryEvent(notice.text, null))
-      }
-      return
+    const warning = notice.kind === 'cap-warning'
+    if (!(warning && this.capWarned) && !this.timers.has('cap')) {
+      this.send(commentaryEvent(notice.text, null))
     }
-    if (this.capReached) {
-      return
+    this.capWarned ||= warning
+    if (!warning && !this.timers.has('cap')) {
+      // Why a grace: let the voice say why before the line goes dead. A drop
+      // meanwhile reconnects, and main then refuses the new call over the cap.
+      this.timers.arm('cap', LIVE_CAP_HANG_UP_GRACE_MS, () => void this.hangUp(notice.text))
     }
-    this.capReached = true
-    this.send(commentaryEvent(notice.text, null))
-    this.timers.arm('cap', LIVE_CAP_HANG_UP_GRACE_MS, () => void this.hangUp(notice.text))
   }
 
   private handle(event: LiveEvent): void {
     switch (event.type) {
       case 'started':
         this.timers.clear('connect')
+        this.reconnect.started(event.expiresAtMs)
         this.touchIdle()
         if (this.snapshot.muted) {
           this.send(muteEvent(true))
@@ -260,9 +257,17 @@ export class LiveVoiceCall {
   }
 
   /** The call ended without Carson hanging up. */
-  protected dropped(why: string): void {
+  private dropped(why: string): void {
     console.warn(`[live-voice] call dropped: ${why}`)
-    void this.hangUp(this.capReached ? this.snapshot.errorText : LIVE_DROPPED_TEXT)
+    this.reconnect.dropped()
+  }
+
+  private reopen(delayMs: number): void {
+    this.generation += 1
+    this.delegations.cancel()
+    this.teardown()
+    this.update({ state: 'connecting' })
+    this.timers.arm('reconnect', delayMs, () => void this.start())
   }
 
   /** Closes the current leg and tells main. Never changes the shown state. */

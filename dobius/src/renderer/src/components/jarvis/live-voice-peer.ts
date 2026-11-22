@@ -12,14 +12,20 @@ export type LivePeerHandlers = {
 /**
  * Builds one WebRTC leg: the microphone track, the `oai-events` data channel
  * and the local offer. Main turns the offer into a session; the caller
- * applies the answer. Handlers fire only until closeLivePeer() runs.
+ * applies the answer. Handlers fire only while `isCurrent()` holds, and a leg
+ * opened for a call that was hung up meanwhile is closed and null returned.
  */
 export async function openLivePeer(
   deps: LiveVoiceCallDeps,
-  mic: Awaited<ReturnType<LiveVoiceCallDeps['getMicrophone']>>,
   muted: boolean,
+  isCurrent: () => boolean,
   handlers: LivePeerHandlers
-): Promise<{ call: LivePeerCall; offerSdp: string }> {
+): Promise<{ call: LivePeerCall; offerSdp: string } | null> {
+  const mic = await deps.getMicrophone()
+  if (!isCurrent()) {
+    mic.getTracks().forEach((track) => track.stop())
+    return null
+  }
   const peer = deps.createPeer()
   for (const track of mic.getAudioTracks()) {
     track.enabled = !muted
@@ -29,27 +35,31 @@ export async function openLivePeer(
   const call: LivePeerCall = { peer, channel, mic, connected: false, stopAudio: null }
   peer.ontrack = (event) => {
     const stream = event.streams[0]
-    if (stream) {
+    if (stream && isCurrent()) {
       call.stopAudio?.()
       call.stopAudio = deps.playRemote(stream)
       handlers.onRemoteStream(stream)
     }
   }
-  channel.onmessage = (message) => handlers.onMessage(message.data)
-  channel.onclose = () => handlers.onDropped('the voice channel closed')
+  channel.onmessage = (message) => isCurrent() && handlers.onMessage(message.data)
+  channel.onclose = () => isCurrent() && handlers.onDropped('the voice channel closed')
   peer.onconnectionstatechange = () => {
-    if (peer.connectionState === 'failed') {
+    if (isCurrent() && peer.connectionState === 'failed') {
       handlers.onDropped('the connection failed')
     }
   }
   try {
     const offer = await peer.createOffer()
     await peer.setLocalDescription(offer)
-    return { call, offerSdp: offer.sdp ?? '' }
+    if (isCurrent()) {
+      return { call, offerSdp: offer.sdp ?? '' }
+    }
   } catch (error) {
     closeLivePeer(call)
     throw error
   }
+  closeLivePeer(call)
+  return null
 }
 
 /** Stops audio and the microphone and closes the peer; safe to call twice. */
