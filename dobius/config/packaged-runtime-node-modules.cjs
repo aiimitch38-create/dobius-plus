@@ -224,12 +224,19 @@ function isFileOnDisk(path) {
   }
 }
 
-// The file `exports` maps the package root to: a string, or the "." entry,
-// following the node/require/import/default conditions (arrays: first entry).
-// null when there is no root export to judge (subpath-only maps).
-function exportsRootEntry(exportsField) {
+// Condition sets Node matches for a package root: require() and import.
+const EXPORT_CONDITION_SETS = [
+  new Set(['node', 'require', 'default']),
+  new Set(['node', 'import', 'default'])
+]
+
+// The file `exports` maps the package root to under one condition set: a
+// string, or the "." entry, taking the first matching condition in the
+// manifest's own key order, as Node does (arrays: first entry). null when the
+// root is not exported under these conditions (subpath-only maps).
+function exportsRootEntry(exportsField, conditions) {
   if (Array.isArray(exportsField)) {
-    return exportsRootEntry(exportsField[0])
+    return exportsRootEntry(exportsField[0], conditions)
   }
   if (typeof exportsField === 'string') {
     return exportsField
@@ -239,29 +246,38 @@ function exportsRootEntry(exportsField) {
   }
   const keys = Object.keys(exportsField)
   if (keys.some((key) => key.startsWith('.'))) {
-    return '.' in exportsField ? exportsRootEntry(exportsField['.']) : null
+    return '.' in exportsField ? exportsRootEntry(exportsField['.'], conditions) : null
   }
-  for (const condition of ['node', 'require', 'import', 'default']) {
-    if (condition in exportsField) {
-      return exportsRootEntry(exportsField[condition])
+  for (const key of keys) {
+    if (conditions.has(key)) {
+      return exportsRootEntry(exportsField[key], conditions)
     }
   }
   return null
 }
 
-// A package's entry file, Node's way: the root of `exports` when it has one,
+// A package's entry file, Node's way: the root of `exports` when it has one
+// (judged under require() and import conditions; either loading is enough),
 // else `main` (as a file, with .js/.json/.node added, or a folder's index),
 // else index.js. Returns the missing entry, or null when it is there or cannot
-// be judged (subpath-only exports, or no main and no index.js).
-function missingPackageEntry(packageDir, manifest) {
+// be judged (subpath-only exports, or a dependency with no main and no
+// index.js). A package the packaged code imports by its bare name must have a
+// default index.js when it declares neither (requireDefaultIndex).
+function missingPackageEntry(packageDir, manifest, { requireDefaultIndex = false } = {}) {
   if (manifest.exports !== undefined) {
-    const entry = exportsRootEntry(manifest.exports)
-    if (entry == null) {
+    const entries = EXPORT_CONDITION_SETS.map((conditions) =>
+      exportsRootEntry(manifest.exports, conditions)
+    ).filter((entry) => entry != null)
+    if (entries.length === 0) {
       return null
     }
-    return isFileOnDisk(join(packageDir, entry)) ? null : entry
+    return entries.some((entry) => isFileOnDisk(join(packageDir, entry))) ? null : entries[0]
   }
-  if (manifest.main === undefined && !isFileOnDisk(join(packageDir, 'index.js'))) {
+  if (
+    manifest.main === undefined &&
+    !requireDefaultIndex &&
+    !isFileOnDisk(join(packageDir, 'index.js'))
+  ) {
     return null
   }
   const entry = manifest.main ?? 'index.js'
@@ -302,7 +318,11 @@ function resolveCopiedPackageDir(resourcesDir, packageName, fromDir) {
  * inside Resources, and require each package's manifest and entry file to be
  * real files there. Returns the problems found (empty when complete).
  */
-function findPackagedRuntimeClosureProblems(resourcesDir, packageNames) {
+function findPackagedRuntimeClosureProblems(
+  resourcesDir,
+  packageNames,
+  { rootImported = new Set() } = {}
+) {
   const problems = []
   const seen = new Set()
   const queue = packageNames.map((name) => ({ name, from: resourcesDir, via: 'packaged code' }))
@@ -331,7 +351,9 @@ function findPackagedRuntimeClosureProblems(resourcesDir, packageNames) {
       problems.push(`${name} (needed by ${via}): unreadable package.json (${error.code || error.message})`)
       continue
     }
-    const entry = missingPackageEntry(packageDir, manifest)
+    const entry = missingPackageEntry(packageDir, manifest, {
+      requireDefaultIndex: via === 'packaged code' && rootImported.has(name)
+    })
     if (entry) {
       problems.push(`${name} (needed by ${via}): its entry file ${entry} is not in the app`)
     }
@@ -366,6 +388,7 @@ function verifyPackagedMainRuntimeDeps(resourcesDir, asar = require('@electron/a
   )
   const missing = new Set()
   const imported = new Set()
+  const rootImported = new Set()
   for (const entry of runtimeEntries) {
     // Why: @electron/asar lists entries with host separators; Windows returns
     // backslashes, and extractFile expects that same host-style path.
@@ -378,6 +401,9 @@ function verifyPackagedMainRuntimeDeps(resourcesDir, asar = require('@electron/a
       }
       const packageName = packageNameFromSpecifier(specifier)
       imported.add(packageName)
+      if (specifier === packageName) {
+        rootImported.add(packageName)
+      }
       if (!existsSync(join(resourcesDir, 'node_modules', ...packageName.split('/')))) {
         missing.add(packageName)
       }
@@ -392,7 +418,9 @@ function verifyPackagedMainRuntimeDeps(resourcesDir, asar = require('@electron/a
     )
   }
 
-  const problems = findPackagedRuntimeClosureProblems(resourcesDir, [...imported].sort())
+  const problems = findPackagedRuntimeClosureProblems(resourcesDir, [...imported].sort(), {
+    rootImported
+  })
   if (problems.length > 0) {
     throw new Error(
       `Packaged app is missing ${problems.length} runtime dependencies:\n  ${problems.join('\n  ')}`

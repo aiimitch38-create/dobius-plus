@@ -323,6 +323,35 @@ describe('electron-builder config', () => {
       })
     })
 
+    it('reads exports conditions in the manifest order, as Node does', async () => {
+      await withResources(async (resourcesDir) => {
+        await writeCopiedPackage(
+          resourcesDir,
+          'ordered',
+          { exports: { default: './working.js', node: './missing.js' } },
+          ['working.js']
+        )
+        expect(verifyWithMainImport(resourcesDir, 'ordered')).not.toThrow()
+      })
+    })
+
+    it('requires a default index.js for a bare import with no main or exports', async () => {
+      await withResources(async (resourcesDir) => {
+        await writeCopiedPackage(resourcesDir, 'bare', {}, [])
+        expect(verifyWithMainImport(resourcesDir, 'bare')).toThrow(
+          'bare (needed by packaged code): its entry file index.js is not in the app'
+        )
+      })
+    })
+
+    it('allows a metadata-only transitive dependency', async () => {
+      await withResources(async (resourcesDir) => {
+        await writeCopiedPackage(resourcesDir, 'top', { dependencies: { meta: '1.0.0' } })
+        await writeCopiedPackage(resourcesDir, 'meta', {}, [])
+        expect(verifyWithMainImport(resourcesDir, 'top')).not.toThrow()
+      })
+    })
+
     it('finds no gaps in the real runtime closure staged as Resources', async () => {
       await withResources(async (resourcesDir) => {
         for (const resource of createPackagedRuntimeNodeModuleResources()) {
