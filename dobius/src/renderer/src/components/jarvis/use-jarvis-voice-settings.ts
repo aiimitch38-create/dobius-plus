@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useAppStore } from '@/store'
 import {
   resolveActiveVoiceEngine,
   resolveLiveVoiceSettings,
@@ -68,9 +69,18 @@ export function useJarvisVoiceSettings(): {
         applyVoice(updates.voice as VoiceSettings | undefined)
       }
     })
+    // Why also the store: main never sends settings:changed back to the window
+    // that made the change, and Settings > Voice lives in this same window.
+    const unsubscribeStore = useAppStore.subscribe((state, prev) => {
+      const voice = state.settings?.voice
+      if (voice && voice !== prev.settings?.voice) {
+        applyVoice(voice)
+      }
+    })
     return () => {
       cancelled = true
       unsubscribe()
+      unsubscribeStore()
     }
   }, [])
 
