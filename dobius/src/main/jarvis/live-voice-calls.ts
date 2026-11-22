@@ -9,6 +9,8 @@ import type {
   OpenAiLiveFailure
 } from '../../shared/speech-types'
 import type { AdamAskOptions } from './adam-conversation'
+import { logLiveVoiceProblem } from './live-voice-log'
+import { runQuickHand, type QuickHandsDeps } from './live-voice-quick-hands'
 import { LIVE_METER_TICK_MS, type LiveVoiceMeter } from './live-voice-meter'
 import { liveVoiceFailure } from './openai-live-session'
 
@@ -131,6 +133,10 @@ export type LiveVoiceCallsDeps = {
    * the caller can escalate. The meter runs until the call is reported gone.
    */
   forceEnd?: (attempt: number) => void
+  /** Instant local answers (terminals, usage) tried before ADAM; absent = ADAM only. */
+  quickHands?: QuickHandsDeps
+  /** Writes one line to the live voice log (defaults to the log file). */
+  log?: (source: string, text: string) => void
   now?: () => number
   setInterval?: (handler: () => void, ms: number) => unknown
   clearInterval?: (timer: unknown) => void
@@ -275,6 +281,25 @@ export class LiveVoiceCalls {
     if (!request || request.length > LIVE_REQUEST_MAX_CHARS) {
       return { ok: false, error: 'The request was empty or too long.' }
     }
+    const clock = this.deps.now ?? Date.now
+    const startedAt = clock()
+    const log = this.deps.log ?? logLiveVoiceProblem
+    // Why before the busy check: a quick hand never touches ADAM's turn, so it
+    // may answer while he works on something else.
+    if (this.deps.quickHands) {
+      try {
+        const quick = await runQuickHand(request, this.deps.quickHands)
+        if (quick) {
+          log('timing', `quick:${quick.name} ${clock() - startedAt}ms`)
+          return this.ownerId === ownerId
+            ? { ok: true, kind: 'answer', speak: speakableReply(quick.speak) }
+            : { ok: true, kind: 'cancelled', speak: '' }
+        }
+      } catch (error) {
+        // Falls through: ADAM gets the request as if no quick hand existed.
+        log('quick-hand', error instanceof Error ? error.message : String(error))
+      }
+    }
     // Why refuse here, before asking: a second spoken request while ADAM
     // works (or while a typed Board turn runs) must not cancel or queue.
     if (this.delegation || this.deps.isAdamBusy()) {
@@ -291,6 +316,7 @@ export class LiveVoiceCalls {
       // worked means nobody is listening for this answer any more.
       // A "stop" clears the token: even an answer that finished meanwhile
       // must not be spoken.
+      log('timing', `adam ${clock() - startedAt}ms`)
       if (this.ownerId !== ownerId || this.delegation?.token !== token) {
         return { ok: true, kind: 'cancelled', speak: '' }
       }

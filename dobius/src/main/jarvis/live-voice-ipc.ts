@@ -9,6 +9,7 @@ import type { AdamThreadStore } from './adam-thread-store'
 import { LiveVoiceCalls } from './live-voice-calls'
 import { LiveVoiceMeter } from './live-voice-meter'
 import { logLiveVoiceProblem } from './live-voice-log'
+import type { QuickHandsDeps } from './live-voice-quick-hands'
 import { buildLiveVoiceInstructions } from './live-voice-prompt'
 import { createOpenAiLiveSession, liveVoiceFailure } from './openai-live-session'
 import type { OpenAiLiveSessionOptions } from './openai-live-session'
@@ -24,6 +25,8 @@ export type LiveVoiceIpcDeps = {
   cancelAdam: () => void
   lookingAt: () => AdamLookingAt | null
   thread: () => AdamThreadStore
+  /** Instant local answers tried before ADAM on every spoken request. */
+  quickHands?: QuickHandsDeps
 }
 
 async function liveSessionOptions(
@@ -67,7 +70,8 @@ function getLiveCalls(store: Store, deps: LiveVoiceIpcDeps): LiveVoiceCalls {
     cancelAdam: deps.cancelAdam,
     lookingAt: deps.lookingAt,
     appendThread: (row) => deps.thread().append(row),
-    forceEnd: forceEndLiveCall
+    forceEnd: forceEndLiveCall,
+    quickHands: deps.quickHands
   })
   return liveCalls
 }
