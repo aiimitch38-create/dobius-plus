@@ -3277,6 +3277,8 @@ export type PersistedUIState = {
   showDotfilesByWorktree?: Record<string, boolean>
   filterRepoIds: string[]
   collapsedGroups: string[]
+  /** Worktrees whose sidebar Snoozed shelf is unfolded. Folded is the default. */
+  snoozedShelfOpenWorktreeIds?: string[]
   uiZoomLevel: number
   editorFontZoomLevel: number
   worktreeCardProperties: WorktreeCardProperty[]

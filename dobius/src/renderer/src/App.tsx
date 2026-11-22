@@ -18,6 +18,7 @@ import {
 import { BoardSurfaceCover } from './components/board/BoardSurfaceCover'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useIpcEvents } from './hooks/useIpcEvents'
+import { useTabSnooze } from './hooks/useTabSnooze'
 import { useConsoleTileSync } from './components/board/board-browser-link/console-tile-sync'
 import { useAutomationDispatchEvents } from './hooks/useAutomationDispatchEvents'
 import RetainedAgentsSyncGate from './components/dashboard/RetainedAgentsSyncGate'
@@ -243,6 +244,7 @@ function App(): React.JSX.Element {
 
   // Subscribe to IPC push events
   useIpcEvents()
+  useTabSnooze()
   useAutomationDispatchEvents()
   // Why: main drops a tile's console binding when its guest unregisters; the
   // App-level mirror keeps the set true while the Board is open or closed.
