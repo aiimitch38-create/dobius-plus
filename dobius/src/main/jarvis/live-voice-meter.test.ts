@@ -80,7 +80,7 @@ describe('LiveVoiceMeter', () => {
     writeFileSync(file, '{not json')
     const meter = new LiveVoiceMeter(file, clock)
     expect(meter.available).toBe(false)
-    expect(meter.reserve(15)).toBe(false)
+    expect(meter.reserve(15)).toBeNull()
     expect(readFileSync(file, 'utf8')).toBe('{not json')
   })
 
@@ -90,5 +90,35 @@ describe('LiveVoiceMeter', () => {
 
   it('estimates per the published per-minute prices', () => {
     expect(estimateLiveUsd({ activeSec: 120 * 60, standbySec: 360 * 60 })).toBeCloseTo(13.2, 6)
+  })
+})
+
+describe('LiveVoiceMeter fail-closed (review round 2b)', () => {
+  it('treats valid JSON with the wrong shape as damaged and keeps it', () => {
+    for (const body of ['{}', '[]', '{"version":1,"days":{"2026-11-22":{"activeSec":-5}}}', '{"version":2,"days":{}}']) {
+      writeFileSync(file, body)
+      const meter = new LiveVoiceMeter(file, clock)
+      expect(meter.available).toBe(false)
+      expect(meter.reserve(15)).toBeNull()
+      expect(readFileSync(file, 'utf8')).toBe(body)
+    }
+  })
+
+  it('calls work again once Carson deletes or fixes a damaged file', () => {
+    writeFileSync(file, '{not json')
+    const meter = new LiveVoiceMeter(file, clock)
+    expect(meter.available).toBe(false)
+    rmSync(file)
+    expect(meter.available).toBe(true)
+  })
+
+  it('gives a reservation back to the day it was taken from', () => {
+    now = new Date(2026, 10, 22, 23, 59, 55).getTime()
+    const meter = new LiveVoiceMeter(file, clock)
+    const day = meter.reserve(15)
+    expect(day).toBe(localDayKey(now))
+    now += 10_000
+    meter.release(15, day as string)
+    expect(JSON.parse(readFileSync(file, 'utf8')).days[day as string].activeSec).toBe(0)
   })
 })

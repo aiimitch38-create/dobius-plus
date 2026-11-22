@@ -149,7 +149,7 @@ export class LiveVoiceCalls {
   // Why a token per call: transcript row ids are `live:<call>:<item>:<role>`,
   // stable within a call so a resent line is saved once.
   private callToken = ''
-  private reservedSec = 0
+  private reserved: { seconds: number; day: string } | null = null
   private capReachedAt: number | null = null
   private forceAttempts = 0
 
@@ -171,22 +171,26 @@ export class LiveVoiceCalls {
     if (meter.status(this.deps.capUsd()).overCap) {
       return liveVoiceFailure('over-cap')
     }
-    if (!meter.reserve(LIVE_SETUP_RESERVE_SEC)) {
+    const day = meter.reserve(LIVE_SETUP_RESERVE_SEC)
+    if (!day) {
       return liveVoiceFailure('meter-unavailable')
     }
-    this.reservedSec = LIVE_SETUP_RESERVE_SEC
+    this.reserved = { seconds: LIVE_SETUP_RESERVE_SEC, day }
     return null
   }
 
   /** No call came of the reserved start; the charge stays unless never billed. */
   setupFailed(kind: OpenAiLiveErrorKind): void {
-    if (this.reservedSec > 0 && SETUP_NOT_BILLED.has(kind)) {
-      this.deps.meter.release(this.reservedSec)
+    if (this.reserved && SETUP_NOT_BILLED.has(kind)) {
+      this.deps.meter.release(this.reserved.seconds, this.reserved.day)
     }
-    this.reservedSec = 0
+    this.reserved = null
   }
 
-  /** Returns the call's token; every later call IPC must carry it. */
+  /**
+   * Returns the call's token; every later call IPC must carry it. The caller
+   * registers the owner, then calls tick() so the first notice can reach it.
+   */
   callStarted(ownerId: number): string {
     if (this.ownerId !== null) {
       this.callEnded(this.ownerId)
@@ -195,15 +199,14 @@ export class LiveVoiceCalls {
     this.callToken = randomUUID()
     this.capReachedAt = null
     this.forceAttempts = 0
-    this.deps.meter.start(this.reservedSec)
-    this.reservedSec = 0
+    this.deps.meter.start(this.reserved?.seconds ?? 0)
+    this.reserved = null
     const timer = (this.deps.setInterval ?? ((run, ms) => setInterval(run, ms)))(
       () => this.tick(),
       LIVE_METER_TICK_MS
     )
     ;(timer as { unref?: () => void } | null)?.unref?.()
     this.timer = timer
-    this.tick()
     return this.callToken
   }
 

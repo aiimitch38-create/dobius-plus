@@ -42,8 +42,24 @@ export function estimateLiveUsd(usage: LiveVoiceDayUsage): number {
   )
 }
 
-function finiteSeconds(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+const isSeconds = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0
+
+/** The saved days, or null when the file is not exactly what this meter writes. */
+function parseDays(text: string): Record<string, LiveVoiceDayUsage> | null {
+  const parsed = JSON.parse(text) as Partial<MeterFile> | null
+  const days = parsed?.days
+  if (parsed?.version !== 1 || !days || typeof days !== 'object' || Array.isArray(days)) {
+    return null
+  }
+  const out: Record<string, LiveVoiceDayUsage> = {}
+  for (const [key, value] of Object.entries(days)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || !isSeconds(value?.activeSec) || !isSeconds(value?.standbySec)) {
+      return null
+    }
+    out[key] = { activeSec: value.activeSec, standbySec: value.standbySec }
+  }
+  return out
 }
 
 /**
@@ -71,6 +87,11 @@ export class LiveVoiceMeter {
 
   /** True when today's total is known and saved, so the cap can be trusted. */
   get available(): boolean {
+    // Why reload: Carson may have fixed or deleted a damaged file since.
+    if (this.problem === 'damaged') {
+      this.problem = null
+      this.days = null
+    }
     this.load()
     if (this.problem === 'unsaved') {
       this.save()
@@ -78,20 +99,24 @@ export class LiveVoiceMeter {
     return this.problem === null
   }
 
-  /** Counts seconds now, before a session exists; false (and nothing kept) if not saved. */
-  reserve(seconds: number): boolean {
-    this.addActive(seconds)
+  /**
+   * Counts seconds now, before a session exists. Returns the day they were
+   * counted on, or null (and nothing kept) when they could not be saved.
+   */
+  reserve(seconds: number): string | null {
+    const day = localDayKey(this.now())
+    this.addActive(seconds, day)
     this.save()
     if (this.problem === null) {
-      return true
+      return day
     }
-    this.addActive(-seconds)
-    return false
+    this.addActive(-seconds, day)
+    return null
   }
 
-  /** Gives back reserved seconds that were never billed. */
-  release(seconds: number): void {
-    this.addActive(-seconds)
+  /** Gives back reserved seconds that were never billed, on the day they were taken. */
+  release(seconds: number, day: string): void {
+    this.addActive(-seconds, day)
     this.save()
   }
 
@@ -142,9 +167,8 @@ export class LiveVoiceMeter {
     this.save()
   }
 
-  private addActive(seconds: number): void {
+  private addActive(seconds: number, key: string): void {
     const days = this.load()
-    const key = localDayKey(this.now())
     const day = days[key] ?? { activeSec: 0, standbySec: 0 }
     days[key] = { ...day, activeSec: Math.max(0, day.activeSec + seconds) }
   }
@@ -169,25 +193,18 @@ export class LiveVoiceMeter {
     if (this.days) {
       return this.days
     }
-    const days: Record<string, LiveVoiceDayUsage> = {}
+    let days: Record<string, LiveVoiceDayUsage> | null = {}
     try {
-      const parsed = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<MeterFile>
-      for (const [key, value] of Object.entries(parsed?.days ?? {})) {
-        if (/^\d{4}-\d{2}-\d{2}$/.test(key) && value && typeof value === 'object') {
-          days[key] = {
-            activeSec: finiteSeconds(value.activeSec),
-            standbySec: finiteSeconds(value.standbySec)
-          }
-        }
-      }
+      days = parseDays(readFileSync(this.file, 'utf8'))
     } catch (error) {
-      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-        this.problem = 'damaged'
-        console.warn('[jarvis-live] spend meter file is damaged; live calls are refused:', error)
-      }
+      days = (error as NodeJS.ErrnoException)?.code === 'ENOENT' ? {} : null
     }
-    this.days = days
-    return days
+    if (!days) {
+      this.problem = 'damaged'
+      console.warn('[jarvis-live] spend meter file is damaged; live calls are refused')
+    }
+    this.days = days ?? {}
+    return this.days
   }
 
   private save(): void {

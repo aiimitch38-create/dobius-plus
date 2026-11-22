@@ -202,6 +202,7 @@ async function connectLiveSession(
     }
     const callToken = calls.callStarted(sender.id)
     setActiveLiveSession(sender, result.sessionId, callToken)
+    calls.tick()
     return { ...result, callToken }
   } catch (error) {
     calls.setupFailed('network')

@@ -56,7 +56,7 @@ export class LiveVoiceCall {
     this.timers = new NamedTimers(deps.setTimeout, deps.clearTimeout)
     this.levels = new LiveLevels(deps.levelOf)
     this.link = new LiveSessionLink(deps.api)
-    this.transcript = new LiveTranscript((line) => this.link.transcript(line))
+    this.transcript = new LiveTranscript((line) => this.link.transcript(line), this.now)
     this.delegations = new LiveDelegations({
       link: this.link,
       transcript: this.transcript,
@@ -229,7 +229,10 @@ export class LiveVoiceCall {
         this.transcript.addOutput(event.delta)
         this.touchIdle()
         this.update({ state: 'speaking' })
-        this.timers.arm('speaking', LIVE_SPEAKING_QUIET_MS, () => this.settleState())
+        this.timers.arm('speaking', LIVE_SPEAKING_QUIET_MS, () => {
+          this.transcript.replyFinished()
+          this.settleState()
+        })
         return
       case 'delegation':
         this.touchIdle()
@@ -282,7 +285,7 @@ export class LiveVoiceCall {
     }
     // Why before reporting closed: main only saves lines for its active call.
     if (call.connected) {
-      this.transcript.flush()
+      this.transcript.endCall()
       this.link.close()
     }
     closeLivePeer(call)
@@ -331,9 +334,7 @@ export class LiveVoiceCall {
     }
   }
 
-  protected now(): number {
-    return (this.deps.now ?? Date.now)()
-  }
+  protected now = (): number => (this.deps.now ?? Date.now)()
 
   protected update(patch: Partial<LiveVoiceSnapshot>): void {
     const next = { ...this.snapshot, ...patch }

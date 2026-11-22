@@ -70,6 +70,13 @@ export class LiveDelegations {
     const isCurrent = (): boolean => host.generation() === generation && this.epoch === epoch
     this.pending += 1
     this.waitingForWords += 1
+    let waitingHere = true
+    const doneWaiting = (): void => {
+      if (waitingHere && host.generation() === generation) {
+        this.waitingForWords = Math.max(0, this.waitingForWords - 1)
+      }
+      waitingHere = false
+    }
     host.settle()
     try {
       // Why wait for words first: the delegation can arrive before the
@@ -84,7 +91,7 @@ export class LiveDelegations {
           return
         }
       }
-      this.waitingForWords = Math.max(0, this.waitingForWords - 1)
+      doneWaiting()
       const request = host.transcript.takeRequest()
       if (!request) {
         host.send(commentaryEvent(LIVE_NOT_HEARD_TEXT, delegationId))
@@ -110,6 +117,7 @@ export class LiveDelegations {
         host.send(commentaryEvent(say, delegationId))
       }
     } finally {
+      doneWaiting()
       if (host.generation() === generation) {
         this.pending = Math.max(0, this.pending - 1)
         host.settle()

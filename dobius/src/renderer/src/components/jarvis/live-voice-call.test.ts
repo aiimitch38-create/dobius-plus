@@ -504,3 +504,58 @@ describe('review round 2', () => {
     expect(texts).toContain('ok')
   })
 })
+
+describe('review round 2b', () => {
+  const emit = (type: 'input' | 'output', delta: string): void =>
+    peer().channel.emit({ type: `session.${type}_transcript.delta`, delta })
+  const saved = (): string[] =>
+    api.liveTranscript.mock.calls.map(([line]) => (line as { text: string }).text)
+
+  it('a stop that one delegation consumes does not leave another stuck waiting for words', async () => {
+    const call = makeCall()
+    await connected(call)
+    emit('input', 'never mind')
+    peer().channel.emit({ type: 'session.delegation.created' })
+    peer().channel.emit({ type: 'session.delegation.created' })
+    await vi.advanceTimersByTimeAsync(3_000)
+    // Small talk afterwards is saved as usual.
+    emit('output', 'Okay.')
+    emit('input', 'How are you')
+    emit('output', 'Good.')
+    emit('input', 'Great')
+    expect(saved()).toContain('How are you')
+  })
+
+  it('keeps skipping ADAM’s answer when Carson talks over it midway', async () => {
+    const call = makeCall()
+    await connected(call)
+    emit('input', 'Status')
+    peer().channel.emit({ type: 'session.delegation.created' })
+    await vi.advanceTimersByTimeAsync(600)
+    delegateReply.resolve({ ok: true, kind: 'answer', speak: 'Two agents run. Tests pass.' })
+    await vi.advanceTimersByTimeAsync(0)
+    emit('output', 'Two agents run.')
+    emit('input', 'uh huh')
+    emit('output', ' Tests pass.')
+    emit('input', 'thanks')
+    await call.hangUp()
+    expect(saved().join(' ')).not.toContain('Tests pass')
+  })
+
+  it('an answer never spoken before hang-up does not hide the next call’s small talk', async () => {
+    const call = makeCall()
+    await connected(call)
+    emit('input', 'Status')
+    peer().channel.emit({ type: 'session.delegation.created' })
+    await vi.advanceTimersByTimeAsync(600)
+    delegateReply.resolve({ ok: true, kind: 'answer', speak: 'All fine.' })
+    await vi.advanceTimersByTimeAsync(0)
+    await call.hangUp()
+    connect = deferred()
+    await connected(call)
+    emit('input', 'Hello again')
+    emit('output', 'Hi.')
+    emit('input', 'Bye now')
+    expect(saved()).toContain('Hi.')
+  })
+})

@@ -334,3 +334,15 @@ describe('money safety (review round 2)', () => {
     expect(calls.reserveStart()).toMatchObject({ ok: false, kind: 'meter-unavailable' })
   })
 })
+
+describe('cap notice order (review round 2b)', () => {
+  it('does not tick before the call is registered, so the first notice reaches the window', () => {
+    cap = 0.001
+    const calls = new LiveVoiceCalls({ ...depsFor(), now: () => now })
+    calls.callStarted(7)
+    expect(notices).toHaveLength(0)
+    now += 2_000
+    calls.tick()
+    expect(notices.at(-1)?.kind).toBe('cap-reached')
+  })
+})
