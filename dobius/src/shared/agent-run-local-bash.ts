@@ -33,14 +33,16 @@ const EXECUTING_ARGS: Readonly<Record<string, readonly string[]>> = {
   git: ['--upload-pack', '--receive-pack', '--exec', '--ext-diff', '--textconv', '--open-files-in-pager']
 }
 
+// Git subcommands that read, stage or record, and never rewrite files in the
+// working tree. Left out because they can put any file in place of
+// package.json or a tool config: mv, rm, restore, reset, checkout, switch,
+// stash, apply, am, cherry-pick, merge, rebase, pull.
 const QUIET_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set([
   'status', 'diff', 'log', 'show', 'add', 'branch', 'rev-parse', 'ls-files', 'blame', 'merge-base',
-  'describe', 'reset', 'rm', 'mv'
+  'describe'
 ])
-// These run the repository's hooks, so they are local only with hooks switched off.
-const HOOK_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set([
-  'commit', 'checkout', 'switch', 'restore', 'stash'
-])
+// Runs the repository's hooks, so it is local only with hooks switched off.
+const HOOK_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set(['commit'])
 const HOOKS_OFF = 'core.hooksPath=/dev/null'
 
 // Typecheck, test and lint tools, run directly or through a package-runner wrapper.
@@ -144,6 +146,7 @@ function judgeSimpleCommand(command: ShellSimpleCommand): BashVerdict {
   const name = command.words[0].replace(SYSTEM_COMMAND_DIR, '')
   const args = command.words.slice(1)
   if (
+    command.rewritesWords ||
     command.words.some(namesDevice) ||
     command.redirectTargets.some((target) => namesDevice(target) || !PLAIN_FILE_PATH.test(target))
   ) {

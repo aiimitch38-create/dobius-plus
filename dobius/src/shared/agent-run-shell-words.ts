@@ -8,9 +8,16 @@ export type ShellSimpleCommand = {
   words: string[]
   /** Files the command redirects to or from. */
   redirectTargets: string[]
+  /**
+   * True when the shell would rewrite a word before the command sees it, in a
+   * way that could turn it into a different command or option: any `$`
+   * expansion, or a glob (`*`, `?`, `[`) in the command name, in an option, or
+   * at the start of a word. With a file named `-exec`, `-ex?c` becomes `-exec`.
+   */
+  rewritesWords: boolean
 }
 
-type RawWord = { text: string; redirect: boolean }
+type RawWord = { text: string; redirect: boolean; rewrites: boolean }
 
 // `>file`, `>>file`, `2>file`, `&>file`, `<file`; the target may be the next word.
 const FILE_REDIRECT = /^\d*(?:&>>|&>|>>|>\||>|<)(.*)$/
@@ -23,14 +30,16 @@ function readRawSegments(command: string): RawWord[][] | null {
   let text = ''
   let inWord = false
   let redirect = false
+  let rewrites = false
   let quote: '"' | "'" | null = null
   const endWord = (): void => {
     if (inWord) {
-      words.push({ text, redirect })
+      words.push({ text, redirect, rewrites })
     }
     text = ''
     inWord = false
     redirect = false
+    rewrites = false
   }
   const endSegment = (): void => {
     endWord()
@@ -48,6 +57,8 @@ function readRawSegments(command: string): RawWord[][] | null {
         index += 1
         text += command[index]
       } else {
+        // `$` still expands inside double quotes.
+        rewrites ||= char === '$' && quote === '"'
         text += char
       }
       continue
@@ -79,6 +90,12 @@ function readRawSegments(command: string): RawWord[][] | null {
     } else if (char === ' ' || char === '\t' || char === '\r') {
       endWord()
     } else {
+      // A glob only matters where it could produce a command name or an
+      // option: at the start of the word, or in a word that already is one.
+      const isGlob = char === '*' || char === '?' || char === '['
+      rewrites ||=
+        char === '$' ||
+        (isGlob && (!inWord || text.startsWith('-') || words.every((entry) => entry.redirect)))
       text += char
       inWord = true
     }
@@ -93,6 +110,7 @@ function readRawSegments(command: string): RawWord[][] | null {
 function toSimpleCommand(raw: RawWord[]): ShellSimpleCommand | null {
   const words: string[] = []
   const redirectTargets: string[] = []
+  const rewritesWords = raw.some((word) => word.rewrites)
   for (let index = 0; index < raw.length; index += 1) {
     const word = raw[index]
     if (!word.redirect) {
@@ -118,7 +136,7 @@ function toSimpleCommand(raw: RawWord[]): ShellSimpleCommand | null {
     }
     redirectTargets.push(target)
   }
-  return words.length > 0 ? { words, redirectTargets } : null
+  return words.length > 0 ? { words, redirectTargets, rewritesWords } : null
 }
 
 // Command and process substitution run a second command inside the first,
