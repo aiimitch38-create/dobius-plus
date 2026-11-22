@@ -117,7 +117,11 @@ describe('buildAdamThreadMessage', () => {
     expect(header).toContain('approval box')
     // Relaying is his job, across every project, and he reports back in his one thread.
     expect(header).toContain('Passing work on is your job')
-    expect(header).toContain('dobius terminal read --help')
+    // He may type into any terminal, not only agent consoles, and reads before typing.
+    expect(header).toContain('dobius terminal list --json')
+    expect(header).toContain('dobius terminal read --terminal <handle>')
+    expect(header).toContain('dobius terminal send --terminal <handle> --text <text> --enter')
+    expect(header).toContain('you read a terminal before you type into it')
     expect(header).toContain('what you sent to which console in which project')
     expect(header).toContain('the same in every project')
   })
