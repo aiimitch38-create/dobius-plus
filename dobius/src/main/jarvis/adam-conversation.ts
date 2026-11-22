@@ -124,6 +124,7 @@ type AdamBrain = { ask: (text: string) => Promise<JarvisAskResult> }
  */
 export class AdamConversation {
   private inFlight = false
+  private cancelRequested = false
 
   constructor(
     private readonly brain: AdamBrain,
@@ -133,6 +134,22 @@ export class AdamConversation {
   /** True while a turn is running; a new ask would be refused as busy. */
   isBusy(): boolean {
     return this.inFlight
+  }
+
+  /** Same as isBusy(); a live call checks it before asking. */
+  get busy(): boolean {
+    return this.inFlight
+  }
+
+  /**
+   * Stops the running turn from reaching the brain if it has not yet.
+   * Why: the asked row is saved first, and a "stop" landing during that save
+   * would otherwise be lost (the brain has nothing to cancel yet).
+   */
+  cancel(): void {
+    if (this.inFlight) {
+      this.cancelRequested = true
+    }
   }
 
   async ask(
@@ -145,12 +162,15 @@ export class AdamConversation {
       return { kind: 'error', text: ADAM_BUSY_TEXT }
     }
     this.inFlight = true
+    this.cancelRequested = false
     const turn = { turnId: randomUUID(), source: options.source }
     try {
       await this.announce({ ...turn, phase: 'asked', text: options.said ?? text, at: Date.now() })
       let result: JarvisAskResult
       try {
-        result = await this.brain.ask(text)
+        result = this.cancelRequested
+          ? { kind: 'cancelled', text: '' }
+          : await this.brain.ask(text)
       } catch {
         result = { kind: 'error', text: 'ADAM is unreachable' }
       }

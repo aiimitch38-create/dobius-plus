@@ -7,6 +7,7 @@ import { SAVED_PRESETS, type OrbCharacterProps } from 'orb-character'
 import type { DictationState } from '../../../../shared/speech-types'
 import type { JarvisTurn } from '../jarvis/use-jarvis-turn'
 import type { VoiceAgent } from '../jarvis/use-voice-agent'
+import type { LiveVoice } from '../jarvis/use-live-voice'
 import { DictationIndicator } from './DictationIndicator'
 import { VoiceOrb } from './VoiceOrb'
 import { getVoiceOrbPresentation, voiceOrbLevelSource } from './voice-orb-live-level'
@@ -16,7 +17,8 @@ const voice = vi.hoisted(() => ({
   setLabel: vi.fn(),
   jarvis: {} as JarvisTurn,
   agent: {} as VoiceAgent,
-  flags: { jarvisEnabled: true, agentId: '' },
+  live: {} as LiveVoice,
+  flags: { jarvisEnabled: true, agentId: '', engine: '' },
   props: {} as OrbCharacterProps
 }))
 
@@ -31,8 +33,15 @@ vi.mock('@/store', () => ({
 vi.mock('../board/board-route/adam-voice-thread', () => ({ useAdamVoiceThread: () => undefined }))
 vi.mock('../jarvis/use-jarvis-turn', () => ({ useJarvisTurn: () => voice.jarvis }))
 vi.mock('../jarvis/use-voice-agent', () => ({ useVoiceAgent: () => voice.agent }))
+vi.mock('../jarvis/use-live-voice', () => ({ useLiveVoice: () => voice.live }))
 vi.mock('../jarvis/use-jarvis-voice-settings', () => ({
-  useJarvisVoiceSettings: () => ({ flags: voice.flags })
+  useJarvisVoiceSettings: () => ({
+    flags: {
+      ...voice.flags,
+      activeVoiceEngine: voice.flags.engine || (voice.flags.agentId ? 'elevenlabs' : 'hermes'),
+      liveVoice: { micMode: 'push-to-talk' }
+    }
+  })
 }))
 vi.mock('orb-character', () => ({
   SAVED_PRESETS: Object.freeze({}),
@@ -78,7 +87,17 @@ beforeEach(() => {
   })
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
   voice.dictationState = 'idle'
-  voice.flags = { jarvisEnabled: true, agentId: '' }
+  voice.flags = { jarvisEnabled: true, agentId: '', engine: '' }
+  voice.live = {
+    state: 'idle',
+    muted: false,
+    errorText: null,
+    active: false,
+    press: vi.fn(),
+    hangUp: vi.fn(),
+    getInputLevel: vi.fn(() => 0.3),
+    getOutputLevel: vi.fn(() => 0.7)
+  }
   voice.jarvis = {
     hudState: 'idle',
     wakeArmed: false,
@@ -109,6 +128,28 @@ afterEach(async () => {
 })
 
 describe('the shared voice character coordinator', () => {
+  it('lets an OpenAI Live call own the shortcut and show ADAM working', async () => {
+    voice.flags.engine = 'openai-live'
+    voice.live.state = 'thinking'
+    await render()
+    expect(window.api.jarvis.onPttPressed).toHaveBeenCalledTimes(1)
+    vi.mocked(window.api.jarvis.onPttPressed).mock.calls[0][0]({ at: 0 })
+    expect(voice.live.press).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('[data-character="thinking"]')).not.toBeNull()
+    expect(voice.setLabel).toHaveBeenLastCalledWith('ADAM is working on it...')
+    voice.live.state = 'speaking'
+    await render()
+    await tick()
+    expect(container.querySelector('[data-character="speaking"][data-activity="0.7"]')).not.toBeNull()
+    expect(voice.live.hangUp).not.toHaveBeenCalled()
+  })
+
+  it('hangs up a live call when another engine takes over', async () => {
+    voice.flags.engine = 'hermes'
+    await render()
+    expect(voice.live.hangUp).toHaveBeenCalled()
+  })
+
   it('shares phases and live output across Home and composer with one shortcut subscription', async () => {
     voice.flags.agentId = 'agent'
     voice.agent.state = 'listening'

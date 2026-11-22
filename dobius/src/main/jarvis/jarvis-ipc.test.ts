@@ -1,10 +1,12 @@
 import { join } from 'node:path'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import type { BrowserWindow } from 'electron'
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Store } from '../persistence'
+import { localDayKey } from './live-voice-meter'
+import type * as LiveVoiceSettingsModule from '../../shared/live-voice-settings'
 
 type Handler = (...args: unknown[]) => unknown
 
@@ -69,7 +71,7 @@ vi.mock('./openai-live-session', () => ({
   liveVoiceFailure: (kind: string) => ({ ok: false, kind, error: kind })
 }))
 vi.mock('../../shared/live-voice-settings', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../shared/live-voice-settings')>()
+  const actual = await importOriginal<typeof LiveVoiceSettingsModule>()
   return {
     ...actual,
     get OPENAI_LIVE_CALL_READY() {
@@ -82,9 +84,11 @@ vi.mock('../speech/speech-runtime-service', () => ({
   getSpeechSttService: () => ({ startDictation: async () => undefined })
 }))
 
+const selfEditWin = vi.hoisted(() => ({ current: null as unknown }))
 vi.mock('../window/self-edit-window', () => ({
   closeSelfEditWindow: () => undefined,
-  showSelfEditProposal: () => undefined
+  showSelfEditProposal: () => undefined,
+  getSelfEditWindow: () => selfEditWin.current
 }))
 
 vi.mock('./self-edit-repo-root', () => ({
@@ -332,6 +336,17 @@ describe('OpenAI Live session IPC', () => {
     return { sender: contents, senderFrame: contents.mainFrame }
   }
 
+  // Connects and returns the call token main issued for this call.
+  async function callToken(contents: LiveContents): Promise<string> {
+    const result = (await handler('jarvis:liveSessionConnect')(from(contents), {
+      offerSdp: 'v=0 offer'
+    })) as { callToken?: string }
+    if (!result.callToken) {
+      throw new Error(`no call token: ${JSON.stringify(result)}`)
+    }
+    return result.callToken
+  }
+
   function handler(channel: string): Handler {
     const found = electron.handlers.get(channel)
     if (!found) {
@@ -359,10 +374,19 @@ describe('OpenAI Live session IPC', () => {
       apiKey: 'x'
     })
 
-    expect(result).toEqual({ ok: true, answerSdp: 'v=0', sessionId: 's1' })
+    expect(result).toEqual({
+      ok: true,
+      answerSdp: 'v=0',
+      sessionId: 's1',
+      callToken: expect.any(String)
+    })
     expect(live.create).toHaveBeenCalledWith(
       'v=0 offer',
-      { voice: 'cedar', idleTimeoutSec: 45 },
+      {
+        voice: 'cedar',
+        idleTimeoutSec: 45,
+        instructions: expect.stringContaining('You are the voice of ADAM')
+      },
       { signal: expect.any(AbortSignal) }
     )
   })
@@ -375,13 +399,18 @@ describe('OpenAI Live session IPC', () => {
     )
     const connect = handler('jarvis:liveSessionConnect')
 
-    await connect(from(contents), 'just a string')
-    await connect(from(contents), null)
-    await connect(from(contents), ['v=0'])
+    const report = handler('jarvis:liveSessionReport')
+    for (const payload of ['just a string', null, ['v=0']]) {
+      const result = (await connect(from(contents), payload)) as { callToken: string }
+      await report(from(contents), { type: 'closed', callToken: result.callToken })
+    }
 
     expect(live.create).toHaveBeenCalledTimes(3)
     for (const call of live.create.mock.calls) {
-      expect(call.slice(0, 2)).toEqual([undefined, { voice: 'marin', idleTimeoutSec: 60 }])
+      expect(call.slice(0, 2)).toEqual([
+        undefined,
+        { voice: 'marin', idleTimeoutSec: 60, instructions: expect.any(String) }
+      ])
     }
   })
 
@@ -437,6 +466,7 @@ describe('OpenAI Live session IPC', () => {
       ok: false,
       kind: 'busy'
     })
+    await vi.waitFor(() => expect(live.create).toHaveBeenCalledTimes(1))
     finish({ ok: true, answerSdp: 'v=0', sessionId: 's2' })
     expect(await first).toMatchObject({ ok: true, sessionId: 's2' })
   })
@@ -455,6 +485,8 @@ describe('OpenAI Live session IPC', () => {
     })
 
     const pending = handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    // The thread is read first, so the create starts a moment later.
+    await vi.waitFor(() => expect(seenSignal).toBeDefined())
     expect(seenSignal?.aborted).toBe(false)
     contents.emit('destroyed')
 
@@ -482,9 +514,15 @@ describe('OpenAI Live session IPC', () => {
     const { getActiveLiveSessionForTest } = await import('./jarvis-ipc')
     const connect = handler('jarvis:liveSessionConnect')
 
+    const report = handler('jarvis:liveSessionReport')
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      await connect(from(contents), { offerSdp: 'v=0 offer' })
+      const result = (await connect(from(contents), { offerSdp: 'v=0 offer' })) as {
+        callToken: string
+      }
       expect(contents.listenerCount('destroyed')).toBe(1)
+      if (attempt < 4) {
+        await report(from(contents), { type: 'closed', callToken: result.callToken })
+      }
     }
     expect(getActiveLiveSessionForTest()).toEqual({ ownerId: 7, sessionId: 's1' })
 
@@ -509,6 +547,248 @@ describe('OpenAI Live session IPC', () => {
     await handler('jarvis:liveSessionConnect')(from(second.contents), { offerSdp: 'v=0 offer' })
     expect(second.contents.listenerCount('destroyed')).toBe(1)
     expect(getActiveLiveSessionForTest()).toMatchObject({ ownerId: 8 })
+  })
+
+  it('seeds a new session with the latest ADAM thread rows', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    await handler('jarvis:adamThreadAppend')(from(contents), {
+      id: 'r1',
+      role: 'user',
+      text: 'remember the blue button'
+    })
+    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    const options = live.create.mock.calls[0][1] as { instructions: string }
+    expect(options.instructions).toContain('remember the blue button')
+  })
+
+  it('refuses a new session once today is over the spending cap', async () => {
+    const { window, contents } = liveWindow()
+    writeFileSync(
+      join(electron.userData, 'live-voice-meter.json'),
+      JSON.stringify({ version: 1, days: { [localDayKey(Date.now())]: { activeSec: 60 * 60 * 5, standbySec: 0 } } })
+    )
+    await register(liveStore({ liveVoiceDailyCapUsd: 15 }), window)
+    expect(
+      await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    ).toMatchObject({ ok: false, kind: 'over-cap' })
+    expect(live.create).not.toHaveBeenCalled()
+  })
+
+  it('sends delegated requests to ADAM as voice turns, only from the window that owns the call', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    const delegate = handler('jarvis:liveDelegate')
+    expect(await delegate(from(contents), { request: 'status?' })).toMatchObject({ ok: false })
+
+    const token = await callToken(contents)
+    const other = liveWindow(99).contents
+    expect(
+      await delegate({ sender: other, senderFrame: other.mainFrame }, { request: 'status?', callToken: token })
+    ).toMatchObject({ ok: false })
+    expect(await delegate(from(contents), { request: 'status?' })).toMatchObject({ ok: false })
+    expect(await delegate(from(contents), { request: 'status?', callToken: token })).toEqual({
+      ok: true,
+      kind: 'answer',
+      speak: 'Adam Hermes reply'
+    })
+    expect(adam.ask).toHaveBeenCalledWith(expect.stringContaining('"status?"'))
+  })
+
+  it('stop cancels the live call’s ADAM turn, and hanging up stops the call', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    const token = await callToken(contents)
+    let finish: (value: { kind: 'cancelled'; text: '' }) => void = () => undefined
+    adam.ask.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve as never
+        })
+    )
+    adam.cancel.mockImplementationOnce(() => finish({ kind: 'cancelled', text: '' }))
+    const answer = handler('jarvis:liveDelegate')(from(contents), {
+      request: 'long job',
+      callToken: token
+    })
+    expect(await handler('jarvis:liveCancel')(from(contents), { callToken: token })).toEqual({
+      ok: true
+    })
+    expect(await answer).toEqual({ ok: true, kind: 'cancelled', speak: '' })
+
+    const { getActiveLiveSessionForTest } = await import('./jarvis-ipc')
+    expect(
+      await handler('jarvis:liveSessionReport')(from(contents), { type: 'closed', callToken: token })
+    ).toEqual({ ok: true })
+    expect(getActiveLiveSessionForTest()).toBeNull()
+  })
+
+  it('writes spoken small talk into ADAM’s thread for the owning window only', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    const transcript = handler('jarvis:liveTranscript')
+    const line = { role: 'user', text: 'hi', itemId: '1' }
+    expect(await transcript(from(contents), line)).toEqual({ ok: false })
+    const token = await callToken(contents)
+    expect(await transcript(from(contents), line)).toEqual({ ok: false })
+    expect(await transcript(from(contents), { ...line, callToken: token })).toEqual({ ok: true })
+    const rows = (await handler('jarvis:adamThreadGet')(from(contents))) as {
+      text: string
+      voice?: boolean
+    }[]
+    expect(rows.at(-1)).toMatchObject({ text: 'hi', voice: true })
+  })
+
+  it('forgets the call when its page reloads, so the reloaded page can call again', async () => {
+    const { window, contents } = liveWindow(7)
+    await register(liveStore({}), window)
+    const { getActiveLiveSessionForTest } = await import('./jarvis-ipc')
+    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: true })
+    expect(getActiveLiveSessionForTest()).not.toBeNull()
+    // Starting to navigate is not enough: the old page may still be alive.
+    contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+    expect(getActiveLiveSessionForTest()).not.toBeNull()
+    contents.emit('did-navigate')
+    expect(getActiveLiveSessionForTest()).toBeNull()
+    expect(contents.listenerCount('did-navigate')).toBe(0)
+    expect(contents.listenerCount('did-start-navigation')).toBe(0)
+  })
+
+  it('keeps a stalled hard-stop reload owned and metered, so the crash step still runs', async () => {
+    const { window, contents } = liveWindow(7)
+    const reload = vi.fn(() =>
+      contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+    )
+    const crash = vi.fn(() => contents.emit('render-process-gone'))
+    Object.assign(contents, { reload, forcefullyCrashRenderer: crash })
+    await register(liveStore({}), window)
+    const { getActiveLiveSessionForTest, forceEndLiveCallForTest } = await import('./jarvis-ipc')
+    await callToken(contents)
+    forceEndLiveCallForTest(1)
+    expect(getActiveLiveSessionForTest()).not.toBeNull()
+    forceEndLiveCallForTest(2)
+    expect(crash).toHaveBeenCalledTimes(1)
+    expect(getActiveLiveSessionForTest()).toBeNull()
+  })
+
+  it('a navigation that starts during setup still aborts the create', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    let seenSignal: AbortSignal | undefined
+    live.create.mockImplementationOnce((_offer, _options, deps) => {
+      seenSignal = (deps as { signal: AbortSignal }).signal
+      return new Promise((resolve) => {
+        seenSignal?.addEventListener('abort', () =>
+          resolve({ ok: false, kind: 'cancelled', error: 'cancelled' } as never)
+        )
+      })
+    })
+    const pending = handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    await vi.waitFor(() => expect(seenSignal).toBeDefined())
+    contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+    expect(await pending).toMatchObject({ ok: false, kind: 'cancelled' })
+  })
+
+  it('a stop during the thread save keeps the request from ever reaching ADAM', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    const token = await callToken(contents)
+    const answer = handler('jarvis:liveDelegate')(from(contents), {
+      request: 'deploy it',
+      callToken: token
+    })
+    await handler('jarvis:liveCancel')(from(contents), { callToken: token })
+    expect(await answer).toEqual({ ok: true, kind: 'cancelled', speak: '' })
+    expect(adam.ask).not.toHaveBeenCalled()
+  })
+
+  it('refuses a repeat connect while the window’s call is still open', async () => {
+    const { window, contents } = liveWindow(7)
+    await register(liveStore({}), window)
+    const { getActiveLiveSessionForTest } = await import('./jarvis-ipc')
+    await callToken(contents)
+    expect(
+      await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    ).toMatchObject({ ok: false, kind: 'busy' })
+    expect(live.create).toHaveBeenCalledTimes(1)
+    expect(getActiveLiveSessionForTest()).toEqual({ ownerId: 7, sessionId: 's1' })
+  })
+
+  it('a late "closed" from an earlier call does not end the call that replaced it', async () => {
+    const { window, contents } = liveWindow(7)
+    await register(liveStore({}), window)
+    const { getActiveLiveSessionForTest } = await import('./jarvis-ipc')
+    const report = handler('jarvis:liveSessionReport')
+    const first = await callToken(contents)
+    await report(from(contents), { type: 'closed', callToken: first })
+    live.create.mockResolvedValueOnce({ ok: true, answerSdp: 'v=0', sessionId: 's2' })
+    const second = await callToken(contents)
+    expect(second).not.toBe(first)
+    expect(await report(from(contents), { type: 'closed', callToken: first })).toEqual({ ok: false })
+    expect(await report(from(contents), { type: 'closed' })).toEqual({ ok: false })
+    expect(getActiveLiveSessionForTest()).toEqual({ ownerId: 7, sessionId: 's2' })
+  })
+
+  it('writes the setup charge to disk before the session is created', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    let onDisk = -1
+    live.create.mockImplementationOnce(async () => {
+      const file = JSON.parse(readFileSync(join(electron.userData, 'live-voice-meter.json'), 'utf8'))
+      onDisk = file.days[localDayKey(Date.now())].activeSec
+      return { ok: true, answerSdp: 'v=0', sessionId: 's1' }
+    })
+    await callToken(contents)
+    expect(onDisk).toBe(15)
+  })
+
+  it('ends a call from main by reloading a window that ignores the cap', async () => {
+    const { window, contents } = liveWindow(7)
+    const reload = vi.fn(() => contents.emit('did-navigate'))
+    Object.assign(contents, { reload, forcefullyCrashRenderer: vi.fn() })
+    await register(liveStore({}), window)
+    const { getActiveLiveSessionForTest, forceEndLiveCallForTest } = await import('./jarvis-ipc')
+    await callToken(contents)
+    forceEndLiveCallForTest(1)
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(getActiveLiveSessionForTest()).toBeNull()
+  })
+
+  it('self-edit and ElevenLabs key handlers answer only trusted top frames', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    const review = liveWindow(50).contents
+    selfEditWin.current = { isDestroyed: () => false, webContents: review }
+    const other = liveWindow(99).contents
+    const strangers = [
+      {},
+      { sender: other, senderFrame: other.mainFrame },
+      { sender: contents, senderFrame: { name: 'embedded frame' } }
+    ]
+    const notAllowed = { ok: false, error: expect.stringContaining('not allowed') }
+    for (const event of strangers) {
+      expect(await handler('jarvis:proposeSelfEdit')(event, 'a.ts', 'x', 'd')).toMatchObject(notAllowed)
+      expect(await handler('jarvis:applySelfEdit')(event, 'id1')).toMatchObject(notAllowed)
+      expect(await handler('jarvis:undoSelfEdit')(event, 'id1')).toMatchObject(notAllowed)
+      expect(await handler('jarvis:discardSelfEdit')(event, 'id1')).toEqual({ ok: false })
+      for (const channel of [
+        'jarvis:getElevenLabsKeyStatus',
+        'jarvis:saveElevenLabsKey',
+        'jarvis:clearElevenLabsKey'
+      ]) {
+        expect(() => handler(channel)(event, 'sk-new')).toThrow('not allowed')
+      }
+    }
+    // The review window may apply or discard what it shows, nothing else.
+    const fromReview = { sender: review, senderFrame: review.mainFrame }
+    expect(await handler('jarvis:applySelfEdit')(fromReview, 'id1')).not.toMatchObject(notAllowed)
+    expect(await handler('jarvis:proposeSelfEdit')(fromReview, 'a.ts', 'x', 'd')).toMatchObject(notAllowed)
+    expect(await handler('jarvis:getElevenLabsKeyStatus')(from(contents))).toMatchObject({
+      configured: false
+    })
+    expect(await handler('jarvis:undoSelfEdit')(from(contents), 'id1')).not.toMatchObject(notAllowed)
+    selfEditWin.current = null
   })
 
   it('has no connection-test handler, so nothing can open a session just to test', async () => {
