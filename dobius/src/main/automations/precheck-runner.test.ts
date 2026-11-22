@@ -52,6 +52,24 @@ describe('runAutomationPrecheck', () => {
     expect(result.error).toBeNull()
   })
 
+  it('settles as timed out even when a detached child keeps the output open', async () => {
+    // The grandchild leaves the process group (so the kill misses it) and
+    // inherits stdout, so `close` would not arrive until it exits.
+    const script =
+      "require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 15000)'], " +
+      "{ detached: true, stdio: 'inherit' }).unref(); setTimeout(() => {}, 15000)"
+    const started = Date.now()
+    const result = await runAutomationPrecheck({
+      precheck: { command: nodeCommand(script), timeoutSeconds: 1 },
+      target: { type: 'local', cwd }
+    })
+
+    expect(result.timedOut).toBe(true)
+    expect(result.exitCode).toBeNull()
+    expect(result.error).toContain('timed out')
+    expect(Date.now() - started).toBeLessThan(8000)
+  }, 12_000)
+
   it('marks a local precheck as timed out', async () => {
     const result = await runAutomationPrecheck({
       precheck: {

@@ -75,6 +75,10 @@ function failedPrecheckResult(
   })
 }
 
+const FORCE_KILL_AFTER_MS = 2000
+/** After a timeout: the force-kill delay plus a moment for `close` to arrive. */
+const SETTLE_AFTER_KILL_MS = FORCE_KILL_AFTER_MS + 1000
+
 function killLocalPrecheckProcessTree(child: ChildProcess): ReturnType<typeof setTimeout> | null {
   const pid = child.pid
   if (!pid) {
@@ -110,7 +114,7 @@ function killLocalPrecheckProcessTree(child: ChildProcess): ReturnType<typeof se
     } catch {
       /* process group already exited */
     }
-  }, 2000)
+  }, FORCE_KILL_AFTER_MS)
   forceKillTimer.unref?.()
   return forceKillTimer
 }
@@ -128,6 +132,7 @@ function runLocalPrecheck(
     let settled = false
     let timeout: ReturnType<typeof setTimeout> | null = null
     let forceKillTimer: ReturnType<typeof setTimeout> | null = null
+    let settleDeadline: ReturnType<typeof setTimeout> | null = null
 
     const child = spawn(precheck.command, {
       cwd: target.cwd,
@@ -150,6 +155,10 @@ function runLocalPrecheck(
         clearTimeout(forceKillTimer)
         forceKillTimer = null
       }
+      if (settleDeadline) {
+        clearTimeout(settleDeadline)
+        settleDeadline = null
+      }
       resolve(
         createPrecheckResult({ precheck, startedAt, stdout, stderr, exitCode, timedOut, error })
       )
@@ -158,6 +167,13 @@ function runLocalPrecheck(
     timeout = setTimeout(() => {
       timedOut = true
       forceKillTimer = killLocalPrecheckProcessTree(child)
+      // Why: `close` waits for stdout/stderr to end, and a descendant that left
+      // the process group keeps them open after the kill. Stop waiting.
+      settleDeadline = setTimeout(() => {
+        child.stdout?.destroy()
+        child.stderr?.destroy()
+        settle(null, `Precheck timed out after ${precheck.timeoutSeconds}s.`)
+      }, SETTLE_AFTER_KILL_MS)
     }, timeoutMs)
 
     child.stdout?.setEncoding('utf8')
