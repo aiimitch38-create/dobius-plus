@@ -2132,48 +2132,6 @@
               }
             }
           }
-        },
-        "CloseReasonDropdown": {
-          "e1f2a3b4c5": "Choose close reason"
-        },
-        "GitHubIssueCommentComposer": {
-          "082515176a": "Failed to add comment",
-          "9f88657c4e": "Issue closed",
-          "e9b7cb7d17": "Failed to close issue",
-          "bd3b4492a0": "Issue reopened",
-          "f2a8c1d903": "Failed to reopen issue",
-          "a1b2c3d4e5": "Add a comment",
-          "c5c117270e": "Add your comment here, be kind",
-          "f6a7b8c9d0": "Close issue",
-          "b1c2d3e4f5": "Reopen issue",
-          "0a73f59e85": "Send comment",
-          "bf43425540": "Comment",
-          "commentTooLarge": "Comment is too large to submit safely."
-        },
-        "GitHubWorkItemAssigneePopoverContent": {
-          "cddd9b04a7": "Loading assignees",
-          "a00830d3f7": "No users",
-          "4f8b6f2c1d": "Filter assignees..."
-        },
-        "GitHubWorkItemLabelPopoverContent": {
-          "2aa9acdf34": "Edit labels on GitHub",
-          "cddd9b04a7": "Loading labels",
-          "de26e2eb06": "No labels",
-          "8b0d52ee3a": "Filter labels..."
-        },
-        "githubIssueCloseReasons": {
-          "completed": {
-            "label": "Close as completed",
-            "description": "Done, closed, fixed, resolved"
-          },
-          "notPlanned": {
-            "label": "Close as not planned",
-            "description": "Won't fix, can't repro, stale"
-          },
-          "duplicate": {
-            "label": "Close as duplicate",
-            "description": "Duplicate of another issue"
-          }
         }
       },
       "linear": {
@@ -2398,15 +2356,6 @@
         },
         "sheet": {
           "1189e9fe0a": "Close"
-        },
-        "team": {
-          "multi": {
-            "combobox": {
-              "de83523bf9": "No teams match your search.",
-              "301f2a796e": "All teams",
-              "18ec58881e": "Search teams..."
-            }
-          }
         }
       },
       "terminal": {
@@ -3445,18 +3394,6 @@
         "UsageBreakdownSection": {
           "7765a4c3e1": "n/a",
           "247c93ca92": "• inferred pricing"
-        },
-        "UsageSessionsTable": {
-          "1afc25eb06": "Turns",
-          "0f03975d59": "Events",
-          "21ea00bfa8": "Cache",
-          "e0b988599d": "Total",
-          "01476891c7": "Last active",
-          "c17bed0416": "Project",
-          "f6a2c8d019": "Model",
-          "faf3444859": "Input",
-          "a8b7487ff7": "Output",
-          "cfe2282ffa": "Unknown"
         }
       },
       "sparse": {
@@ -4446,42 +4383,9 @@
           "6e7f8a9b0c": "Remove host…"
         },
         "LinearAgentSkillSetupPrompt": {
-          "missingCliAndSkill": "Dobius+ CLI and Linear agent skill are missing.",
-          "modalTitle": "Enable Linear ticket access",
-          "modalDescription": "Install the Linear skill from a terminal.",
-          "modalPrompt": "Enable agents to read and edit the attached Linear ticket.",
-          "dontShowAgain": "Don't show again",
-          "notNow": "Not now",
           "missingBoth": "Dobius+ CLI and Linear agent skill are missing.",
-          "missingCli": "Dobius+ CLI is missing.",
-          "missingSkill": "Linear agent skill is missing.",
-          "title": "Set up Linear agent skill",
-          "remoteCopy": "This installs host setup; remote agent environments may need separate setup.",
-          "hostCopy": "Install it for host agent handoffs from linked Linear work.",
-          "dismiss": "Dismiss Linear agent skill setup",
-          "setup": "Set up",
-          "recheck": "Re-check",
           "panelTitle": "Linear agent skill",
-          "panelDescription": "Install the host agent skill for linked Linear task handoffs.",
-          "terminalTitle": "Install Linear agent skill",
-          "terminalAria": "Linear agent skill installer terminal",
-          "install": "Install CLI & Skill",
-          "successTitle": "Linear ticket access is ready",
-          "successDescription": "Agents can now read and update linked Linear tickets from this workspace.",
-          "successDescriptionWsl": "WSL agents can now use linked Linear tickets from this workspace.",
-          "successDescriptionRemote": "Host agents can now use linked Linear tickets. Remote agent environments may still need their own setup.",
-          "successStatus": "Linear ticket access ready",
-          "done": "Done",
-          "wslCopy": "Install it for WSL agent handoffs from linked Linear work.",
-          "wslLabel": "WSL default",
-          "toastMissingCliAndSkill": "Dobius+ CLI and Linear skill are missing",
-          "toastMissingCli": "Dobius+ CLI is missing",
-          "toastMissingSkill": "Linear skill is missing",
-          "toastInstallCliAndSkillDescription": "Install the Dobius+ CLI and the Linear skill to enable your agents to read and edit Linear tasks.",
-          "toastInstallCliDescription": "Install the Dobius+ CLI to enable your agents to read and edit Linear tasks.",
-          "toastInstallSkillDescription": "Install the Linear skill to enable your agents to read and edit Linear tasks through the Dobius+ CLI.",
-          "toastRemoteDescription": "{{value0}} Remote agent environments may need their own setup.",
-          "toastWslDescription": "{{value0}} This setup runs in the selected WSL agent runtime."
+          "panelDescription": "Install the host agent skill for linked Linear task handoffs."
         },
         "FolderWorkspaceComposerDialog": {
           "connectFailed": "Failed to connect to project.",
@@ -4927,20 +4831,6 @@
           "a4fa380b67": "{assistantMessage}",
           "2ee2779c05": "{firstPrompt}"
         },
-        "AutoRenameBranchPromptEditor": {
-          "63121132c0": "Discard",
-          "4416b25d29": "Prefer domain nouns from the task, avoid ticket IDs, and keep names reviewer-friendly.",
-          "39278f4411": "; your branch prefix setting still applies.",
-          "ebb942a2ec": "fix-login-flow",
-          "af2d9a2cc6": ". Dobius+ generates only the final segment, like",
-          "182d419b97": "built-in branch-name prompt",
-          "2f5dc661fe": "Appended to Dobius+'s",
-          "7d6176f506": "Prompt",
-          "5968112152": "Save",
-          "54ac229ad4": "Saving...",
-          "af0831a590": "Saved",
-          "0691753cf2": "Unsaved changes"
-        },
         "BaseRefPicker": {
           "1b8e54151f": "No matching branches found.",
           "d166ff883d": "Current",
@@ -5091,9 +4981,7 @@
           "14444243ba": "Remove `{{value0}}` from PATH?",
           "5d432fe44d": "installed",
           "8a9b784c60": "stale",
-          "d363e5929b": "Checking CLI registration…",
-          "cliSkillTerminalTitle": "CLI skill setup",
-          "cliSkillTerminalAria": "CLI skill install terminal"
+          "d363e5929b": "Checking CLI registration…"
         },
         "CliSkillRuntimeSetup": {
           "04325573f8": "WSL",
@@ -5768,14 +5656,15 @@
           "d3756cf5bc": "disabled"
         },
         "OpenAiTranscriptionKeyDialog": {
+          "0eea7bc276": "OpenAI API Key",
+          "d284d59f4c": "Used for OpenAI transcription and OpenAI Live voice. Audio is sent to OpenAI only while one of them is in use.",
+          "82063d50f5": "This needs an API key from the OpenAI developer platform with billing set up. A ChatGPT subscription does not include API use.",
           "fa83512e48": "Save Key",
           "07b26f2742": "Clear Key",
           "d246b2bdb3": "Local runtime keys are stored in ~/.dobius using Electron encrypted storage when available.",
           "c3380e4ca5": "sk-...",
           "2f797018f0": "API key configured",
-          "16015322f9": "API Key",
-          "07ed3e512e": "Audio is sent to OpenAI only when an OpenAI speech model is selected.",
-          "439e91879e": "OpenAI Transcription"
+          "16015322f9": "API Key"
         },
         "OpenAiTranscriptionSettingsRow": {
           "85c589cd61": "Add API key",
@@ -6587,7 +6476,6 @@
           "db270cc9a9": "Cursor Shape",
           "d455f2ef4f": "Default cursor appearance for Dobius+ terminal panes.",
           "abcb4dd019": "Terminal Cursor",
-          "70beb1bbc7": "Preview",
           "31f6e61085": "Ligatures are currently",
           "870377082f": "Off",
           "84bd22f2cd": "On",
@@ -6597,15 +6485,10 @@
           "400e950ca5": "Auto - enabled for \"{{value0}}\".",
           "04569feb07": "Always off, even for fonts that ship them.",
           "7234abcd08": "Always on. Fonts without ligatures simply render as-is.",
-          "7233d594bf": "Render programming ligatures (e.g. =>, !=, ===) for fonts that ship them. \"Auto\" enables ligatures only for known ligature fonts (Fira Code, JetBrains Mono, Cascadia Code, Iosevka, etc.).",
-          "bafc80efbc": "Controls the terminal line height multiplier.",
           "c084eb7d4c": "Line Height",
-          "36af8ad94c": "Controls the terminal text font weight.",
           "4aae5db258": "Font Weight",
-          "f04b17a50e": "Default terminal font family for new panes and live updates.",
           "a408266e67": "Font Family",
           "855a76343a": "Import from Ghostty",
-          "711e589f18": "Default terminal typography for new panes and live updates.",
           "048aac8a64": "Terminal Typography",
           "4415beb958": "disabled",
           "4e7d41a9f0": "enabled",
@@ -9045,38 +8928,14 @@
             "3c3ad3a1d2": "Started the agent. No selected comments can be marked resolved on the host."
           },
           "CreatePullRequestDialog": {
-            "2bc1b4345e": "Cancel",
-            "27ef4b195c": "Choose a different base branch before creating a {{value0}}.",
-            "7ef56f3efe": "Create as draft",
-            "0c9f9a568c": "Supports Markdown formatting. Use Generate with AI to auto-fill from your changes.",
-            "02b2ce911f": "Description (optional)",
-            "1cd53359db": "Description",
-            "68314b4369": "Title",
-            "694550a610": "main",
-            "0fad57a14c": "Search remote branches or enter a branch name.",
-            "8584ccb43c": "Base branch",
-            "6f5f1962b6": "Head branch",
-            "b504b3ceb1": "details before creating the hosted review.",
-            "f658ff2455": "Confirm the target branch and {{value0}} details before creating the hosted review.",
-            "b7f43474d7": "Create {{value0}}",
-            "7a21f0dae8": "Open on {{value0}}",
-            "edc35a7027": "{{value0}} #{{value1}} is already open",
-            "a154fe55e6": "Push & Create {{value0}}",
-            "21c7a1daa0": "{{value0}} is already open",
-            "db9cee18f7": "Create {{value0}}"
+            "b504b3ceb1": "details before creating the hosted review."
           },
           "CreateHostedReviewComposer": {
             "741ff8a0d2": "Push & Create {{value0}}"
           },
           "CreatePullRequestGenerateButton": {
-            "4012459f8a": "Generate with AI",
-            "a0501572c1": "Generate {{value0}} details with AI",
-            "d47fd63012": "Generating {{value0}} details. Click to stop.",
             "bdf83ccb15": "Generating {{value0}}",
-            "f5513bdeb1": "Generating",
-            "a6ea6dc3aa": "Generating…",
-            "e61d7e7ad4": "Stop generating {{value0}} details",
-            "e041998cad": "Stop generating"
+            "f5513bdeb1": "Generating"
           },
           "FileExplorer": {
             "79b1537dd3": "Select a workspace to browse files",
@@ -10102,17 +9961,6 @@
           "yoloPermissionsInfo": "Agent permission info",
           "yoloPermissionsTooltip": "Skip permission checks for agents for less interruptions"
         },
-        "FeatureSetupChecklist": {
-          "77f74946f5": "Agents can message each other, take tasks, and coordinate handoffs.",
-          "399cf885c0": "Agent Orchestration",
-          "c5292c409d": "Agents can inspect app windows and operate local apps when you ask.",
-          "1ecfb490ac": "Computer Use",
-          "01426f3a23": "Agents can navigate sites, inspect pages, and work through browser tasks.",
-          "ea85d9e628": "Agent Browser Use",
-          "linearTicketsTitle": "Linear agent skill",
-          "linearTicketsDescription": "Agents can use linked Linear tasks for richer ticket-aware handoffs.",
-          "linearTicketsSetupSummary": "Recommended for Linear workspaces; does not affect Linear connection setup."
-        },
         "FeatureSetupInlineTerminal": {
           "789b59936e": "Press Enter to run the command and confirm npx if asked. You can also set this up later in Settings.",
           "47fc6cc6dc": "Skill setup command",
@@ -10190,37 +10038,6 @@
           "9f47f345a4": "It won't take long!",
           "e4726b2d50": "Skip onboarding?"
         },
-        "OnboardingTourStep": {
-          "3f9586c043": "Take the tour",
-          "60c5576353": "Exit tour"
-        },
-        "RepoStep": {
-          "e8fdb36338": "Scanning repositories. Click to stop.",
-          "b7c4da0504": "SSH? Set hosts up in Settings",
-          "c33b190ca3": "Host paths only",
-          "7b679207e4": "Workspace",
-          "24c7c8696c": "Clone into host path",
-          "7932e95f68": "Clone",
-          "955134915e": "git@github.com:org/repo.git",
-          "288d8444b7": "Paste an HTTPS or SSH URL.",
-          "132425a3e3": "Clone a repo",
-          "6558d50c69": "Want to import many repos at once? Select the parent folder.",
-          "831524961f": "Choose any local directory, git repo or not.",
-          "f4e9c8dcf8": "Browse for a folder",
-          "e8214aa632": "Open as Folder",
-          "3863747c56": "Add Git Project",
-          "2ebbc26343": "/home/user/project",
-          "466108ab89": "Enter a path that exists on the selected host.",
-          "8cab104e3c": "Open a project on this host",
-          "2d20200346": "Import repositories",
-          "27ca610db1": "Back",
-          "cecd6593fa": "Scanned folder:",
-          "c7af322fc3": "Stop scanning",
-          "c3d9d44ca2": "Stop scan",
-          "cf23006ba7": "Selected host",
-          "7ec3f48820": "/home/user",
-          "2e6438dd34": "{{value0}}Found {{value1}} {{value2}} in this folder."
-        },
         "ThemeStep": {
           "a4b254779d": "macOS Option key",
           "6c51398942": "Mouse",
@@ -10253,9 +10070,6 @@
               "52acfbef51": "Could not save progress"
             }
           }
-        },
-        "AgentFeatureSetupStep": {
-          "97dcdc010f": "Enable capabilities"
         },
         "WindowsTerminalStep": {
           "powerShell": "PowerShell",
@@ -10332,10 +10146,6 @@
             "searchBranches": "Search branches",
             "searchLinear": "Search Linear issues",
             "workspaceName": "Workspace name"
-          },
-          "ProjectHostSetupCombobox": {
-            "empty": "No hosts are ready for this project.",
-            "placeholder": "Choose host"
           },
           "ProjectCombobox": {
             "search": "Search projects...",
@@ -10654,21 +10464,6 @@
             "cbc45022d4": "Enables agents to navigate and verify pages in Dobius+'s browser.",
             "d5bb1cd4ba": "Browser Use skill"
           },
-          "ComputerUseAnimatedVisual": {
-            "d8401975b1": "approved",
-            "f27676a92c": "status:",
-            "6804cb356f": "click sent",
-            "1719b28a81": "found \"Approve\"",
-            "79445f7512": "approve the note in my app",
-            "99a8624bcb": ">",
-            "2adb561b44": "Claude Code session started",
-            "94787f01f8": "Claude Code",
-            "9cddfe96b2": "Local app",
-            "9634d870d1": "Approve",
-            "3cc2df3671": "Done",
-            "bdd5312213": "Pending",
-            "c11dda000b": "Approved"
-          },
           "EditorAnimatedVisual": {
             "7a763daf2f": "italic",
             "8521536429": "bold ·",
@@ -10690,41 +10485,7 @@
             "e16479c1c5": "[data-slash-menu] [data-slash-row].slash-active { background: rgba(24,24,27,0.07); box-shadow: inset 0 0 0 1px rgba(24,24,27,0.06); } [data-md-active-line][data-role=\"active\"] { color: rgb(113 113 122); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; } [data-md-active-line][data-role=\"h1\"] { color: inherit; font-family: inherit; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; margin-top: 6px; } [data-md-caret] { display: inline-block; width: 1.5px; height: 1em; background: currentColor; vertical-align: -2px; margin-left: 1px; animation: md-caret-blink 1.05s steps(1) infinite; } @keyframes md-caret-blink { 0%, 50% { opacity: 1 } 51%, 100% { opacity: 0 } } @keyframes md-block-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } } @keyframes md-cursor-ripple { 0% { transform: scale(0.4); opacity: 0.9; } 100% { transform: scale(1.4); opacity: 0; } } [data-clicking=\"1\"] [data-cursor-ripple] { animation: md-cursor-ripple 460ms ease-out forwards; }"
           },
           "FeatureTourPreview": {
-            "1170621527": ">",
-            "304ad0dfc1": "Thinking...",
-            "ef8b164dd1": "review src/auth",
-            "952d3ddd9a": "session started",
-            "771d8881c2": "claude",
-            "6ed43cb0e0": "dashboard.spec.ts",
-            "24fedd5a52": "login.spec.ts",
-            "8279e9d95b": "Running 12 tests",
-            "6218a9014d": "pnpm playwright test",
-            "04d54d50ec": "dobius · zsh",
-            "1aa8a9a24a": "Splittable terminal",
-            "2a7cfc82c8": "Linked to GH #1842",
-            "3822d8d14b": "fix/worktree-picker-truncates",
-            "d54aefe09e": "LIN-329",
-            "40bbd92ef4": "Start",
-            "c1f28c03b2": "Worktree picker truncates",
-            "fc0cc0b267": "GH #1842",
-            "0688842445": "GH #1799",
-            "bee6b4088d": "GitHub & Linear tasks",
-            "5171768676": "orchestrating 3 agents",
-            "cebc7769cd": "redesign auth flow",
-            "e44269e97d": "Agent orchestration",
-            "ec4a73f5e6": "PR 3/3",
-            "cfdfd4d6b4": "PR 2/3",
-            "b1f17bcc74": "PR 1/3",
-            "e38112b289": "refactor billing webhook",
-            "9c812e0d7c": "speed up CI pipeline",
-            "3c4adfd821": "fix login race condition",
-            "56a0271428": "Isolated workspaces",
-            "ef737dcee1": "GitHub & Linear tasks",
-            "ac51c061e2": "codex",
-            "47f16ecf34": "Ship several things at once. Each workspace keeps its branch, terminal, and agent activity together.",
-            "70aa182266": "Hand off a goal and walk away. A coordinator agent fans out and ships parallel PRs.",
-            "f10c14dd9d": "Skip the tab-switching. Pick from your GitHub or Linear backlog and start a workspace in one click.",
-            "5d6ee181b6": "Open any workspace to return to its terminal, then split panes for tests, logs, and agents."
+            "ac51c061e2": "codex"
           },
           "FeatureWallBody": {
             "25ec5356d6": "Setup"
@@ -12599,22 +12360,6 @@
       },
       "ShortcutKeyCombo": {
         "07eb4985a1": "Double-tap {{value0}}"
-      },
-      "star": {
-        "nag": {
-          "StarNagToastHost": {
-            "starredThanks": "Starred — thank you!",
-            "githubOpened": "GitHub opened",
-            "opening": "Opening…",
-            "starring": "Starring…",
-            "openGithub": "Open GitHub",
-            "starOnGithub": "Star on GitHub",
-            "onboardingCompleted": "Onboarding completed!",
-            "body": "If you’re enjoying Dobius+ so far, a GitHub star helps other developers discover it.",
-            "dismiss": "Dismiss",
-            "later": "Later"
-          }
-        }
       },
       "nativeChat": {
         "contextMenu": {

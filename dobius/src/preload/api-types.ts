@@ -412,6 +412,7 @@ import type {
   JarvisAskResult,
   JarvisSpeakOutcome,
   JarvisStateEvent,
+  OpenAiLiveSessionResult,
   SpeechErrorEvent,
   SpeechLifecycleEvent,
   SpeechModelManifest,
@@ -3392,6 +3393,11 @@ export type PreloadApi = {
     /** Saves the key to the encrypted store (session-only when encryption is unavailable). */
     saveElevenLabsKey: (apiKey: string) => Promise<ElevenLabsKeyStatus>
     clearElevenLabsKey: () => Promise<ElevenLabsKeyStatus>
+    /**
+     * Sends the window's WebRTC offer to main, which creates the OpenAI Live
+     * session with the stored key. Only the answer and session id come back.
+     */
+    liveSessionConnect: (offerSdp: string) => Promise<OpenAiLiveSessionResult>
     /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
     cancelAsk: () => Promise<{ ok: true }>
     askAdamText: (utterance: string) => Promise<JarvisAskResult>

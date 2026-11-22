@@ -411,6 +411,12 @@ export function getDefaultExternalBackupSettings(): ExternalBackupSettings {
 
 export const DEFAULT_ADAM_ENDPOINT = 'http://127.0.0.1:8791'
 
+export const DEFAULT_LIVE_VOICE_ENGINE = 'openai-live' as const
+export const DEFAULT_OPENAI_LIVE_VOICE = 'marin'
+export const DEFAULT_LIVE_VOICE_MIC_MODE = 'push-to-talk' as const
+export const DEFAULT_LIVE_VOICE_DAILY_CAP_USD = 15
+export const DEFAULT_LIVE_VOICE_IDLE_TIMEOUT_SEC = 30
+
 export function getDefaultVoiceSettings(): VoiceSettings {
   return {
     enabled: false,
@@ -424,7 +430,12 @@ export function getDefaultVoiceSettings(): VoiceSettings {
     conductorEnabled: false,
     jarvisEnabled: false,
     jarvisWakeWord: false,
-    adamEndpoint: DEFAULT_ADAM_ENDPOINT
+    adamEndpoint: DEFAULT_ADAM_ENDPOINT,
+    liveVoiceEngine: DEFAULT_LIVE_VOICE_ENGINE,
+    openAiLiveVoice: DEFAULT_OPENAI_LIVE_VOICE,
+    liveVoiceMicMode: DEFAULT_LIVE_VOICE_MIC_MODE,
+    liveVoiceDailyCapUsd: DEFAULT_LIVE_VOICE_DAILY_CAP_USD,
+    liveVoiceIdleTimeoutSec: DEFAULT_LIVE_VOICE_IDLE_TIMEOUT_SEC
   }
 }
 

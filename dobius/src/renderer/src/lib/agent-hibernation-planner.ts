@@ -182,6 +182,12 @@ function getEligiblePane(args: {
   if (!entry.launchToken || entry.connectionId === undefined || entry.ptyId !== livePane.ptyId) {
     return null
   }
+  // Why: shutdownCompletedAgentPaneForHibernation refuses SSH panes (their
+  // wake claim cannot succeed yet); skip them so the coordinator does not
+  // retry and warn every tick.
+  if (entry.connectionId !== null) {
+    return null
+  }
   const { leafId, ptyId } = livePane
   const runtimePtyId = toRuntimePtyId(ptyId)
   if (!livePtyIds.has(runtimePtyId) || mobileLockedPtyIds.has(runtimePtyId)) {

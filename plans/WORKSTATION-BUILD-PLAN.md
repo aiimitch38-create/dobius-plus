@@ -290,7 +290,7 @@ Report a problem -> Phase 5, stale-graph rule -> 4.1, Graphify-on-every-project 
 | 8.17 | **Weekly skill cleanup** (see plan below) | yes |
 | 8.18 | **Gmail intake** (see plan below) | yes |
 | 8.19 | Command Center backed by real tasks | yes |
-| 8.20 | Delete with OK: fake Operations dashboard, legacy dialogs, comms identity IPC, test-only chat projections | no |
+| 8.20 | APPROVED by Carson 2026-11-22 (all four groups). Delete: fake Operations dashboard, legacy dialogs, comms identity IPC, test-only chat projections | no |
 
 ### Plan: Gmail intake (8.18)
 Goal: mail from tracked contacts becomes Kanban cards automatically, suggestions first.
@@ -338,3 +338,4 @@ Findings (verified):
 | 9.5 | Show dead consoles honestly: card badge "not running" + a Restart button; orchestrator list says "Exited", not "Done" | board console card + OrchestratorCard | S |
 | 9.6 | CLI path into a board orchestrator: `dobius orchestration send --to board:<orchestratorCardId>` fans out to its wired consoles, same as typing in the card | main-side relay | M |
 | 9.7 | Keep a card's tabId stable across console restart, or have the card own a stable id the CLI can resolve. | card restart path + terminal handle resolver | S |
+| 9.8 | LAST ITEM (Carson 2026-11-22: "this is really the last thing we need to cli everything in dobius"). Every Dobius feature reachable from the `dobius` CLI. Method borrowed from HKUDS/CLI-Anything (Apache-2.0: analyze, design, implement, tests, SKILL.md), but built in our own TypeScript CLI, not its generated Python wrapper. Step 1: audit every IPC channel, RPC method and UI action against CLI coverage; step 2: fill the gaps (JSON output, tests); step 3: one SKILL.md so agents discover it. When this is done the release is Dobius 2.9.2. | `src/cli/`, `main/runtime/rpc/methods/`, preload IPC list | L |

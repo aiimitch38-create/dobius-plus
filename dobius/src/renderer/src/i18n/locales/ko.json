@@ -2132,48 +2132,6 @@
               }
             }
           }
-        },
-        "CloseReasonDropdown": {
-          "e1f2a3b4c5": "닫기 사유 선택"
-        },
-        "GitHubIssueCommentComposer": {
-          "082515176a": "댓글을 추가하지 못했습니다",
-          "9f88657c4e": "이슈가 닫혔습니다",
-          "e9b7cb7d17": "이슈를 닫지 못했습니다",
-          "bd3b4492a0": "이슈가 다시 열렸습니다",
-          "f2a8c1d903": "이슈를 다시 열지 못했습니다",
-          "a1b2c3d4e5": "댓글 추가",
-          "c5c117270e": "댓글을 입력하세요. 서로 배려해 주세요.",
-          "f6a7b8c9d0": "이슈 닫기",
-          "b1c2d3e4f5": "이슈 다시 열기",
-          "0a73f59e85": "댓글 보내기",
-          "bf43425540": "댓글",
-          "commentTooLarge": "댓글이 너무 커서 안전하게 제출할 수 없습니다."
-        },
-        "GitHubWorkItemAssigneePopoverContent": {
-          "cddd9b04a7": "담당자 로드 중",
-          "a00830d3f7": "사용자 없음",
-          "4f8b6f2c1d": "담당자 필터..."
-        },
-        "GitHubWorkItemLabelPopoverContent": {
-          "2aa9acdf34": "GitHub에서 라벨 편집",
-          "cddd9b04a7": "라벨 로드 중",
-          "de26e2eb06": "라벨 없음",
-          "8b0d52ee3a": "라벨 필터..."
-        },
-        "githubIssueCloseReasons": {
-          "completed": {
-            "label": "완료로 닫기",
-            "description": "완료, 닫힘, 수정됨, 해결됨"
-          },
-          "notPlanned": {
-            "label": "계획 없음으로 닫기",
-            "description": "수정하지 않음, 재현 불가, 오래됨"
-          },
-          "duplicate": {
-            "label": "중복으로 닫기",
-            "description": "다른 이슈와 중복"
-          }
         }
       },
       "linear": {
@@ -2398,15 +2356,6 @@
         },
         "sheet": {
           "1189e9fe0a": "닫기"
-        },
-        "team": {
-          "multi": {
-            "combobox": {
-              "de83523bf9": "검색어와 일치하는 팀이 없습니다.",
-              "301f2a796e": "모든 팀",
-              "18ec58881e": "팀 검색..."
-            }
-          }
         }
       },
       "terminal": {
@@ -3445,18 +3394,6 @@
         "UsageBreakdownSection": {
           "7765a4c3e1": "n/a",
           "247c93ca92": "• 추정 가격"
-        },
-        "UsageSessionsTable": {
-          "1afc25eb06": "턴",
-          "0f03975d59": "이벤트",
-          "21ea00bfa8": "캐시",
-          "e0b988599d": "합계",
-          "01476891c7": "마지막 활동",
-          "c17bed0416": "프로젝트",
-          "f6a2c8d019": "모델",
-          "faf3444859": "입력",
-          "a8b7487ff7": "출력",
-          "cfe2282ffa": "알 수 없음"
         }
       },
       "sparse": {
@@ -4390,42 +4327,9 @@
           }
         },
         "LinearAgentSkillSetupPrompt": {
-          "missingCliAndSkill": "Dobius+ CLI와 Linear agent 스킬이 없습니다.",
-          "modalTitle": "Linear 티켓 접근 활성화",
-          "modalDescription": "terminal에서 Linear 스킬을 설치합니다.",
-          "modalPrompt": "agents가 첨부된 Linear 티켓을 읽고 편집할 수 있게 합니다.",
-          "dontShowAgain": "다시 표시하지 않음",
-          "notNow": "나중에",
           "missingBoth": "Dobius+ CLI와 Linear agent 스킬이 없습니다.",
-          "missingCli": "Dobius+ CLI가 없습니다.",
-          "missingSkill": "Linear agent 스킬이 없습니다.",
-          "title": "Linear agent 스킬 설정",
-          "remoteCopy": "호스트 설정을 설치합니다. 원격 agent 환경에는 별도 설정이 필요할 수 있습니다.",
-          "hostCopy": "연결된 Linear 작업에서 호스트 agent 인계를 위해 설치합니다.",
-          "dismiss": "Linear agent 스킬 설정 닫기",
-          "setup": "설정",
-          "recheck": "다시 확인",
           "panelTitle": "Linear agent 스킬",
-          "panelDescription": "연결된 Linear 작업 인계를 위해 호스트 agent 스킬을 설치합니다.",
-          "terminalTitle": "Linear agent 스킬 설치",
-          "terminalAria": "Linear agent 스킬 설치 terminal",
-          "install": "CLI 및 스킬 설치",
-          "successTitle": "Linear 티켓 접근이 준비되었습니다",
-          "successDescription": "이제 agents가 이 워크스페이스에서 연결된 Linear 티켓을 읽고 업데이트할 수 있습니다.",
-          "successDescriptionWsl": "이제 WSL agents가 이 워크스페이스에서 연결된 Linear 티켓을 사용할 수 있습니다.",
-          "successDescriptionRemote": "이제 호스트 agents가 연결된 Linear 티켓을 사용할 수 있습니다. 원격 agent 환경에는 자체 설정이 여전히 필요할 수 있습니다.",
-          "successStatus": "Linear 티켓 접근 준비됨",
-          "done": "완료",
-          "wslCopy": "연결된 Linear 작업에서 WSL agent 인계를 위해 설치합니다.",
-          "wslLabel": "WSL 기본값",
-          "toastMissingCliAndSkill": "Dobius+ CLI와 Linear 스킬이 없습니다",
-          "toastMissingCli": "Dobius+ CLI가 없습니다",
-          "toastMissingSkill": "Linear 스킬이 없습니다",
-          "toastInstallCliAndSkillDescription": "Dobius+ CLI와 Linear 스킬을 설치하여 agents가 Linear 작업을 읽고 편집할 수 있게 하세요.",
-          "toastInstallCliDescription": "Dobius+ CLI를 설치하여 agents가 Linear 작업을 읽고 편집할 수 있게 하세요.",
-          "toastInstallSkillDescription": "Linear 스킬을 설치하여 agents가 Dobius+ CLI를 통해 Linear 작업을 읽고 편집할 수 있게 하세요.",
-          "toastRemoteDescription": "{{value0}} 원격 agent 환경에는 자체 설정이 필요할 수 있습니다.",
-          "toastWslDescription": "{{value0}} 이 설정은 선택한 WSL agent 런타임에서 실행됩니다."
+          "panelDescription": "연결된 Linear 작업 인계를 위해 호스트 agent 스킬을 설치합니다."
         },
         "FolderWorkspaceComposerDialog": {
           "connectFailed": "프로젝트에 연결하지 못했습니다.",
@@ -4912,20 +4816,6 @@
           "a4fa380b67": "{assistantMessage}",
           "2ee2779c05": "{firstPrompt}"
         },
-        "AutoRenameBranchPromptEditor": {
-          "63121132c0": "버리기",
-          "4416b25d29": "작업에서 도메인 명사를 선호하고, 티켓 ID를 피하고, 리뷰어 친화적인 이름을 유지하세요.",
-          "39278f4411": "; 브랜치 접두사 설정이 계속 적용됩니다.",
-          "ebb942a2ec": "fix-login-flow",
-          "af2d9a2cc6": ". Dobius+는 다음과 같은 마지막 세그먼트만 생성합니다.",
-          "182d419b97": "내장된 브랜치 이름 프롬프트",
-          "2f5dc661fe": "Dobius+에 추가됨",
-          "7d6176f506": "프롬프트",
-          "5968112152": "저장",
-          "54ac229ad4": "저장 중...",
-          "af0831a590": "저장됨",
-          "0691753cf2": "저장되지 않은 변경사항"
-        },
         "BaseRefPicker": {
           "1b8e54151f": "일치하는 브랜치를 찾을 수 없습니다.",
           "d166ff883d": "현재",
@@ -5048,8 +4938,6 @@
           "8671e406f0": "취소",
           "a4aafe46e3": "대상 경로:",
           "e8012c03a1": "agents가 Dobius+ 워크스페이스, terminal 및 진행 명령을 사용할 수 있도록 합니다.",
-          "cliSkillTerminalTitle": "CLI 스킬 설정",
-          "cliSkillTerminalAria": "CLI 스킬 설치 terminal",
           "6053cf736c": "CLI 스킬",
           "36a6f919ba": "agents에게 Dobius+ 인식 워크스페이스, terminal 및 진행 워크플로를 제공합니다.",
           "04873eea3e": "Agent 스킬",
@@ -5716,14 +5604,15 @@
           "d3756cf5bc": "비활성"
         },
         "OpenAiTranscriptionKeyDialog": {
+          "0eea7bc276": "OpenAI API 키",
+          "d284d59f4c": "OpenAI 전사와 OpenAI Live 음성에 사용됩니다. 오디오는 둘 중 하나를 사용하는 동안에만 OpenAI로 전송됩니다.",
+          "82063d50f5": "결제가 설정된 OpenAI 개발자 플랫폼의 API 키가 필요합니다. ChatGPT 구독에는 API 사용이 포함되지 않습니다.",
           "fa83512e48": "키 저장",
           "07b26f2742": "키 지우기",
           "d246b2bdb3": "로컬 런타임 키는 가능한 경우 Electron 암호화 저장소를 사용하여 ~/.dobius에 저장됩니다.",
           "c3380e4ca5": "sk-...",
           "2f797018f0": "API 키가 구성됨",
-          "16015322f9": "API 키",
-          "07ed3e512e": "OpenAI 음성 모델이 선택된 경우에만 오디오가 OpenAI로 전송됩니다.",
-          "439e91879e": "OpenAI 전사"
+          "16015322f9": "API 키"
         },
         "OpenAiTranscriptionSettingsRow": {
           "85c589cd61": "API 키 추가",
@@ -6535,7 +6424,6 @@
           "db270cc9a9": "Cursor 모양",
           "d455f2ef4f": "Dobius+ terminal 패널의 기본 커서 모양입니다.",
           "abcb4dd019": "Terminal 커서",
-          "70beb1bbc7": "미리보기",
           "31f6e61085": "합자는 현재",
           "870377082f": "끔",
           "84bd22f2cd": "켜짐",
@@ -6545,15 +6433,10 @@
           "400e950ca5": "자동 - \"{{value0}}\"에 대해 활성화되었습니다.",
           "04569feb07": "제공되는 글꼴의 경우에도 항상 꺼져 있습니다.",
           "7234abcd08": "항상 켜져 있습니다. 합자가 없는 글꼴은 있는 그대로 렌더링됩니다.",
-          "7233d594bf": "제공되는 글꼴에 대한 프로그래밍 합자(예: =>, !=, ===)를 렌더링합니다. \"자동\"은 알려진 합자 글꼴(Fira Code, JetBrains Mono, Cascadia Code, Iosevka 등)에 대해서만 합자를 활성화합니다.",
-          "bafc80efbc": "terminal 라인 높이 승수를 제어합니다.",
           "c084eb7d4c": "라인 높이",
-          "36af8ad94c": "terminal 텍스트 글꼴 두께를 제어합니다.",
           "4aae5db258": "글꼴 두께",
-          "f04b17a50e": "새 창 및 라이브 업데이트를 위한 기본 terminal 글꼴 모음입니다.",
           "a408266e67": "글꼴군",
           "855a76343a": "Ghostty에서 가져오기",
-          "711e589f18": "새 패널 및 실시간 업데이트에 사용할 기본 terminal 타이포그래피입니다.",
           "048aac8a64": "Terminal 타이포그래피",
           "4415beb958": "비활성",
           "4e7d41a9f0": "활성화됨",
@@ -9045,38 +8928,14 @@
             "3c3ad3a1d2": "agent를 시작했습니다. 호스트에서 해결됨으로 표시할 수 있는 선택된 댓글이 없습니다."
           },
           "CreatePullRequestDialog": {
-            "2bc1b4345e": "취소",
-            "27ef4b195c": "{{value0}}을(를) 만들기 전에 다른 베이스 브랜치를 선택하세요.",
-            "7ef56f3efe": "초안으로 만들기",
-            "0c9f9a568c": "Markdown 형식을 지원합니다. AI로 생성을 사용하여 변경 사항을 자동으로 채웁니다.",
-            "02b2ce911f": "설명(선택사항)",
-            "1cd53359db": "설명",
-            "68314b4369": "제목",
-            "694550a610": "main",
-            "0fad57a14c": "원격 브랜치를 검색하거나 브랜치 이름을 입력하세요.",
-            "8584ccb43c": "기본 브랜치",
-            "6f5f1962b6": "헤드 브랜치",
-            "b504b3ceb1": "호스팅된 리뷰를 생성하기 전에 자세한 내용을 확인하세요.",
-            "f658ff2455": "호스팅된 리뷰를 만들기 전에 대상 브랜치와 {{value0}} 세부 정보를 확인하세요.",
-            "b7f43474d7": "{{value0}} 만들기",
-            "7a21f0dae8": "{{value0}}에서 열기",
-            "edc35a7027": "{{value0}} #{{value1}}은(는) 이미 열려 있습니다.",
-            "a154fe55e6": "푸시 및 생성 {{value0}}",
-            "21c7a1daa0": "{{value0}}이(가) 이미 열려 있습니다",
-            "db9cee18f7": "{{value0}} 만들기"
+            "b504b3ceb1": "호스팅된 리뷰를 생성하기 전에 자세한 내용을 확인하세요."
           },
           "CreateHostedReviewComposer": {
             "741ff8a0d2": "푸시 및 생성 {{value0}}"
           },
           "CreatePullRequestGenerateButton": {
-            "4012459f8a": "AI로 생성",
-            "a0501572c1": "AI로 {{value0}} 세부정보 생성",
-            "d47fd63012": "{{value0}} 세부 정보를 생성하는 중입니다. 클릭하여 중지하세요.",
             "bdf83ccb15": "{{value0}} 생성 중",
-            "f5513bdeb1": "생성 중",
-            "a6ea6dc3aa": "생성 중…",
-            "e61d7e7ad4": "{{value0}} 세부정보 생성 중지",
-            "e041998cad": "생성 중지"
+            "f5513bdeb1": "생성 중"
           },
           "FileExplorer": {
             "79b1537dd3": "파일을 찾아보려면 워크스페이스를 선택하세요.",
@@ -10102,17 +9961,6 @@
           "yoloPermissionsInfo": "Agent 권한 정보",
           "yoloPermissionsTooltip": "중단을 줄이기 위해 agents 권한 확인을 건너뜁니다."
         },
-        "FeatureSetupChecklist": {
-          "77f74946f5": "Agents는 서로 메시지를 보내고, 작업을 수행하고, 핸드오프를 조정할 수 있습니다.",
-          "399cf885c0": "Agent 오케스트레이션",
-          "c5292c409d": "Agents는 요청 시 앱 창을 검사하고 로컬 앱을 작동할 수 있습니다.",
-          "1ecfb490ac": "컴퓨터 사용",
-          "01426f3a23": "Agents가 사이트를 탐색하고, 페이지를 검사하고, 브라우저 작업을 처리할 수 있습니다.",
-          "ea85d9e628": "Agent 브라우저 사용",
-          "linearTicketsTitle": "Linear agent 스킬",
-          "linearTicketsDescription": "Agents는 연결된 Linear 작업을 사용해 티켓 맥락을 반영한 더 풍부한 인계를 할 수 있습니다.",
-          "linearTicketsSetupSummary": "Linear 워크스페이스에 권장됩니다. Linear 연결 설정에는 영향을 주지 않습니다."
-        },
         "FeatureSetupInlineTerminal": {
           "789b59936e": "Enter를 눌러 명령을 실행하고 요청 시 npx를 확인합니다. 나중에 설정에서 설정할 수도 있습니다.",
           "47fc6cc6dc": "스킬 설정 명령어",
@@ -10190,37 +10038,6 @@
           "9f47f345a4": "오래 걸리지 않을 거예요!",
           "e4726b2d50": "온보딩을 건너뛰시겠습니까?"
         },
-        "OnboardingTourStep": {
-          "3f9586c043": "둘러보기",
-          "60c5576353": "투어 종료"
-        },
-        "RepoStep": {
-          "e8fdb36338": "repos를 스캔하는 중입니다. 중지하려면 클릭하세요.",
-          "b7c4da0504": "SSH? 설정에서 호스트를 설정하세요",
-          "c33b190ca3": "호스트 경로만",
-          "7b679207e4": "워크스페이스",
-          "24c7c8696c": "서버 경로로 복제",
-          "7932e95f68": "클론",
-          "955134915e": "git@github.com:org/repo.git",
-          "288d8444b7": "HTTPS 또는 SSH URL을 붙여넣습니다.",
-          "132425a3e3": "repo 복제",
-          "6558d50c69": "한 번에 여러 repos를 가져오고 싶으신가요? 상위 폴더를 선택하세요.",
-          "831524961f": "로컬 디렉터리(git repo 여부)를 선택하세요.",
-          "f4e9c8dcf8": "폴더 찾아보기",
-          "e8214aa632": "폴더로 열기",
-          "3863747c56": "Git 프로젝트 추가",
-          "2ebbc26343": "/home/user/project",
-          "466108ab89": "선택한 호스트에 존재하는 경로를 입력하세요.",
-          "8cab104e3c": "서버 프로젝트 열기",
-          "2d20200346": "repos 가져오기",
-          "27ca610db1": "뒤로",
-          "cecd6593fa": "스캔한 폴더:",
-          "c7af322fc3": "스캔 중지",
-          "c3d9d44ca2": "스캔 중지",
-          "cf23006ba7": "선택한 호스트",
-          "7ec3f48820": "/home/user",
-          "2e6438dd34": "{{value0}}이 폴더에서 {{value1}} {{value2}}을(를) 찾았습니다."
-        },
         "ThemeStep": {
           "a4b254779d": "macOS 옵션 키",
           "6c51398942": "마우스",
@@ -10253,9 +10070,6 @@
               "52acfbef51": "진행 상황을 저장할 수 없습니다."
             }
           }
-        },
-        "AgentFeatureSetupStep": {
-          "97dcdc010f": "기능 활성화"
         },
         "WindowsTerminalStep": {
           "powerShell": "PowerShell",
@@ -10332,10 +10146,6 @@
             "searchBranches": "브랜치 검색",
             "searchLinear": "Linear 이슈 검색",
             "workspaceName": "워크스페이스 이름"
-          },
-          "ProjectHostSetupCombobox": {
-            "empty": "이 프로젝트에 준비된 호스트가 없습니다.",
-            "placeholder": "호스트 선택"
           },
           "ProjectCombobox": {
             "search": "프로젝트 검색...",
@@ -10654,21 +10464,6 @@
             "cbc45022d4": "agents가 Dobius+ 브라우저에서 페이지를 탐색하고 확인할 수 있습니다.",
             "d5bb1cd4ba": "Browser Use 스킬"
           },
-          "ComputerUseAnimatedVisual": {
-            "d8401975b1": "승인됨",
-            "f27676a92c": "상태:",
-            "6804cb356f": "클릭 전송됨",
-            "1719b28a81": "'승인'을 찾았습니다.",
-            "79445f7512": "내 앱에서 메모 승인",
-            "99a8624bcb": ">",
-            "2adb561b44": "Claude Code 세션이 시작되었습니다.",
-            "94787f01f8": "Claude Code",
-            "9cddfe96b2": "로컬 앱",
-            "9634d870d1": "승인",
-            "3cc2df3671": "완료",
-            "bdd5312213": "보류 중",
-            "c11dda000b": "승인됨"
-          },
           "EditorAnimatedVisual": {
             "7a763daf2f": "이탤릭체",
             "8521536429": "굵게 ·",
@@ -10690,41 +10485,7 @@
             "e16479c1c5": "[data-slash-menu] [data-slash-row].slash-active { background: rgba(24,24,27,0.07); box-shadow: inset 0 0 0 1px rgba(24,24,27,0.06); } [data-md-active-line][data-role=\"active\"] { color: rgb(113 113 122); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; } [data-md-active-line][data-role=\"h1\"] { color: inherit; font-family: inherit; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; margin-top: 6px; } [data-md-caret] { display: inline-block; width: 1.5px; height: 1em; background: currentColor; vertical-align: -2px; margin-left: 1px; animation: md-caret-blink 1.05s steps(1) infinite; } @keyframes md-caret-blink { 0%, 50% { opacity: 1 } 51%, 100% { opacity: 0 } } @keyframes md-block-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } } @keyframes md-cursor-ripple { 0% { transform: scale(0.4); opacity: 0.9; } 100% { transform: scale(1.4); opacity: 0; } } [data-clicking=\"1\"] [data-cursor-ripple] { animation: md-cursor-ripple 460ms ease-out forwards; }"
           },
           "FeatureTourPreview": {
-            "1170621527": ">",
-            "304ad0dfc1": "생각 중...",
-            "ef8b164dd1": "src/auth 리뷰",
-            "952d3ddd9a": "세션이 시작되었습니다",
-            "771d8881c2": "claude",
-            "6ed43cb0e0": "dashboard.spec.ts",
-            "24fedd5a52": "login.spec.ts",
-            "8279e9d95b": "12개 테스트 실행",
-            "6218a9014d": "pnpm playwright test",
-            "04d54d50ec": "dobius · zsh",
-            "1aa8a9a24a": "분할 가능한 terminal",
-            "2a7cfc82c8": "GH #1842와 연결됨",
-            "3822d8d14b": "fix/worktree-picker-truncates",
-            "d54aefe09e": "LIN-329",
-            "40bbd92ef4": "시작",
-            "c1f28c03b2": "작업 트리 선택 도구가 잘립니다.",
-            "fc0cc0b267": "GH #1842",
-            "0688842445": "GH #1799",
-            "bee6b4088d": "GitHub 및 Linear 작업",
-            "5171768676": "agents 3개 조율",
-            "cebc7769cd": "인증 흐름 재설계",
-            "e44269e97d": "Agent 오케스트레이션",
-            "ec4a73f5e6": "PR 3/3",
-            "cfdfd4d6b4": "PR 2/3",
-            "b1f17bcc74": "PR 1/3",
-            "e38112b289": "청구 웹훅 리팩터링",
-            "9c812e0d7c": "CI 파이프라인 속도 향상",
-            "3c4adfd821": "로그인 경쟁 조건 수정",
-            "56a0271428": "격리된 워크스페이스",
-            "ef737dcee1": "GitHub 및 Linear 작업",
-            "ac51c061e2": "codex",
-            "47f16ecf34": "여러 작업을 동시에 진행하세요. 각 워크스페이스는 브랜치, terminal, agent 활동을 함께 보관합니다.",
-            "70aa182266": "목표를 넘겨두고 자리를 비우세요. 코디네이터 agent가 작업을 나누어 병렬 PR을 만듭니다.",
-            "f10c14dd9d": "탭을 오갈 필요 없이 GitHub 또는 Linear 백로그에서 선택하고 한 번의 클릭으로 워크스페이스를 시작하세요.",
-            "5d6ee181b6": "워크스페이스를 열어 terminal로 돌아가고, 테스트와 로그, agents 용으로 패널을 나누세요."
+            "ac51c061e2": "codex"
           },
           "FeatureWallBody": {
             "25ec5356d6": "설정"
@@ -12599,22 +12360,6 @@
       },
       "ShortcutKeyCombo": {
         "07eb4985a1": "{{value0}} 두 번 누르기"
-      },
-      "star": {
-        "nag": {
-          "StarNagToastHost": {
-            "starredThanks": "별표를 눌러주셔서 감사합니다!",
-            "githubOpened": "GitHub 열림",
-            "opening": "여는 중…",
-            "starring": "별표 누르는 중…",
-            "openGithub": "GitHub 열기",
-            "starOnGithub": "GitHub에서 별표 누르기",
-            "onboardingCompleted": "온보딩 완료!",
-            "body": "Dobius+가 마음에 드신다면 GitHub 별표가 다른 개발자가 Dobius+를 발견하는 데 도움이 됩니다.",
-            "dismiss": "닫기",
-            "later": "Later"
-          }
-        }
       },
       "nativeChat": {
         "contextMenu": {
