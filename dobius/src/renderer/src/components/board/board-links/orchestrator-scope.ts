@@ -19,6 +19,11 @@ export function orchestratorRefusalText(
         'board.orchestrator.refuseScope',
         'That console isn’t wired to this card, so nothing was sent. Tap Connect to wire it.'
       )
+    case 'ambiguous':
+      return translate(
+        'board.orchestrator.refuseAmbiguous',
+        'Several wired consoles have that name, so nothing was sent. Rename one first.'
+      )
     case 'workspace':
       return translate(
         'board.orchestrator.refuseWorkspace',

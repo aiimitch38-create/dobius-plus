@@ -5,16 +5,19 @@
 import {
   BOARD_ORCHESTRATOR_ADDRESS_PREFIX,
   orchestratorHandle,
-  orchestratorRelayRecipients,
+  orchestratorRelayTargets,
   relaySubject,
   relayThreadId,
   routeOrchestratorMessage,
   wiredScopedConsoles,
-  type OrchestratorRoute
+  type OrchestratorRoute,
+  type RelaySkip
 } from '../../../shared/board-orchestrator-relay'
+import { checkExecutionAdmission } from '../../agents/execution-gate'
 import { BoardConsoleError } from '../../../shared/board-console-errors'
 import type { DobiusRuntimeService } from '../dobius-runtime'
 import type { MessagePriority, MessageRow, MessageType } from './db'
+import { formatMessagesForInjection } from './formatter'
 
 type Raw = Record<string, unknown>
 const isObj = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -93,6 +96,8 @@ export function findBoardOrchestrator(boardsByWorktree: unknown, query: string):
 
 const REFUSAL_TEXT: Record<Extract<OrchestratorRoute, { kind: 'refuse' }>['reason'], string> = {
   'outside-scope': 'that console is not wired to this orchestrator card, so nothing was sent.',
+  ambiguous:
+    'several wired consoles have that name, so nothing was sent. Rename one on the Board, or send to it with card:<card id>.',
   workspace: 'workspaces are managed from the main command bar, not from an orchestrator card.',
   undo: 'undo and redo work from the main command bar only.',
   'nothing-wired': 'no consoles are wired to this orchestrator card yet.'
@@ -112,15 +117,73 @@ type RelayRuntime = Pick<
   DobiusRuntimeService,
   | 'getUIState'
   | 'listTerminals'
+  | 'getTerminalTabActiveLeafId'
+  | 'getTerminalAgentStatus'
+  | 'sendTerminal'
   | 'getOrchestrationDb'
-  | 'deliverPendingMessagesForHandle'
   | 'notifyMessageArrived'
 >
+
+export type RelayRefusalReason = 'paused' | 'no-agent' | 'permission' | 'not-writable'
+export type RelayRefusal = {
+  cardId: string
+  title: string
+  handle: string
+  reason: RelayRefusalReason
+  /** True when some text may already be typed there (Enter was not pressed). */
+  partlyTyped: boolean
+}
+
+class RelayRefused extends Error {
+  constructor(readonly reason: RelayRefusalReason) {
+    super(`board_relay_${reason}`)
+  }
+}
+
+const crewPaused = (): boolean => !checkExecutionAdmission('board-relay').allowed
+
+/**
+ * Same rule as guarded `terminal.send` (requireAgentStatus 'sendable') plus
+ * Pause crew: an agent is in the foreground and not on a permission prompt.
+ * Why pause is checked again after the await: a pause flipped mid-check must
+ * stop the very next write.
+ */
+async function assertDeliverable(runtime: RelayRuntime, handle: string): Promise<void> {
+  if (crewPaused()) {
+    throw new RelayRefused('paused')
+  }
+  const agent = await runtime.getTerminalAgentStatus(handle)
+  if (!agent.isRunningAgent) {
+    throw new RelayRefused('no-agent')
+  }
+  if (agent.status === 'permission') {
+    throw new RelayRefused('permission')
+  }
+  if (crewPaused()) {
+    throw new RelayRefused('paused')
+  }
+}
+
+const REFUSAL_WORDS: Record<RelayRefusalReason, string> = {
+  paused: 'the crew is paused',
+  'no-agent': 'no agent is running in it',
+  permission: 'its agent is waiting on a permission prompt',
+  'not-writable': 'it is not accepting input'
+}
+const SKIP_WORDS: Record<RelaySkip['reason'], string> = {
+  'not-running': 'not running',
+  'pane-unclear': 'several running panes, none focused'
+}
+
+const listNames = (rows: readonly { title: string }[], why: (i: number) => string): string =>
+  rows.map((r, i) => `"${r.title}" (${why(i)})`).join(', ')
 
 /**
  * Relays one message to the orchestrator's wired consoles. The text is the
  * body (or the subject when there is no body), routed like the card's input:
  * `@Name rest` reaches one wired console, anything else reaches all of them.
+ * Delivery is guarded: Pause crew and the sendable check run before the text
+ * and again before Enter, so a permission or update menu cannot eat it.
  * Known difference: the card puts a wired Goal's block in front of a task;
  * that throttle lives in the renderer, so a CLI relay sends the text only.
  */
@@ -128,7 +191,13 @@ export async function relayToBoardOrchestrator(
   runtime: RelayRuntime,
   params: BoardOrchestratorSendParams,
   now: () => number = Date.now
-): Promise<{ messages: MessageRow[]; recipients: number; orchestratorCardId: string }> {
+): Promise<{
+  messages: MessageRow[]
+  recipients: number
+  orchestratorCardId: string
+  refused: RelayRefusal[]
+  skipped: RelaySkip[]
+}> {
   if (params.type === 'worker_done' || params.type === 'heartbeat') {
     throw new Error(
       `${params.type} messages must be sent to a concrete coordinator terminal handle, not a board orchestrator.`
@@ -136,48 +205,105 @@ export async function relayToBoardOrchestrator(
   }
   const query = params.to.slice(BOARD_ORCHESTRATOR_ADDRESS_PREFIX.length)
   const found = findBoardOrchestrator(runtime.getUIState().boardsByWorktree, query)
+  const label = found.name || found.cardId
+  if (crewPaused()) {
+    throw new BoardConsoleError(
+      'board_orchestrator_paused',
+      `the crew is paused, so nothing was sent to orchestrator "${label}". Resume it on the Agents page.`
+    )
+  }
   const text = params.body?.trim() ? params.body : params.subject
   const route = routeOrchestratorMessage(text, wiredScopedConsoles(found.cards, found.wiredCardIds))
   if (route.kind === 'refuse') {
     throw new BoardConsoleError(
       'board_orchestrator_refused',
-      `orchestrator "${found.name || found.cardId}": ${REFUSAL_TEXT[route.reason]}`
+      `orchestrator "${label}": ${REFUSAL_TEXT[route.reason]}`
     )
   }
   const { terminals } = await runtime.listTerminals(
     `id:${found.worktreeId}`,
     RELAY_TERMINAL_LIST_LIMIT
   )
-  const recipients = orchestratorRelayRecipients(
+  const { targets, skipped } = orchestratorRelayTargets(
     found.cards,
     found.wiredCardIds,
     route.kind === 'one' ? [route.cardId] : undefined,
-    terminals
+    terminals,
+    (tabId) => runtime.getTerminalTabActiveLeafId(tabId)
   )
-  if (recipients.length === 0) {
+  if (targets.length === 0) {
+    const why = skipped.length > 0 ? ` (${listNames(skipped, (i) => SKIP_WORDS[skipped[i].reason])})` : ''
     throw new BoardConsoleError(
       'board_orchestrator_none_running',
-      `none of the consoles wired to orchestrator "${found.name || found.cardId}" is running. Restart them on the Board, then send again.`
+      `none of the consoles wired to orchestrator "${label}" is running${why}. Restart them on the Board, then send again.`
     )
   }
   const db = runtime.getOrchestrationDb()
   const from = orchestratorHandle(found.cardId)
   const threadId = params.threadId ?? relayThreadId(found.cardId, now())
-  const messages = recipients.map((r) =>
-    db.insertMessage({
-      from,
-      to: r.handle,
-      subject: relaySubject(route.text),
-      body: route.text,
-      type: params.type,
-      priority: params.priority,
-      threadId,
-      payload: params.payload
-    })
-  )
-  for (const message of messages) {
-    runtime.deliverPendingMessagesForHandle(message.to_handle)
-    runtime.notifyMessageArrived(message.to_handle, message.type)
+  const delivered: MessageRow[] = []
+  const refused: RelayRefusal[] = []
+  for (const target of targets) {
+    const handle = target.terminal.handle
+    let partlyTyped = false
+    let message: MessageRow | null = null
+    try {
+      await assertDeliverable(runtime, handle)
+      message = db.insertMessage({
+        from,
+        to: handle,
+        subject: relaySubject(route.text),
+        body: route.text,
+        type: params.type,
+        priority: params.priority,
+        threadId,
+        payload: params.payload
+      })
+      const sent = message
+      // Why: text, a settle delay, then Enter, each write rechecked (sendTerminal).
+      await runtime.sendTerminal(
+        handle,
+        { text: formatMessagesForInjection([sent]), enter: true },
+        {
+          beforeWrite: async () => {
+            await assertDeliverable(runtime, handle)
+            partlyTyped = true
+          }
+        }
+      )
+      delivered.push(sent)
+    } catch (error) {
+      refused.push({
+        cardId: target.cardId,
+        title: target.title,
+        handle,
+        reason: error instanceof RelayRefused ? error.reason : 'not-writable',
+        partlyTyped
+      })
+    } finally {
+      if (message) {
+        // Why: stamped even when refused, so the runtime's unguarded push-on-idle
+        // never types it later; it stays readable with `orchestration check`.
+        db.markAsDelivered([message.id])
+        runtime.notifyMessageArrived(handle, message.type)
+      }
+    }
   }
-  return { messages, recipients: recipients.length, orchestratorCardId: found.cardId }
+  if (delivered.length === 0) {
+    throw new BoardConsoleError(
+      'board_orchestrator_not_delivered',
+      `orchestrator "${label}" reached no console: ${listNames(refused, (i) =>
+        refused[i].partlyTyped
+          ? `${REFUSAL_WORDS[refused[i].reason]}; text may be partly typed, Enter was not pressed`
+          : REFUSAL_WORDS[refused[i].reason]
+      )}.`
+    )
+  }
+  return {
+    messages: delivered,
+    recipients: delivered.length,
+    orchestratorCardId: found.cardId,
+    refused,
+    skipped
+  }
 }

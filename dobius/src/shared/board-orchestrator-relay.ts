@@ -10,7 +10,10 @@ export type ScopedConsole = { cardId: string; title: string }
 export type OrchestratorRoute =
   | { kind: 'all'; text: string }
   | { kind: 'one'; cardId: string; text: string }
-  | { kind: 'refuse'; reason: 'outside-scope' | 'workspace' | 'undo' | 'nothing-wired' }
+  | {
+      kind: 'refuse'
+      reason: 'outside-scope' | 'ambiguous' | 'workspace' | 'undo' | 'nothing-wired'
+    }
 
 type RelayCard = { id: string; kind: string; tabId?: unknown; title?: unknown }
 
@@ -20,7 +23,8 @@ const UNDO_ACTION = /^(undo|redo)\b/i
 
 /**
  * `@Name rest` targets one wired console (longest title match wins);
- * anything else goes to every wired console.
+ * anything else goes to every wired console. Two wired consoles whose titles
+ * match the mention (ignoring case) are refused: picking one would be a guess.
  */
 export function routeOrchestratorMessage(
   raw: string,
@@ -46,6 +50,10 @@ export function routeOrchestratorMessage(
       })
     if (!match) {
       return { kind: 'refuse', reason: 'outside-scope' }
+    }
+    const matchTitle = match.title.toLowerCase()
+    if (wired.filter((c) => c.title.toLowerCase() === matchTitle).length > 1) {
+      return { kind: 'refuse', reason: 'ambiguous' }
     }
     const body = text.slice(1 + match.title.length).trim()
     return body
@@ -95,18 +103,78 @@ export function wiredConsoleTabIds(
   )
 }
 
+type ConsoleTerminal = {
+  handle: string
+  leafId: string
+  connected: boolean
+  ptyId: string | null
+}
+const isLiveTerminal = (t: ConsoleTerminal): boolean => t.connected && t.ptyId !== null
+
 /**
- * Terminals one relay reaches: those in the tabs of the wired consoles, narrowed
- * to `onlyCardIds` for an @mention. Why wiring is passed in at send time: a
+ * Chooses which pane of a console card's tab is "the console". One live pane is
+ * unambiguous. With several live panes only the tab's focused pane counts; if
+ * that is not known the card is reported as unclear rather than guessed at.
+ */
+export function pickConsoleTerminal<T extends ConsoleTerminal>(
+  inTab: T[],
+  activeLeafId: string | null
+): { terminal: T | null; running: boolean; paneUnclear: boolean } {
+  const live = inTab.filter(isLiveTerminal)
+  if (live.length === 0) {
+    const shown = inTab.find((t) => t.leafId === activeLeafId) ?? inTab[0] ?? null
+    return { terminal: shown, running: false, paneUnclear: false }
+  }
+  if (live.length === 1) {
+    return { terminal: live[0], running: true, paneUnclear: false }
+  }
+  const focused = live.find((t) => t.leafId === activeLeafId)
+  return focused
+    ? { terminal: focused, running: true, paneUnclear: false }
+    : { terminal: null, running: true, paneUnclear: true }
+}
+
+export type RelayTerminal = ConsoleTerminal & { tabId: string; originTabId?: string | null }
+export type RelayTarget<T extends RelayTerminal> = { cardId: string; title: string; terminal: T }
+export type RelaySkip = { cardId: string; title: string; reason: 'not-running' | 'pane-unclear' }
+
+/**
+ * The one live terminal of each wired console a relay reaches, narrowed to
+ * `onlyCardIds` for an @mention. Same pane rule as `card:` addresses: a split
+ * console gets it once (its focused pane), never in every pane; a stopped
+ * console is skipped, not counted. Why wiring is passed in at send time: a
  * console disconnected meanwhile must get nothing.
  */
-export function orchestratorRelayRecipients<T extends { tabId: string }>(
+export function orchestratorRelayTargets<T extends RelayTerminal>(
   cards: readonly RelayCard[],
   wiredCardIds: readonly string[],
   onlyCardIds: readonly string[] | undefined,
-  terminals: readonly T[]
-): T[] {
-  const scope = onlyCardIds ? wiredCardIds.filter((id) => onlyCardIds.includes(id)) : wiredCardIds
-  const tabIds = new Set(wiredConsoleTabIds(cards, scope))
-  return terminals.filter((t) => tabIds.has(t.tabId))
+  terminals: readonly T[],
+  activeLeafIdOf: (tabId: string) => string | null
+): { targets: RelayTarget<T>[]; skipped: RelaySkip[] } {
+  const scope = new Set(
+    onlyCardIds ? wiredCardIds.filter((id) => onlyCardIds.includes(id)) : wiredCardIds
+  )
+  const targets: RelayTarget<T>[] = []
+  const skipped: RelaySkip[] = []
+  const seen = new Set<string>()
+  for (const card of cards) {
+    if (card.kind !== 'console' || !scope.has(card.id) || typeof card.tabId !== 'string') {
+      continue
+    }
+    const tabId = card.tabId
+    const title = typeof card.title === 'string' ? card.title : ''
+    // Why originTabId: while terminals are listed from PTY records the tab link lives there.
+    const inTab = terminals.filter((t) => t.tabId === tabId || t.originTabId === tabId)
+    const picked = pickConsoleTerminal(inTab, activeLeafIdOf(tabId))
+    if (picked.paneUnclear) {
+      skipped.push({ cardId: card.id, title, reason: 'pane-unclear' })
+    } else if (!picked.running || !picked.terminal) {
+      skipped.push({ cardId: card.id, title, reason: 'not-running' })
+    } else if (!seen.has(picked.terminal.handle)) {
+      seen.add(picked.terminal.handle)
+      targets.push({ cardId: card.id, title, terminal: picked.terminal })
+    }
+  }
+  return { targets, skipped }
 }

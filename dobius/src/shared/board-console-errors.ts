@@ -13,7 +13,9 @@ export const BOARD_CONSOLE_ERROR_CODES = [
   'board_orchestrator_not_found',
   'board_orchestrator_ambiguous',
   'board_orchestrator_refused',
-  'board_orchestrator_none_running'
+  'board_orchestrator_none_running',
+  'board_orchestrator_paused',
+  'board_orchestrator_not_delivered'
 ] as const
 export type BoardConsoleErrorCode = (typeof BOARD_CONSOLE_ERROR_CODES)[number]
 

@@ -197,7 +197,14 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
       ? undefined
       : await resolveOrchestrationTerminalHandle(senderFlags(flags), cwd, client, 'from')
     const result = await client.call<
-      { message: { id: string } } | { messages: { id: string }[]; recipients: number }
+      | { message: { id: string } }
+      | {
+          messages: { id: string }[]
+          recipients: number
+          // Why optional: only a board:<orchestrator> relay reports these.
+          refused?: { title: string; reason: string; partlyTyped: boolean }[]
+          skipped?: { title: string; reason: string }[]
+        }
     >('orchestration.send', {
       from,
       to,
@@ -213,7 +220,16 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
       if ('message' in r) {
         return `Sent ${r.message.id}`
       }
-      return `Sent ${r.messages.length} messages to ${r.recipients} recipients`
+      const lines = [`Sent ${r.messages.length} messages to ${r.recipients} recipients`]
+      for (const x of r.refused ?? []) {
+        lines.push(
+          `Not delivered to "${x.title}": ${x.reason}${x.partlyTyped ? ' (text may be partly typed; Enter was not pressed)' : ''}`
+        )
+      }
+      for (const x of r.skipped ?? []) {
+        lines.push(`Skipped "${x.title}": ${x.reason}`)
+      }
+      return lines.join('\n')
     })
   },
 

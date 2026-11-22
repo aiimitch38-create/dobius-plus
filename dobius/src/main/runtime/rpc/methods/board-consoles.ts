@@ -18,8 +18,8 @@ import {
 import type { RuntimeBoardSpawnConsoleEvent } from '../../../../shared/runtime-client-events'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import type { TuiAgent } from '../../../../shared/types'
-import type { RuntimeTerminalSummary } from '../../../../shared/runtime-types'
 import { BoardConsoleError } from '../../../../shared/board-console-errors'
+import { pickConsoleTerminal } from '../../../../shared/board-orchestrator-relay'
 import type { DobiusRuntimeService } from '../../dobius-runtime'
 import { defineMethod, type RpcMethod } from '../core'
 
@@ -180,31 +180,8 @@ export async function listBoardConsoleRows(
   })
 }
 
-type ConsoleTerminal = Pick<RuntimeTerminalSummary, 'handle' | 'leafId' | 'connected' | 'ptyId'>
-const isLiveTerminal = (t: ConsoleTerminal): boolean => t.connected && t.ptyId !== null
-
-/**
- * Chooses which pane of a console card's tab is "the console". One live pane is
- * unambiguous. With several live panes only the tab's focused pane counts; if
- * that is not known the card is reported as unclear rather than guessed at.
- */
-export function pickConsoleTerminal<T extends ConsoleTerminal>(
-  inTab: T[],
-  activeLeafId: string | null
-): { terminal: T | null; running: boolean; paneUnclear: boolean } {
-  const live = inTab.filter(isLiveTerminal)
-  if (live.length === 0) {
-    const shown = inTab.find((t) => t.leafId === activeLeafId) ?? inTab[0] ?? null
-    return { terminal: shown, running: false, paneUnclear: false }
-  }
-  if (live.length === 1) {
-    return { terminal: live[0], running: true, paneUnclear: false }
-  }
-  const focused = live.find((t) => t.leafId === activeLeafId)
-  return focused
-    ? { terminal: focused, running: true, paneUnclear: false }
-    : { terminal: null, running: true, paneUnclear: true }
-}
+// Why shared: the board:<orchestrator> relay picks each wired console's pane the same way.
+export { pickConsoleTerminal } from '../../../../shared/board-orchestrator-relay'
 
 const quoted = (values: string[]): string => values.map((v) => `"${v}"`).join(', ')
 

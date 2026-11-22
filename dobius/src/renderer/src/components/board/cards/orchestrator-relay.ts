@@ -6,7 +6,7 @@ import type { OrchestratorMessage } from './OrchestratorCard'
 // Routing and fan-out live in shared/ so `orchestration send --to board:<id>` matches the card.
 export {
   orchestratorHandle,
-  orchestratorRelayRecipients,
+  orchestratorRelayTargets,
   relaySubject,
   relayThreadId,
   wiredScopedConsoles
