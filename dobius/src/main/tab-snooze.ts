@@ -28,28 +28,9 @@ import {
   snoozedTabKey
 } from '../shared/tab-snooze-types'
 
-export type TabSnoozeScrollbackStore = {
-  write: (key: string, buffer: string) => string | null
-  read: (ref: string) => string | null
-  remove: (ref: string) => void
-}
+export type { TabSnoozeDeps, TabSnoozeScrollbackStore } from './tab-snooze-deps'
 
-export type TabSnoozeDeps = {
-  /** The saved list, as it is on disk (cleaned here on every read). */
-  load: () => unknown
-  save: (entries: SnoozedTabEntry[]) => void
-  scrollback: TabSnoozeScrollbackStore
-  /** Told after every change (main broadcasts tabSnooze:changed). */
-  onChange: () => void
-  /** True when main itself can see this pane running this conversation. */
-  verifyResumeOwner?: (owner: AgentResumeOwner) => boolean
-  /**
-   * A window left mid-return: give its unspawned session claim back. True
-   * when main is starting that terminal right now and will decide the outcome.
-   */
-  abandonReturnClaim?: (owner: AgentResumeOwner) => boolean
-  now?: () => number
-}
+import type { TabSnoozeDeps } from './tab-snooze-deps'
 
 export type TabSnoozeService = ReturnType<typeof createTabSnoozeService>
 
@@ -60,6 +41,9 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
   // In memory only: after a relaunch no window holds one, and
   // recoverInterruptedReturns() starts those returns over.
   const reservedBy = new Map<string, number>()
+  // Returns the user called off while main was starting their terminal; the
+  // spawn's completion (stageReturnSettle) reads this and undoes itself.
+  const cancelled = new Set<string>()
   const read = (): SnoozedTabEntry[] => cleanSnoozedTabEntries(deps.load())
   const find = (ref: SnoozedTabRef): { entries: SnoozedTabEntry[]; entry?: SnoozedTabEntry } => {
     const entries = read()
@@ -142,6 +126,7 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
     deps.save(entries.filter((existing) => !gone.includes(existing)))
     for (const entry of gone) {
       reservedBy.delete(snoozedTabKey(entry))
+      cancelled.delete(snoozedTabKey(entry))
       if (entry.scrollbackRef) {
         deps.scrollback.remove(entry.scrollbackRef)
       }
@@ -151,7 +136,7 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
   }
 
   /** Returns that did not finish: back on the shelf until the user brings them back. */
-  function shelve(entries: SnoozedTabEntry[], back: SnoozedTabEntry[]): boolean {
+  function shelve(entries: SnoozedTabEntry[], back: SnoozedTabEntry[], ready = false): boolean {
     if (back.length === 0) {
       return false
     }
@@ -161,8 +146,10 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
           return existing
         }
         reservedBy.delete(snoozedTabKey(existing))
+        cancelled.delete(snoozedTabKey(existing))
         const { returning: _returning, ...rest } = existing
-        return { ...rest, until: null, ready: false }
+        // `ready`: a return cut short by a quit starts over by itself.
+        return ready ? { ...rest, ready } : { ...rest, until: null, ready }
       })
     )
     changed()
@@ -261,18 +248,66 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
         : false
     },
 
-    /** Main started this conversation's terminal for the returning tab: done. */
-    settleReturn(owner: AgentResumeOwner): boolean {
+    /**
+     * Main started this conversation's terminal for the returning tab. The row
+     * leaves the list now, so the save that writes the tab's terminal binding
+     * also writes the row's removal: a crash can never keep both a good tab
+     * and a row that would close it at the next launch. `commit` once that
+     * save succeeded; `rollback` (back on the shelf) when it failed, or when
+     * `cancelled` says the user closed the tab while the terminal started.
+     */
+    stageReturnSettle(
+      owner: AgentResumeOwner
+    ): { cancelled: boolean; commit: () => void; rollback: () => void } | null {
       const entries = read()
-      return remove(
-        entries,
-        entries.filter((entry) => entry.returning && ownsConversation(entry, owner))
+      const entry = entries.find(
+        (existing) => existing.returning && ownsConversation(existing, owner)
       )
+      if (!entry) {
+        return null
+      }
+      const key = snoozedTabKey(entry)
+      const wasCancelled = cancelled.delete(key)
+      reservedBy.delete(key)
+      if (!wasCancelled) {
+        // A cancelled return keeps its row: nothing is being saved for it.
+        deps.save(entries.filter((existing) => existing !== entry))
+      }
+      return {
+        cancelled: wasCancelled,
+        commit: () => {
+          if (entry.scrollbackRef) {
+            deps.scrollback.remove(entry.scrollbackRef)
+          }
+          changed()
+        },
+        rollback: () => {
+          const now = read()
+          const still = now.find((existing) => sameSnoozedTab(existing, entry))
+          if (!shelve(now, still?.returning ? [still] : []) && !still) {
+            const { returning: _returning, ...rest } = entry
+            deps.save([...now, { ...rest, until: null, ready: false }])
+            changed()
+          }
+        }
+      }
     },
 
     putBack(ref: SnoozedTabRef, rendererId?: number): boolean {
       const { entries, entry } = find(ref)
-      return entry && holds(entry, rendererId) ? shelve(entries, [entry]) : false
+      if (!entry || !holds(entry, rendererId)) {
+        return false
+      }
+      const owner = entry.agentSession?.resumeOwner
+      if (owner && deps.abandonReturnClaim?.(owner)) {
+        // Why not shelved: main is starting this conversation's terminal right
+        // now. Shelving here would leave a running terminal nobody settles,
+        // so the spawn's completion is told to stop it and shelve instead.
+        reservedBy.delete(snoozedTabKey(entry))
+        cancelled.add(snoozedTabKey(entry))
+        return false
+      }
+      return shelve(entries, [entry])
     },
 
     /** A window closed, crashed or reloaded: the returns it held go back on the shelf. */
@@ -312,35 +347,22 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
      */
     recoverInterruptedReturns(): void {
       const entries = read()
-      if (!entries.some((entry) => entry.returning)) {
-        return
-      }
-      deps.save(
-        entries.map((entry) => {
-          if (!entry.returning) {
-            return entry
-          }
-          const { returning: _returning, ...rest } = entry
-          return { ...rest, ready: true }
-        })
+      shelve(
+        entries,
+        entries.filter((entry) => entry.returning),
+        true
       )
-      changed()
     },
 
     /** A new time (null: until brought back), or now: ready at once. */
     setTime(ref: SnoozedTabRef, until: number | null): boolean {
-      const entries = read()
-      if (!entries.some((entry) => sameSnoozedTab(entry, ref) && !entry.returning)) {
+      const { entries, entry } = find(ref)
+      if (!entry || entry.returning) {
         return false
       }
       const next = Number.isFinite(until) ? (until as number) : null
-      deps.save(
-        entries.map((entry) =>
-          sameSnoozedTab(entry, ref)
-            ? { ...entry, until: next, ready: next != null && next <= now() }
-            : entry
-        )
-      )
+      const moved = { ...entry, until: next, ready: next != null && next <= now() }
+      deps.save(entries.map((existing) => (existing === entry ? moved : existing)))
       changed()
       return true
     },

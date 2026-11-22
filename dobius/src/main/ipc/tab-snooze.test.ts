@@ -189,7 +189,8 @@ describe('tab snooze IPC', () => {
 
   it('the claim gate vouches only for the window returning the tab, until main settles it', async () => {
     const { call, callFrom, makeSender } = await setup()
-    const { isSnoozedTabReturnOwner, settleSnoozedTabReturn } = await import('../tab-snooze-active')
+    const { isSnoozedTabReturnOwner, stageSnoozedTabReturnSettle } =
+      await import('../tab-snooze-active')
     mocks.status.push(liveStatus)
     const ref = { worktreeId: 'wt-1', tabId: 'tab-1' }
     call('tabSnooze:add', { ...ref, title: 'Fix', until: null, agentSession })
@@ -208,7 +209,7 @@ describe('tab snooze IPC', () => {
     // "Some terminal started" from the renderer does not settle a conversation.
     expect(call('tabSnooze:settle', ref)).toBe(false)
     expect(call('tabSnooze:list')).toHaveLength(1)
-    expect(settleSnoozedTabReturn(owner)).toBe(true)
+    stageSnoozedTabReturnSettle(owner)?.commit()
     expect(call('tabSnooze:list')).toEqual([])
     expect(isSnoozedTabReturnOwner(owner, 7)).toBe(false)
   })

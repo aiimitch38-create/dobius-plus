@@ -31,7 +31,7 @@ import { mainProcessAgentResumeClaims } from '../pty/agent-resume-claims'
 import {
   isSnoozedTabReturnOwner,
   releaseSnoozedTabReturn,
-  settleSnoozedTabReturn
+  stageSnoozedTabReturnSettle
 } from '../tab-snooze-active'
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
 import {
@@ -3183,10 +3183,11 @@ export function registerPtyHandlers(
           }
           spawnTiming.mark('provider_spawn')
         } catch (err) {
-          if (resumeClaim) {
-            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, false)
+          if (resumeClaim && mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, false)) {
             // Why: a snoozed tab whose conversation did not start goes back on
             // the shelf from here, whether or not its window is still around.
+            // Why only when this token's spawn had begun: a stale request must
+            // not shelve the newer return that now owns the same conversation.
             releaseSnoozedTabReturn(resumeClaim.owner)
           }
           const rawMessage = err instanceof Error ? err.message : String(err)
@@ -3292,6 +3293,32 @@ export function registerPtyHandlers(
         // other field; patch the load-bearing (tab.ptyId, ptyIdsByLeafId)
         // binding synchronously so a force-quit in the ~450 ms debounce window
         // cannot orphan either daemon history or a remote relay PTY lease.
+        // Why staged before the binding save and with no await in between: a
+        // returning snoozed tab's row must leave the list in the same save
+        // that writes its terminal binding, and come back if that save fails.
+        const snoozeReturn = resumeClaim ? stageSnoozedTabReturnSettle(resumeClaim.owner) : null
+        // Why only once the terminal is confirmed dead: a claim made
+        // retryable while it may still run would allow a second resume.
+        const retrySnoozeReturnClaim = (): void => {
+          if (resumeClaim && snoozeReturn) {
+            mainProcessAgentResumeClaims.failStarted(resumeClaim.owner, result.id)
+          }
+        }
+        if (snoozeReturn?.cancelled) {
+          // The user closed the returning tab while its terminal was starting.
+          // Its row stays off the shelf until the terminal has been stopped.
+          try {
+            await provider.shutdown(result.id, { immediate: true })
+            clearProviderPtyState(result.id)
+            deletePtyOwnership(result.id)
+            ptySizes.delete(result.id)
+            retrySnoozeReturnClaim()
+          } catch (shutdownErr) {
+            console.warn('[pty] failed to stop a cancelled snooze return:', shutdownErr)
+          }
+          snoozeReturn.rollback()
+          throw new Error('Snoozed tab return was cancelled before its terminal started')
+        }
         if (
           (isDaemonHostSpawn || args.connectionId) &&
           store &&
@@ -3309,9 +3336,13 @@ export function registerPtyHandlers(
             })
           } catch (err) {
             console.error('[pty] failed to persist PTY binding after spawn:', err)
+            // Why before any await: the staged row removal must be undone
+            // before another save could write it without the binding.
+            snoozeReturn?.rollback()
             if (!result.isReattach) {
               try {
                 await provider.shutdown(result.id, { immediate: true })
+                retrySnoozeReturnClaim()
               } catch (shutdownErr) {
                 console.warn('[pty] failed to clean up PTY after persistence failure:', shutdownErr)
               }
@@ -3321,20 +3352,10 @@ export function registerPtyHandlers(
             if (!result.isReattach && args.connectionId && store) {
               store.removeSshRemotePtyLease(args.connectionId, relayResultId)
             }
-            if (resumeClaim && releaseSnoozedTabReturn(resumeClaim.owner) && !result.isReattach) {
-              // Why: the terminal was just killed, so the snoozed tab's claim
-              // must not stay "started" or its retry would be refused.
-              mainProcessAgentResumeClaims.failStarted(resumeClaim.owner, result.id)
-            }
             throw new Error(createTerminalSessionStateSaveFailureMessage())
           }
         }
-        if (resumeClaim) {
-          // Why only here: main started the conversation's terminal and its
-          // tab binding is saved, which is the proof that a snoozed tab's
-          // return is complete. Earlier, a failed save would lose the entry.
-          settleSnoozedTabReturn(resumeClaim.owner)
-        }
+        snoozeReturn?.commit()
         // Why: pre-signal cooperation gate — when the renderer has declared it
         // will own the serializer for this paneKey, suppress the daemon-snapshot
         // seed so the renderer's hydration path (maybeHydrateHeadlessFromRenderer)

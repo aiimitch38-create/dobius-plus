@@ -14,10 +14,15 @@ export function isSnoozedTabReturnOwner(owner: AgentResumeOwner, rendererId: num
   return activeService?.ownsReturn(owner, rendererId) ?? false
 }
 
-/** Main started the conversation's terminal (main/ipc/pty.ts): the return is done. */
-export function settleSnoozedTabReturn(owner: AgentResumeOwner): boolean {
+/**
+ * Main started the conversation's terminal (main/ipc/pty.ts). Null when no
+ * snoozed tab is returning with this conversation. See stageReturnSettle.
+ */
+export function stageSnoozedTabReturnSettle(
+  owner: AgentResumeOwner
+): ReturnType<TabSnoozeService['stageReturnSettle']> {
   try {
-    return activeService?.settleReturn(owner) ?? false
+    return activeService?.stageReturnSettle(owner) ?? null
   } catch (err) {
     // Why: the caller has just started a terminal; bookkeeping here must not
     // make that spawn look failed. The entry stays and is released later.
@@ -25,7 +30,7 @@ export function settleSnoozedTabReturn(owner: AgentResumeOwner): boolean {
       '[tab-snooze] could not settle a return:',
       err instanceof Error ? err.message : err
     )
-    return false
+    return null
   }
 }
 

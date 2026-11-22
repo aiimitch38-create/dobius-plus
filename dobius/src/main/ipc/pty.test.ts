@@ -808,6 +808,7 @@ describe('registerPtyHandlers', () => {
   it('keeps a snoozed tab until its terminal binding is saved, and retries cleanly when the save fails', async () => {
     const { createTabSnoozeService } = await import('../tab-snooze')
     const { setActiveTabSnoozeService } = await import('../tab-snooze-active')
+    const { mainProcessAgentResumeClaims } = await import('../pty/agent-resume-claims')
     const leafId = '11111111-1111-4111-8111-111111111111'
     const owner: AgentResumeOwner = {
       authority: { kind: 'local' },
@@ -828,7 +829,8 @@ describe('registerPtyHandlers', () => {
         saved = entries
       },
       scrollback: { write: () => null, read: () => null, remove: () => {} },
-      onChange: () => {}
+      onChange: () => {},
+      abandonReturnClaim: (claimed) => mainProcessAgentResumeClaims.abandon(claimed)
     })
     setActiveTabSnoozeService(snooze)
     const sender = mainWindow.webContents as { id?: number }
@@ -856,33 +858,45 @@ describe('registerPtyHandlers', () => {
       })
       getAgentStatusSnapshotMock.mockReturnValue([])
       let spawned = 0
+      let duringSpawn: (() => void) | null = null
+      let duringShutdown: (() => void) | null = null
+      const shutdown = vi.fn(async () => duringShutdown?.())
       setLocalPtyProvider({
-        spawn: vi.fn(async () => ({ id: `returned-pty-${++spawned}` })),
+        spawn: vi.fn(async () => {
+          duringSpawn?.()
+          return { id: `returned-pty-${++spawned}` }
+        }),
         write: vi.fn(),
         resize: vi.fn(),
         kill: vi.fn(),
-        shutdown: vi.fn(),
+        shutdown,
         onData: vi.fn(() => vi.fn()),
         onExit: vi.fn(() => vi.fn()),
         listProcesses: vi.fn(async () => []),
         getForegroundProcess: vi.fn(async () => null)
       } as never)
+      const rowsAtSave: number[] = []
+      let saveFails = true
       const persistPtyBinding = vi.fn(() => {
-        throw new Error('disk full')
+        rowsAtSave.push(snooze.list().length)
+        if (saveFails) {
+          throw new Error('disk full')
+        }
       })
       handlers.clear()
       registerPtyHandlers(mainWindow as never, undefined, undefined, undefined, undefined, {
         getWorkspaceSession: () => ({}),
         persistPtyBinding
       } as never)
-      const spawnReturn = async (): Promise<unknown> => {
-        snooze.take(ref, { rendererId: 7, returnTabId: 'tab-returned' })
-        const claim = (await handlers.get('pty:claimAgentResume')!(mainWindowIpcEvent, owner)) as {
-          token: string
-          target: AgentResumeSpawnTarget
-        }
+      type Claim = { token: string; target: AgentResumeSpawnTarget }
+      const claimReturn = async (): Promise<Claim> => {
+        expect(snooze.take(ref, { rendererId: 7, returnTabId: 'tab-returned' })).not.toBeNull()
+        const claim = await handlers.get('pty:claimAgentResume')!(mainWindowIpcEvent, owner)
         expect(claim).toMatchObject({ ok: true })
-        return handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+        return claim as Claim
+      }
+      const spawnWith = (claim: Claim): unknown =>
+        handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           worktreeId: owner.worktreeId,
@@ -898,17 +912,42 @@ describe('registerPtyHandlers', () => {
             })
           }
         })
+      const expectOnShelf = (): void => {
+        expect(snooze.list()).toHaveLength(1)
+        expect(snooze.list()[0].returning).toBeUndefined()
       }
 
-      // The save fails: the terminal is killed, so the entry must survive on
-      // the shelf and the same return must be able to claim again.
-      await expect(spawnReturn()).rejects.toThrow()
-      expect(persistPtyBinding).toHaveBeenCalledTimes(1)
-      expect(snooze.list()).toHaveLength(1)
-      expect(snooze.list()[0].returning).toBeUndefined()
+      // The save fails and the window goes away while the terminal is being
+      // killed: the row left the list in the same save as the binding, comes
+      // back on the shelf, and the killed terminal's claim is retryable.
+      duringShutdown = () => snooze.releaseRenderer(7)
+      await expect(spawnWith(await claimReturn())).rejects.toThrow()
+      duringShutdown = null
+      expect(rowsAtSave).toEqual([0])
+      expect(shutdown).toHaveBeenCalledTimes(1)
+      expectOnShelf()
 
-      persistPtyBinding.mockImplementation(() => undefined as never)
-      await expect(spawnReturn()).resolves.toMatchObject({ id: 'returned-pty-2' })
+      // A stale spawn request (its window left, a new return claimed since)
+      // is rejected without touching the newer return.
+      const stale = await claimReturn()
+      snooze.releaseRenderer(7)
+      const current = await claimReturn()
+      await expect(spawnWith(stale)).rejects.toThrow(
+        'Automatic agent-resume ownership changed before PTY spawn'
+      )
+      expect(snooze.list()[0].returning).toBe(true)
+
+      // The user closes the returning tab while its terminal is starting: the
+      // terminal is stopped, the entry is back on the shelf, the claim retryable.
+      saveFails = false
+      duringSpawn = () => expect(snooze.putBack(ref, 7)).toBe(false)
+      await expect(spawnWith(current)).rejects.toThrow()
+      duringSpawn = null
+      expect(shutdown).toHaveBeenCalledTimes(2)
+      expectOnShelf()
+
+      await expect(spawnWith(await claimReturn())).resolves.toMatchObject({ id: 'returned-pty-3' })
+      expect(rowsAtSave.at(-1)).toBe(0)
       expect(snooze.list()).toEqual([])
     } finally {
       delete sender.id

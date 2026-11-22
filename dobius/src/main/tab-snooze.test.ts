@@ -284,9 +284,9 @@ describe('tab snooze service', () => {
     expect(h.service.ownsReturn({ ...owner, ptyId: 'pty-other' }, 7)).toBe(false)
     // A terminal starting is not enough: only the confirmed conversation settles it.
     expect(h.service.settle(ref, 7)).toBe(false)
-    expect(h.service.settleReturn({ ...owner, ptyId: 'pty-other' })).toBe(false)
+    expect(h.service.stageReturnSettle({ ...owner, ptyId: 'pty-other' })).toBeNull()
     expect(h.service.list()).toHaveLength(1)
-    expect(h.service.settleReturn(owner)).toBe(true)
+    h.service.stageReturnSettle(owner)?.commit()
     expect(h.service.list()).toEqual([])
     expect(h.service.ownsReturn(owner, 7)).toBe(false)
     h.service.stop()
@@ -353,7 +353,7 @@ describe('tab snooze service', () => {
     // The spawn succeeded: main settles it though the window is gone.
     h.service.take(ref, { rendererId: 7 })
     h.service.releaseRenderer(7)
-    expect(h.service.settleReturn(owner)).toBe(true)
+    h.service.stageReturnSettle(owner)?.commit()
     expect(h.service.list()).toEqual([])
     h.service.stop()
   })
@@ -385,6 +385,54 @@ describe('tab snooze service', () => {
     expect(h.service.list()).toHaveLength(1)
     h.service.take({ worktreeId: 'wt-1', tabId: 'tab-1' }, { rendererId: 7 })
     expect(h.service.ownsReturn(sshOwner, 7)).toBe(false)
+    h.service.stop()
+  })
+
+  it('settling is staged: the row leaves the list first, and a failed save restores it', () => {
+    const h = harness({ verifyResumeOwner: () => true })
+    const session = agentSession('tab-1')
+    const owner = session.resumeOwner as AgentResumeOwner
+    const ref = { worktreeId: 'wt-1', tabId: 'tab-1' }
+    h.service.add(request('tab-1', { agentSession: session, scrollback: 'out' }))
+    h.service.take(ref, { rendererId: 7 })
+    const failed = h.service.stageReturnSettle(owner)
+    // Gone from what the next save writes, but its output is still on disk.
+    expect(h.service.list()).toEqual([])
+    expect([...h.files.values()]).toEqual(['out'])
+    failed?.rollback()
+    expect(h.service.list()[0]).toMatchObject({ tabId: 'tab-1', until: null, ready: false })
+    expect(h.service.list()[0].returning).toBeUndefined()
+
+    expect(h.service.take(ref, { rendererId: 7 })?.scrollback).toBe('out')
+    const done = h.service.stageReturnSettle(owner)
+    expect(done?.cancelled).toBe(false)
+    done?.commit()
+    expect(h.service.list()).toEqual([])
+    expect(h.files.size).toBe(0)
+    h.service.stop()
+  })
+
+  it('a tab closed while its terminal is starting is not shelved under the running spawn', () => {
+    const h = harness({ verifyResumeOwner: () => true, abandonReturnClaim: () => true })
+    const session = agentSession('tab-1')
+    const owner = session.resumeOwner as AgentResumeOwner
+    const ref = { worktreeId: 'wt-1', tabId: 'tab-1' }
+    h.service.add(request('tab-1', { agentSession: session }))
+    h.service.take(ref, { rendererId: 7 })
+    expect(h.service.putBack(ref, 7)).toBe(false)
+    expect(h.service.list()[0].returning).toBe(true)
+    expect(h.service.take(ref)).toBeNull()
+    // The spawn's completion is told the return was cancelled and undoes it.
+    const staged = h.service.stageReturnSettle(owner)
+    expect(staged?.cancelled).toBe(true)
+    // Still in the list (off the shelf) while main stops the terminal: a save
+    // that lands meanwhile must not write the entry's removal.
+    expect(h.service.list()[0].returning).toBe(true)
+    staged?.rollback()
+    expect(h.service.list()[0].returning).toBeUndefined()
+    // A later return of the same tab starts clean.
+    h.service.take(ref, { rendererId: 7 })
+    expect(h.service.stageReturnSettle(owner)?.cancelled).toBe(false)
     h.service.stop()
   })
 
