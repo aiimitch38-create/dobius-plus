@@ -28,6 +28,7 @@ vi.mock('@/store', () => ({
       setVoiceOrbLabel: voice.setLabel
     })
 }))
+vi.mock('../board/board-route/adam-voice-thread', () => ({ useAdamVoiceThread: () => undefined }))
 vi.mock('../jarvis/use-jarvis-turn', () => ({ useJarvisTurn: () => voice.jarvis }))
 vi.mock('../jarvis/use-voice-agent', () => ({ useVoiceAgent: () => voice.agent }))
 vi.mock('../jarvis/use-jarvis-voice-settings', () => ({

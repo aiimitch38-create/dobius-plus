@@ -409,6 +409,10 @@ import type {
 } from '../shared/rate-limit-types'
 import type {
   ElevenLabsKeyStatus,
+  AdamTurnEvent,
+  AdamLookingAt,
+  AdamThreadRow,
+  AdamTurnSource,
   JarvisAskResult,
   JarvisSpeakOutcome,
   JarvisStateEvent,
@@ -3349,7 +3353,8 @@ export type PreloadApi = {
   jarvis: {
     /** Toggles system-wide ⌘T Jarvis mode; persists voice.jarvisEnabled on success. */
     setMode: (on: boolean) => Promise<{ ok: boolean }>
-    ask: (utterance: string) => Promise<JarvisAskResult>
+    /** `lookingAt` is the project on screen when the capture started. */
+    ask: (utterance: string, lookingAt?: AdamLookingAt | null) => Promise<JarvisAskResult>
     speak: (text: string) => Promise<JarvisSpeakOutcome>
     openOrb: () => Promise<{ ok: boolean; windowId?: number }>
     /** Fires the same pressed/released broadcast the global ⌘T shortcut fires,
@@ -3400,7 +3405,18 @@ export type PreloadApi = {
     liveSessionConnect: (offerSdp: string) => Promise<OpenAiLiveSessionResult>
     /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
     cancelAsk: () => Promise<{ ok: true }>
-    askAdamText: (utterance: string) => Promise<JarvisAskResult>
+    askAdamText: (utterance: string, source?: AdamTurnSource) => Promise<JarvisAskResult>
+    /** ADAM's one thread, owned by main: read it, add a row, clear it, and hear every change. */
+    adamThreadGet: () => Promise<AdamThreadRow[]>
+    adamThreadAppend: (row: AdamThreadRow) => Promise<{ ok: boolean; error?: 'not-saved' }>
+    adamThreadClear: () => Promise<{ ok: boolean; error?: 'not-saved' }>
+    onAdamThread: (callback: (rows: AdamThreadRow[]) => void) => () => void
+    /** Main could not save a row it wrote itself (a spoken turn). */
+    onAdamThreadUnsaved: (callback: () => void) => () => void
+    /** Tells main which project is on screen, for turns that start there (the wake word). */
+    reportLookingAt: (lookingAt: AdamLookingAt | null) => Promise<void>
+    /** Every accepted ADAM turn, voice or typed: the words asked, then the reply. */
+    onAdamTurn: (callback: (event: AdamTurnEvent) => void) => () => void
     onState: (callback: (event: JarvisStateEvent) => void) => () => void
     onPttPressed: (callback: (data: { at: number }) => void) => () => void
     onPttReleased: (callback: (data: { at: number }) => void) => () => void

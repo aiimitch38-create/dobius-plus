@@ -89,12 +89,22 @@ describe('board send', () => {
     ])
     expect(callMock.mock.calls).toEqual([
       ['board.resolveConsole', { worktree: 'id:wt-1', card: 'Builder 1' }],
+      // Guarded delivery: the text first, then Enter, each checked by the runtime.
       [
         'terminal.send',
         {
           terminal: 'term_live',
           text: 'hello',
+          requireAgentStatus: 'sendable',
+          client: { id: 'dobius-cli', type: 'desktop' }
+        }
+      ],
+      [
+        'terminal.send',
+        {
+          terminal: 'term_live',
           enter: true,
+          requireAgentStatus: 'sendable',
           client: { id: 'dobius-cli', type: 'desktop' }
         }
       ]
@@ -103,6 +113,90 @@ describe('board send', () => {
     expect(formatter({ send: { handle: 'term_live', bytesWritten: 5 } })).toBe(
       'Sent 5 bytes to card "Builder 1" (term_live).'
     )
+  })
+
+  it('refuses when no agent is running or it is on a permission prompt, and never presses Enter', async () => {
+    for (const [refusedReason, words] of [
+      ['no-agent', 'no agent is running in it'],
+      ['permission', 'its agent is waiting on a permission prompt']
+    ] as const) {
+      callMock.mockReset().mockImplementation(async (method: string) =>
+        method === 'board.resolveConsole'
+          ? { result: { handle: 'term_live', title: 'Builder 1' } }
+          : { result: { send: { handle: 'term_live', accepted: false, bytesWritten: 0, refusedReason } } }
+      )
+      await expect(
+        send([
+          ['card', 'Builder 1'],
+          ['text', 'hello'],
+          ['enter', true]
+        ])
+      ).rejects.toThrow(words)
+      expect(callMock.mock.calls.filter(([method]) => method === 'terminal.send')).toHaveLength(1)
+    }
+  })
+
+  it('says how much is typed when a long text is refused part-way', async () => {
+    callMock.mockReset().mockImplementation(async (method: string) =>
+      method === 'board.resolveConsole'
+        ? { result: { handle: 'term_live', title: 'Builder 1' } }
+        : {
+            result: {
+              send: {
+                handle: 'term_live',
+                accepted: false,
+                bytesWritten: 16384,
+                refusedReason: 'permission'
+              }
+            }
+          }
+    )
+    const sending = send([
+      ['card', 'Builder 1'],
+      ['text', 'long text'],
+      ['enter', true]
+    ])
+    await expect(sending).rejects.toThrow('The first 16384 bytes of the text are typed in')
+    await expect(sending).rejects.toThrow('clear its input line before sending again')
+    await expect(sending).rejects.not.toThrow('Nothing was sent')
+  })
+
+  it('waits for the pasted text to settle before the guarded Enter', async () => {
+    const at: number[] = []
+    callMock.mockReset().mockImplementation(async (method: string) => {
+      if (method === 'board.resolveConsole') {
+        return { result: { handle: 'term_live', title: 'Builder 1' } }
+      }
+      at.push(Date.now())
+      return { result: { send: { handle: 'term_live', accepted: true, bytesWritten: 5 } } }
+    })
+    await send([
+      ['card', 'Builder 1'],
+      ['text', 'hello'],
+      ['enter', true]
+    ])
+    expect(at).toHaveLength(2)
+    expect(at[1] - at[0]).toBeGreaterThanOrEqual(490)
+  })
+
+  it('says the text is typed but not submitted when the guard flips before Enter', async () => {
+    let sends = 0
+    callMock.mockReset().mockImplementation(async (method: string) => {
+      if (method === 'board.resolveConsole') {
+        return { result: { handle: 'term_live', title: 'Builder 1' } }
+      }
+      sends += 1
+      return sends === 1
+        ? { result: { send: { handle: 'term_live', accepted: true, bytesWritten: 5 } } }
+        : { result: { send: { handle: 'term_live', accepted: false, bytesWritten: 0, refusedReason: 'permission' } } }
+    })
+    await expect(
+      send([
+        ['card', 'Builder 1'],
+        ['text', 'hello'],
+        ['enter', true]
+      ])
+    ).rejects.toThrow('Enter was not pressed')
   })
 
   it('accepts the card:<title> spelling and an explicit --worktree', async () => {
@@ -115,10 +209,18 @@ describe('board send', () => {
       worktree: 'id:wt-9',
       card: 'Builder 1'
     })
-    expect(callMock).toHaveBeenCalledWith(
-      'terminal.send',
-      expect.objectContaining({ terminal: 'term_live', enter: false })
-    )
+    // Without --enter the text is typed and nothing presses Enter.
+    expect(callMock.mock.calls.filter(([method]) => method === 'terminal.send')).toEqual([
+      [
+        'terminal.send',
+        {
+          terminal: 'term_live',
+          text: 'hello',
+          requireAgentStatus: 'sendable',
+          client: { id: 'dobius-cli', type: 'desktop' }
+        }
+      ]
+    ])
   })
 
   it('passes a card id through unchanged (the runtime matches ids before titles)', async () => {

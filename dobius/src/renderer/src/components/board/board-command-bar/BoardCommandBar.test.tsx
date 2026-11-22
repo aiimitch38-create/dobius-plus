@@ -245,4 +245,30 @@ describe('BoardCommandBar thread visibility', () => {
     render([fresh])
     expect(thread()).not.toBeNull()
   })
+  it('while ADAM is busy, holds a chat message but still sends an "@Name" order', () => {
+    const onCommand = vi.fn()
+    const draw = (draft: string): void =>
+      act(() =>
+        root.render(
+          <TooltipProvider>
+            <BoardCommandBar {...props} messages={[]} busy draft={draft} onCommand={onCommand} />
+          </TooltipProvider>
+        )
+      )
+    const send = (): HTMLButtonElement => container.querySelector('button[type="submit"]')!
+    const submit = (): void =>
+      act(() => {
+        container.querySelector('form')!.dispatchEvent(
+          new Event('submit', { bubbles: true, cancelable: true })
+        )
+      })
+    draw('what is running?')
+    expect(send().disabled).toBe(true)
+    submit()
+    expect(onCommand).not.toHaveBeenCalled()
+    draw('@Codex 1 run the tests')
+    expect(send().disabled).toBe(false)
+    submit()
+    expect(onCommand).toHaveBeenCalledWith('@Codex 1 run the tests')
+  })
 })

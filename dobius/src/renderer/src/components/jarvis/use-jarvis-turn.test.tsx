@@ -186,6 +186,46 @@ describe('useJarvisTurn lifecycle (#82)', () => {
   })
 })
 
+describe('useJarvisTurn: what Carson was looking at', () => {
+  const lookAt = (project: string): void => {
+    Object.assign(storeActions, {
+      activeWorktreeId: 'wt',
+      repos: [{ id: 'repo', displayName: project }],
+      getKnownWorktreeById: () => ({
+        repoId: 'repo',
+        displayName: 'main',
+        branch: 'main',
+        path: `/code/${project}`
+      })
+    })
+  }
+  afterEach(() => {
+    Object.assign(storeActions, { activeWorktreeId: undefined })
+  })
+
+  it('sends the project on screen when the capture started, not when the words arrived', async () => {
+    installApi({ jarvisEnabled: true, sttModel: 'model-a' } as VoiceSettings)
+    const api = (window as unknown as { api: { speech: Record<string, ReturnType<typeof vi.fn>>; jarvis: Record<string, ReturnType<typeof vi.fn>> } }).api
+    api.jarvis.ask.mockResolvedValue({ kind: 'answer', text: 'ok' })
+    await renderProbe()
+    lookAt('project-a')
+    await act(async () => {
+      pttPressed?.()
+    })
+    // Carson switches projects while the words are still being transcribed.
+    lookAt('project-b')
+    const final = api.speech.onFinalTranscript.mock.calls[0][0] as (data: unknown) => void
+    await act(async () => {
+      final({ sessionId: '1', text: 'run the tests here' })
+    })
+    expect(api.jarvis.ask).toHaveBeenCalledExactlyOnceWith('run the tests here', {
+      project: 'project-a',
+      workspace: 'main',
+      folder: '/code/project-a'
+    })
+  })
+})
+
 describe('useJarvisTurn missing model (#88)', () => {
   it('reports a specific, actionable status without opening capture', async () => {
     installApi({ jarvisEnabled: true, sttModel: '' } as VoiceSettings)

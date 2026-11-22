@@ -12562,7 +12562,8 @@
       "title": "Thread",
       "emptyTitle": "Nothing said yet",
       "emptyHint": "Tell your agents what to do, move the board, or open a tool. Try “spawn two reviewers”, “fit the board”, “open loops”, or “what can you do?”",
-      "seeOutput": "See output"
+      "seeOutput": "See output",
+      "spoken": "Spoken"
     },
     "agentPicker": {
       "titleMany": "Spawn {{count}} consoles",
@@ -13055,9 +13056,6 @@
     },
     "relay": {
       "sent": "Sent to {{name}}."
-    },
-    "conductor": {
-      "enable": "Turn on Voice Conductor in Settings"
     },
     "voice": {
       "off": "Turn on voice dictation in Settings to talk to the Board.",
@@ -13758,9 +13756,7 @@
       "notTyped": "not typed",
       "noConsoles": "No consoles on the board.",
       "loopFromPlanner": "Creating a loop by voice",
-      "needsPlanner": "The planner is not answering, and without it I can’t write or split instructions. Say who and what plainly, for example “@Codex 1 run the tests”.",
       "rejected": "I could not make a valid plan: {{reason}}",
-      "unsafe": "Ignored: that looked like instructions hidden inside the text.",
       "confirmTitle": "Go ahead with this?",
       "confirmAction": "Confirm",
       "notSent": "Nothing was sent.",
@@ -14216,6 +14212,16 @@
       "handoffSummary": "Browser handoff: {{title}}",
       "handoffDeferred": "{{name}} is working. The browser handoff is sent when it is idle.",
       "verifySummary": "Verify in browser: {{title}}"
+    },
+    "adam": {
+      "thinking": "ADAM is thinking…",
+      "stillThinking": "ADAM is still working on your last message. Wait for his reply, then send this again.",
+      "failed": "ADAM could not answer. {{reason}} To send work straight to a console instead, type its name first, for example “@Codex 1 run the tests”.",
+      "unreachable": "This window could not reach ADAM’s Hermes connection. Quit and reopen Dobius+, then send your message again.",
+      "cancelled": "ADAM’s answer was stopped before it finished. Send your message again.",
+      "emptyReply": "He sent back an empty reply. Try again.",
+      "tooLong": "That message is too long for one turn. Send it in shorter parts.",
+      "threadNotSaved": "ADAM’s thread could not be saved to disk. It is still shown here, and Dobius+ will try again with the next message. If this keeps happening, check free disk space."
     }
   },
   "start": "Start",

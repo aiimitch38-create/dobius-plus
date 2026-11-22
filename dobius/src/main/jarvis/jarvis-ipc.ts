@@ -1,10 +1,24 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { getDefaultVoiceSettings } from '../../shared/constants'
-import type { VoiceSettings } from '../../shared/speech-types'
+import type { AdamLookingAt, JarvisAskResult, VoiceSettings } from '../../shared/speech-types'
+import {
+  ADAM_THREAD_CHANNEL,
+  ADAM_THREAD_UNSAVED_CHANNEL,
+  AdamThreadStore,
+  adamThreadRowOf
+} from './adam-thread-store'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { adamProjectDirectory } from '../adam-connection'
+import {
+  ADAM_TURN_CHANNEL,
+  AdamConversation,
+  lookingAtOf,
+  voiceMessage,
+  voiceTurnRow,
+  type AdamAskOptions
+} from './adam-conversation'
 import { AdamHermesVoice } from './adam-hermes-voice'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
 import { SelfEditStore, selfEditRoots } from './self-edit'
@@ -61,6 +75,21 @@ function createBroadcastPort(): JarvisBroadcastPort {
 }
 
 let adamVoice: AdamHermesVoice | null = null
+// What the main window last said was on screen. Wake-word turns start in main and use it.
+let lastLookingAt: AdamLookingAt | null = null
+let adamThread: AdamThreadStore | null = null
+
+function getAdamThread(): AdamThreadStore {
+  // Why only the main window: the thread holds Carson's conversation, so it is never
+  // sent to a web tile, a preview or any other window this app happens to have open.
+  adamThread ??= new AdamThreadStore(join(getUserDataRoot(), 'adam-thread.json'), (rows) => {
+    const host = jarvisHostWindow
+    if (host && !host.isDestroyed()) {
+      host.webContents.send(ADAM_THREAD_CHANNEL, rows)
+    }
+  })
+  return adamThread
+}
 
 function getAdamVoice(): AdamHermesVoice {
   if (!adamVoice) {
@@ -70,7 +99,7 @@ function getAdamVoice(): AdamHermesVoice {
         app.focus({ steal: true })
         const { response } = await dialog.showMessageBox({
           type: 'question',
-          title: 'Adam voice — allow command?',
+          title: 'ADAM — allow command?',
           message: description || 'Adam is requesting permission to run a command.',
           detail: command,
           buttons: ['Cancel', 'Allow once'],
@@ -87,13 +116,52 @@ function getAdamVoice(): AdamHermesVoice {
   return adamVoice
 }
 
+let adamConversation: AdamConversation | null = null
+
+/**
+ * The single entry point to ADAM for every caller in main (voice turns, the
+ * Board thread, a future live voice engine). One Hermes session, one turn at a
+ * time, and every turn is sent to the window so it lands in the Board thread.
+ */
+export function askAdam(text: string, options: AdamAskOptions): ReturnType<AdamConversation['ask']> {
+  if (!adamConversation) {
+    const broadcast = createBroadcastPort()
+    adamConversation = new AdamConversation(
+      { ask: (prompt) => getAdamVoice().ask(prompt) },
+      async (event) => {
+        // Spoken turns are in the thread before any window hears of the turn.
+        const row = voiceTurnRow(event)
+        if (row) {
+          await getAdamThread()
+            .append(row)
+            .catch((error) => {
+              console.warn('ADAM voice turn could not be saved:', error)
+              // No window asked for this write, so main tells the window itself.
+              const host = jarvisHostWindow
+              if (host && !host.isDestroyed()) {
+                host.webContents.send(ADAM_THREAD_UNSAVED_CHANNEL)
+              }
+            })
+        }
+        broadcast(ADAM_TURN_CHANNEL, event)
+      }
+    )
+  }
+  return adamConversation.ask(text, options)
+}
+
 function createJarvisDeps(store: Store): JarvisServiceDeps {
   return {
     store,
     broadcast: createBroadcastPort(),
     shortcut: createGlobalShortcutPort(),
-    askAgent: (utterance) => getAdamVoice().ask(utterance),
-    cancelAgent: () => adamVoice?.cancel()
+    askAgent: (utterance, lookingAt) =>
+      askAdam(lookingAt ? voiceMessage(utterance, lookingAt) : utterance, {
+        source: 'voice',
+        said: utterance
+      }),
+    cancelAgent: () => adamVoice?.cancel(),
+    lookingAt: () => lastLookingAt
   }
 }
 
@@ -266,6 +334,24 @@ function registerLiveSessionHandlers(store: Store): void {
   ipcMain.removeHandler('jarvis:liveSessionTest')
 }
 
+/** `not-saved`: the change is shown and kept in memory, but could not be written to disk. */
+async function saved(change: Promise<void>): Promise<{ ok: boolean; error?: 'not-saved' }> {
+  try {
+    await change
+    return { ok: true }
+  } catch (error) {
+    console.warn('ADAM thread could not be saved:', error)
+    return { ok: false, error: 'not-saved' }
+  }
+}
+
+// Why: a turn with ADAM can run commands and is written into Carson's thread,
+// so only the main window's top frame may start one (never a web tile or embedded page).
+const ADAM_UNTRUSTED_SENDER: JarvisAskResult = {
+  kind: 'error',
+  text: 'ADAM only takes messages from the main Dobius+ window.'
+}
+
 function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.removeHandler('jarvis:setMode')
   ipcMain.handle('jarvis:setMode', (_event, active: unknown) => {
@@ -280,11 +366,43 @@ function registerHandlers(store: Store, service: JarvisService): void {
   })
 
   ipcMain.removeHandler('jarvis:ask')
-  ipcMain.handle('jarvis:ask', (_event, utterance: string) => service.ask(utterance))
+  ipcMain.handle('jarvis:ask', (event, utterance: string, lookingAt?: unknown) =>
+    trustedLiveSender(event) ? service.ask(utterance, lookingAtOf(lookingAt)) : ADAM_UNTRUSTED_SENDER
+  )
+
+  // ADAM's thread lives in main so every window shows the same rows and none can overwrite another's.
+  ipcMain.removeHandler('jarvis:adamThreadGet')
+  ipcMain.handle('jarvis:adamThreadGet', (event) =>
+    trustedLiveSender(event) ? getAdamThread().get() : []
+  )
+  ipcMain.removeHandler('jarvis:adamThreadAppend')
+  ipcMain.handle('jarvis:adamThreadAppend', async (event, raw: unknown) => {
+    const row = trustedLiveSender(event) ? adamThreadRowOf(raw) : null
+    if (!row) {
+      return { ok: false }
+    }
+    return saved(getAdamThread().append(row))
+  })
+  ipcMain.removeHandler('jarvis:adamThreadClear')
+  ipcMain.handle('jarvis:adamThreadClear', async (event) => {
+    if (!trustedLiveSender(event)) {
+      return { ok: false }
+    }
+    return saved(getAdamThread().clear())
+  })
+  ipcMain.removeHandler('jarvis:lookingAt')
+  ipcMain.handle('jarvis:lookingAt', (event, raw: unknown) => {
+    if (trustedLiveSender(event)) {
+      lastLookingAt = lookingAtOf(raw)
+    }
+  })
 
   ipcMain.removeHandler('jarvis:cancelAsk')
-  ipcMain.handle('jarvis:cancelAsk', () => {
-    service.cancelAsk()
+  ipcMain.handle('jarvis:cancelAsk', (event) => {
+    // Why: stopping ADAM mid-turn is the main window's call, never an embedded page's.
+    if (trustedLiveSender(event)) {
+      service.cancelAsk()
+    }
     return { ok: true }
   })
 
@@ -403,8 +521,15 @@ function registerHandlers(store: Store, service: JarvisService): void {
   // Why a text-only ask: during a live conversation the AGENT speaks, so
   // service.ask() would talk over it with a second voice.
   ipcMain.removeHandler('jarvis:askAdamText')
-  ipcMain.handle('jarvis:askAdamText', (_event, utterance: string) =>
-    getAdamVoice().ask(typeof utterance === 'string' ? utterance : '')
+  ipcMain.handle(
+    'jarvis:askAdamText',
+    (event, utterance: string, source?: unknown) =>
+      trustedLiveSender(event)
+        ? // Why voice by default: the only caller without a source is the live voice agent's tool.
+          askAdam(typeof utterance === 'string' ? utterance : '', {
+            source: source === 'thread' ? 'thread' : 'voice'
+          })
+        : ADAM_UNTRUSTED_SENDER
   )
 }
 

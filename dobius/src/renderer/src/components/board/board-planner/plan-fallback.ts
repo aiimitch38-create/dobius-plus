@@ -1,9 +1,9 @@
 import type { BoardPlan, PlanStep } from './plan-schema'
 import { agentKindFor, splitAddressee } from './plan-target'
 
-// Built-in keyword parser used when the planner is unreachable, rate limited,
-// out of credits or busy. It covers simple board commands only: it cannot write
-// or split instructions, so work orders get a plain "say who and what" reply.
+// Built-in keyword parser for the commands the app runs itself, with no model.
+// It covers simple board commands only: it cannot write or split instructions,
+// so anything else goes to ADAM.
 
 type Rule = { re: RegExp; step: (m: RegExpMatchArray) => PlanStep | null }
 
@@ -169,35 +169,4 @@ export function fallbackParse(utterance: string): FallbackResult {
     }
   }
   return { kind: 'work-order' }
-}
-
-/**
- * Keeps the built-in parser in charge for a while after repeated planner
- * failures, so a down planner is not retried on every utterance.
- */
-export class PlannerBreaker {
-  private failures = 0
-  private openUntil = 0
-
-  constructor(
-    private readonly threshold = 2,
-    private readonly coolDownMs = 60_000
-  ) {}
-
-  isOpen(now: number): boolean {
-    return now < this.openUntil
-  }
-
-  recordFailure(now: number): void {
-    this.failures += 1
-    if (this.failures >= this.threshold) {
-      this.openUntil = now + this.coolDownMs
-      this.failures = 0
-    }
-  }
-
-  recordSuccess(): void {
-    this.failures = 0
-    this.openUntil = 0
-  }
 }

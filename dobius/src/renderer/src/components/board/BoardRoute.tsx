@@ -93,8 +93,7 @@ export default function BoardRoute(): React.JSX.Element {
     (s) => s.dictationState === 'listening' || s.dictationState === 'starting'
   )
 
-  const openSettings = useCallback(() => setStudio('settings'), [])
-  const conductor = useBoardConductor(openSettings, data.repoId)
+  const conductor = useBoardConductor()
   const selection = useBoardSelection(worktreeId, board.tool)
   const pen = useBoardPen(worktreeId, board.viewport)
   // Why: `board` above ignores card geometry (board-shape.ts) so a drag never
@@ -122,8 +121,17 @@ export default function BoardRoute(): React.JSX.Element {
     }),
     [closeStudio, freeCenter, history.undo, history.redo]
   )
-  const planner = useBoardPlanner({ data, conductor, context: plannerContext })
-  const onCommand = useBoardCommand(data, conductor, planner)
+  const topBar = useBoardTopBarProps(data, setStudio)
+  const planner = useBoardPlanner({
+    data,
+    conductor,
+    context: plannerContext,
+    projectName: topBar.projectName
+  })
+  const onCommand = useBoardCommand(data, conductor, planner.run)
+  const threadBusy = planner.busy
+  const threadBusyRef = useRef(threadBusy)
+  threadBusyRef.current = threadBusy
   // Why: leaving the Board must never leave a paused agent frozen in the background.
   useEffect(
     () => () => {
@@ -155,12 +163,12 @@ export default function BoardRoute(): React.JSX.Element {
   })
   const ptt = useBoardPushToTalk(inputRef, () => {
     const text = draftRef.current.trim()
-    if (text) {
+    // Why: a spoken message waits in the box while ADAM is busy, as a typed one does.
+    if (text && !(threadBusyRef.current && !text.startsWith('@'))) {
       onCommand(text)
       setDraft('')
     }
   })
-  const topBar = useBoardTopBarProps(data, setStudio)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const focusMode = useBoardFocusMode({
     worktreeId,
@@ -349,7 +357,7 @@ export default function BoardRoute(): React.JSX.Element {
             inputRef.current?.focus()
             dispatchDictationControl('toggle')
           },
-          busy: conductor.busy
+          busy: threadBusy
         }}
         overlay={
           <>
