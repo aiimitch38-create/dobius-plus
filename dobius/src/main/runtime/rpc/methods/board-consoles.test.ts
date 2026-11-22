@@ -19,7 +19,21 @@ function consoleCard(i: number, role: string | null) {
   return { id: `c${i}`, kind: 'console', tabId: `tab-${i}`, title: `Console ${i}`, role, x: 0, y: 0 }
 }
 
-function makeRuntime(cards: unknown[], delivered = true) {
+type TestTerminal = {
+  handle: string
+  tabId: string
+  ptyId: string | null
+  connected: boolean
+  leafId?: string
+  originTabId?: string | null
+}
+
+function makeRuntime(
+  cards: unknown[],
+  delivered = true,
+  terminals: TestTerminal[] = [],
+  activeLeafByTab: Record<string, string> = {}
+) {
   const emitClientEvent = vi.fn((_event: RuntimeBoardSpawnConsoleEvent) => ({ delivered }))
   const runtime = {
     getRuntimeId: () => 'test-runtime',
@@ -27,8 +41,14 @@ function makeRuntime(cards: unknown[], delivered = true) {
       if (selector === 'id:missing') {
         throw new Error('selector_not_found')
       }
-      return { id: WT }
+      return { id: WT, path: '/repo/wt-1' }
     }),
+    listTerminals: vi.fn(async (_selector: string, _limit?: number) => ({
+      terminals,
+      totalCount: terminals.length,
+      truncated: false
+    })),
+    getTerminalTabActiveLeafId: (tabId: string) => activeLeafByTab[tabId] ?? null,
     getUIState: () => ({ boardsByWorktree: { [WT]: { cards, groups: [] } } }),
     // Why: spawnBoardConsole must go through the runtime's notify path (window
     // IPC + client event), never emitClientEvent alone.
@@ -289,5 +309,216 @@ describe('board.listConsoles', () => {
         { id: 'c2', tabId: 'tab-2', title: 'Console 2', role: null }
       ]
     })
+  })
+
+  async function list(
+    cards: unknown[],
+    terminals: TestTerminal[],
+    activeLeafByTab: Record<string, string> = {}
+  ) {
+    const { runtime } = makeRuntime(cards, true, terminals, activeLeafByTab)
+    const dispatcher = new RpcDispatcher({ runtime, methods: BOARD_CONSOLE_METHODS })
+    const response = await dispatcher.dispatch(
+      makeRequest('board.listConsoles', { worktree: `id:${WT}` })
+    )
+    return { response, runtime }
+  }
+
+  it('adds the live handle, running flag, agent and worktree to each row', async () => {
+    const { response, runtime } = await list(
+      [{ ...consoleCard(1, null), agentKind: 'codex' }, consoleCard(2, null)],
+      [{ handle: 'term_a', tabId: 'tab-1', ptyId: 'pty-1', connected: true }]
+    )
+    expect(response).toMatchObject({
+      ok: true,
+      result: [
+        {
+          id: 'c1',
+          tabId: 'tab-1',
+          agent: 'codex',
+          handle: 'term_a',
+          running: true,
+          worktreeId: WT,
+          worktreePath: '/repo/wt-1'
+        },
+        { id: 'c2', tabId: 'tab-2', agent: null, handle: null, running: false }
+      ]
+    })
+    expect(runtime.listTerminals).toHaveBeenCalledWith(`id:${WT}`, expect.any(Number))
+  })
+
+  it('reports a card whose terminal has exited as not running', async () => {
+    const { response } = await list(
+      [consoleCard(1, null)],
+      [{ handle: 'term_dead', tabId: 'tab-1', ptyId: null, connected: false }]
+    )
+    expect(response).toMatchObject({
+      ok: true,
+      result: [{ id: 'c1', handle: 'term_dead', running: false }]
+    })
+  })
+
+  it('prefers the live pane when a console tab is split', async () => {
+    const { response } = await list(
+      [consoleCard(1, null)],
+      [
+        { handle: 'term_dead', tabId: 'tab-1', ptyId: null, connected: false },
+        { handle: 'term_live', tabId: 'tab-1', ptyId: 'pty-2', connected: true }
+      ]
+    )
+    expect(response).toMatchObject({
+      ok: true,
+      result: [{ id: 'c1', handle: 'term_live', running: true }]
+    })
+  })
+
+  const twoLivePanes: TestTerminal[] = [
+    { handle: 'term_left', tabId: 'tab-1', leafId: 'leaf-l', ptyId: 'pty-1', connected: true },
+    { handle: 'term_right', tabId: 'tab-1', leafId: 'leaf-r', ptyId: 'pty-2', connected: true }
+  ]
+
+  it('picks the focused pane when a console tab has two live panes', async () => {
+    const { response } = await list([consoleCard(1, null)], twoLivePanes, { 'tab-1': 'leaf-r' })
+    expect(response).toMatchObject({
+      ok: true,
+      result: [{ id: 'c1', handle: 'term_right', running: true, paneUnclear: false }]
+    })
+  })
+
+  it('gives no handle when two panes are live and the focused one is unknown', async () => {
+    const { response } = await list([consoleCard(1, null)], twoLivePanes)
+    expect(response).toMatchObject({
+      ok: true,
+      result: [{ id: 'c1', handle: null, running: true, paneUnclear: true }]
+    })
+    const stale = await list([consoleCard(1, null)], twoLivePanes, { 'tab-1': 'leaf-gone' })
+    expect(stale.response).toMatchObject({ result: [{ handle: null, paneUnclear: true }] })
+  })
+
+  it('finds a running console listed from its PTY record (renderer graph unavailable)', async () => {
+    const { response } = await list(
+      [consoleCard(1, null), consoleCard(2, null)],
+      [
+        {
+          handle: 'term_pty',
+          tabId: 'pty:pty-7',
+          leafId: 'pty:pty-7',
+          originTabId: 'tab-1',
+          ptyId: 'pty-7',
+          connected: true
+        },
+        { handle: 'term_other', tabId: 'pty:pty-8', originTabId: null, ptyId: 'pty-8', connected: true }
+      ]
+    )
+    expect(response).toMatchObject({
+      ok: true,
+      result: [
+        { id: 'c1', handle: 'term_pty', running: true },
+        { id: 'c2', handle: null, running: false }
+      ]
+    })
+  })
+
+  it('reads the handle again on every call (a restarted console gets a new one)', async () => {
+    const terminals: TestTerminal[] = [
+      { handle: 'term_old', tabId: 'tab-1', ptyId: 'pty-1', connected: true }
+    ]
+    const { runtime } = makeRuntime([consoleCard(1, null)], true, terminals)
+    const dispatcher = new RpcDispatcher({ runtime, methods: BOARD_CONSOLE_METHODS })
+    const call = () =>
+      dispatcher.dispatch(makeRequest('board.listConsoles', { worktree: `id:${WT}` }))
+    expect(await call()).toMatchObject({ result: [{ handle: 'term_old' }] })
+    terminals[0] = { handle: 'term_new', tabId: 'tab-1', ptyId: 'pty-9', connected: true }
+    expect(await call()).toMatchObject({ result: [{ handle: 'term_new' }] })
+  })
+})
+
+describe('board.resolveConsole', () => {
+  const live = (n: number): TestTerminal => ({
+    handle: `term_${n}`,
+    tabId: `tab-${n}`,
+    ptyId: `pty-${n}`,
+    connected: true
+  })
+
+  async function resolve(cards: unknown[], terminals: TestTerminal[], card: unknown) {
+    const { runtime } = makeRuntime(cards, true, terminals)
+    const dispatcher = new RpcDispatcher({ runtime, methods: BOARD_CONSOLE_METHODS })
+    return dispatcher.dispatch(
+      makeRequest('board.resolveConsole', { worktree: `id:${WT}`, card })
+    )
+  }
+
+  it('returns the running console with that exact title', async () => {
+    const response = await resolve([consoleCard(1, null), consoleCard(2, null)], [live(1), live(2)], 'Console 2')
+    expect(response).toMatchObject({
+      ok: true,
+      result: { id: 'c2', tabId: 'tab-2', title: 'Console 2', handle: 'term_2', running: true }
+    })
+  })
+
+  it('ignores letter case and outer spaces when no exact title matches', async () => {
+    const response = await resolve([consoleCard(1, null)], [live(1)], '  console 1 ')
+    expect(response).toMatchObject({ ok: true, result: { id: 'c1', handle: 'term_1' } })
+  })
+
+  it('prefers an exact title over a case-insensitive one', async () => {
+    const cards = [
+      { ...consoleCard(1, null), title: 'builder' },
+      { ...consoleCard(2, null), title: 'Builder' }
+    ]
+    const response = await resolve(cards, [live(1), live(2)], 'Builder')
+    expect(response).toMatchObject({ ok: true, result: { id: 'c2' } })
+  })
+
+  it('accepts a card id', async () => {
+    const response = await resolve([consoleCard(1, null), consoleCard(2, null)], [live(1), live(2)], 'c1')
+    expect(response).toMatchObject({ ok: true, result: { id: 'c1', handle: 'term_1' } })
+  })
+
+  it('fails with board_card_pane_unclear instead of picking one of two live panes', async () => {
+    const response = await resolve(
+      [consoleCard(1, null)],
+      [
+        { handle: 'term_left', tabId: 'tab-1', leafId: 'leaf-l', ptyId: 'pty-1', connected: true },
+        { handle: 'term_right', tabId: 'tab-1', leafId: 'leaf-r', ptyId: 'pty-2', connected: true }
+      ],
+      'Console 1'
+    )
+    expect(response).toMatchObject({ ok: false, error: { code: 'board_card_pane_unclear' } })
+  })
+
+  it('fails with board_card_not_found for an unknown card and names the known ones', async () => {
+    const response = await resolve([consoleCard(1, null)], [live(1)], 'Nope')
+    expect(response).toMatchObject({ ok: false, error: { code: 'board_card_not_found' } })
+    expect(JSON.stringify(response)).toContain('board_card_not_found')
+    expect(JSON.stringify(response)).toContain('Console 1')
+  })
+
+  it('fails with board_card_ambiguous when two cards share the title', async () => {
+    const cards = [
+      { ...consoleCard(1, null), title: 'Builder' },
+      { ...consoleCard(2, null), title: 'Builder' }
+    ]
+    const response = await resolve(cards, [live(1), live(2)], 'Builder')
+    expect(response).toMatchObject({ ok: false, error: { code: 'board_card_ambiguous' } })
+    expect(JSON.stringify(response)).toContain('c1, c2')
+  })
+
+  it('fails with board_card_not_running when the card has no live terminal', async () => {
+    const missing = await resolve([consoleCard(1, null)], [], 'Console 1')
+    expect(JSON.stringify(missing)).toContain('board_card_not_running')
+    const exited = await resolve(
+      [consoleCard(1, null)],
+      [{ handle: 'term_dead', tabId: 'tab-1', ptyId: null, connected: false }],
+      'Console 1'
+    )
+    expect(missing).toMatchObject({ ok: false, error: { code: 'board_card_not_running' } })
+    expect(exited).toMatchObject({ ok: false, error: { code: 'board_card_not_running' } })
+  })
+
+  it('rejects a missing or blank card name', async () => {
+    expect((await resolve([consoleCard(1, null)], [live(1)], '   ')).ok).toBe(false)
+    expect((await resolve([consoleCard(1, null)], [live(1)], undefined)).ok).toBe(false)
   })
 })

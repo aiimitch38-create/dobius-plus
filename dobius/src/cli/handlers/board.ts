@@ -1,16 +1,29 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { CommandHandler } from '../dispatch'
+import type { RuntimeTerminalSend } from '../../shared/runtime-types'
 import { getOptionalStringFlag, getRequiredStringFlag } from '../flags'
 import { printResult } from '../format'
+import { RuntimeClientError } from '../runtime-client'
 import {
   getOptionalWorktreeSelector,
+  BOARD_CARD_ADDRESS_PREFIX,
   getRequiredWorktreeSelector,
   resolveCurrentWorktreeSelector
 } from '../selectors'
 
 type SpawnConsoleResult = { requestId: string; worktreeId: string; role: string }
-type BoardConsole = { tabId: string; title: string; role: string | null }
+type BoardConsole = {
+  tabId: string
+  title: string
+  role: string | null
+  // Why optional: an older paired runtime returns only tabId, title and role.
+  agent?: string | null
+  handle?: string | null
+  running?: boolean
+  paneUnclear?: boolean
+  worktreePath?: string
+}
 type OpenTileResult = { requestId: string; worktreeId: string; cardId: string; browserPageId: string }
 type AgentControlResult = {
   ok: boolean
@@ -20,12 +33,22 @@ type AgentControlResult = {
   gateResolved?: boolean
 }
 
-function formatConsoles(consoles: BoardConsole[]): string {
+export function formatConsoles(consoles: BoardConsole[]): string {
   if (consoles.length === 0) {
     return 'No console cards on this board.'
   }
   return consoles
-    .map((c) => `${c.tabId}  ${c.role ?? '-'}  ${c.title}`)
+    .map((c) => {
+      const terminal =
+        c.running === undefined
+          ? 'unknown'
+          : c.paneUnclear
+            ? 'pane unclear'
+            : c.running && c.handle
+              ? c.handle
+              : 'not running'
+      return `${c.tabId}  ${terminal}  ${c.agent ?? '-'}  ${c.role ?? '-'}  ${c.title}`
+    })
     .join('\n')
 }
 
@@ -63,6 +86,40 @@ export const BOARD_HANDLERS: Record<string, CommandHandler> = {
       (await resolveCurrentWorktreeSelector(cwd, client))
     const result = await client.call<BoardConsole[]>('board.listConsoles', { worktree })
     printResult(result, json, formatConsoles)
+  },
+  'board send': async ({ client, flags, cwd, json }) => {
+    const cardFlag = getRequiredStringFlag(flags, 'card')
+    const card = cardFlag.startsWith(BOARD_CARD_ADDRESS_PREFIX)
+      ? cardFlag.slice(BOARD_CARD_ADDRESS_PREFIX.length)
+      : cardFlag
+    const text = getRequiredStringFlag(flags, 'text')
+    const worktree =
+      (await getOptionalWorktreeSelector(flags, 'worktree', cwd, client)) ??
+      (await resolveCurrentWorktreeSelector(cwd, client))
+    // Why: the card is looked up right before the write, and the runtime refuses
+    // an unknown, ambiguous or not-running card. There is no other target.
+    const resolved = await client.call<{ handle: string; title: string }>('board.resolveConsole', {
+      worktree,
+      card
+    })
+    const { handle, title } = resolved.result
+    const result = await client.call<{ send: RuntimeTerminalSend }>('terminal.send', {
+      terminal: handle,
+      text,
+      enter: flags.get('enter') === true,
+      client: { id: 'dobius-cli', type: 'desktop' }
+    })
+    if (!result.result.send.accepted) {
+      throw new RuntimeClientError(
+        'board_card_send_refused',
+        `Console card "${title}" (${handle}) did not accept the text; nothing was sent.`
+      )
+    }
+    printResult(
+      result,
+      json,
+      (value) => `Sent ${value.send.bytesWritten} bytes to card "${title}" (${value.send.handle}).`
+    )
   },
   'board open-tile': async ({ client, flags, cwd, json }) => {
     const worktree =

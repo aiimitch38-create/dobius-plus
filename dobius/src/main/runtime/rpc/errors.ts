@@ -7,6 +7,7 @@ import { computerUseErrorRecoveryData } from '../../../shared/computer-use-error
 import { COMPUTER_ERROR_CODES } from '../../../shared/runtime-types'
 import { LINEAR_ERROR_CODES } from '../../../shared/linear-agent-access'
 import { DesktopScreenError } from '../../../shared/desktop-screen-errors'
+import { BoardConsoleError } from '../../../shared/board-console-errors'
 
 export function successResponse(id: string, meta: RpcEnvelopeMeta, result: unknown): RpcSuccess {
   return {
@@ -55,6 +56,9 @@ const LINEAR_PASSTHROUGH_CODES: ReadonlySet<string> = new Set(LINEAR_ERROR_CODES
 
 export function mapRuntimeError(id: string, meta: RpcEnvelopeMeta, error: unknown): RpcFailure {
   if (error instanceof DesktopScreenError) {
+    return errorResponse(id, meta, error.code, error.message)
+  }
+  if (error instanceof BoardConsoleError) {
     return errorResponse(id, meta, error.code, error.message)
   }
   const message = error instanceof Error ? error.message : String(error)

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { mapRuntimeError } from './errors'
+import {
+  BOARD_CONSOLE_ERROR_CODES,
+  BoardConsoleError
+} from '../../../shared/board-console-errors'
 
 class LineageError extends Error {
   code = 'LINEAGE_PARENT_NOT_FOUND'
@@ -9,6 +13,20 @@ class LineageError extends Error {
 }
 
 describe('mapRuntimeError', () => {
+  it.each(BOARD_CONSOLE_ERROR_CODES)('forwards the board console code %s', (code) => {
+    const response = mapRuntimeError('req-1', { runtimeId: 'rt' }, new BoardConsoleError(code, 'why'))
+    expect(response.error).toEqual({ code, message: `${code}: why` })
+  })
+
+  it('does not treat a plain Error that merely mentions a board code as structured', () => {
+    const response = mapRuntimeError(
+      'req-1',
+      { runtimeId: 'rt' },
+      new Error('board_card_not_found: nope')
+    )
+    expect(response.error.code).toBe('runtime_error')
+  })
+
   it.each([
     ['window_not_focused', 'keyboard input requires focus', 'restore-window'],
     ['permission_denied', 'missing DBUS_SESSION_BUS_ADDRESS', 'permissions'],

@@ -7,7 +7,7 @@ import {
   getRequiredStringFlag
 } from '../flags'
 import { RuntimeClientError } from '../runtime-client'
-import { getTerminalHandle } from '../selectors'
+import { getTerminalHandle, resolveTerminalAddress } from '../selectors'
 
 // Why: 15 s is well under Claude Code's empirical ~2 min Bash-tool silence
 // budget and generates only ~40 lines per 10 min wait — enough to assure the
@@ -140,6 +140,14 @@ async function resolveOrchestrationTerminalHandle(
   return await getTerminalHandle(flags, cwd, client)
 }
 
+// Why: on send/dispatch --worktree names the Board a card: recipient is on. It
+// must not also move the sender to that worktree's active terminal.
+function senderFlags(flags: Map<string, string | boolean>): Map<string, string | boolean> {
+  const scoped = new Map(flags)
+  scoped.delete('worktree')
+  return scoped
+}
+
 function isDevCliInvocation(): boolean {
   return process.env.DOBIUS_USER_DATA_PATH?.includes('dobius-dev') ?? false
 }
@@ -173,11 +181,12 @@ function rejectLifecycleGroupRecipient(type: string | undefined, to: string): vo
 
 export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
   'orchestration send': async ({ flags, client, cwd, json }) => {
-    const to = getRequiredStringFlag(flags, 'to')
+    const rawTo = getRequiredStringFlag(flags, 'to')
     const type = getOptionalStringFlag(flags, 'type')
-    rejectLifecycleGroupRecipient(type, to)
+    rejectLifecycleGroupRecipient(type, rawTo)
+    const to = await resolveTerminalAddress(rawTo, flags, cwd, client)
 
-    const from = await resolveOrchestrationTerminalHandle(flags, cwd, client, 'from')
+    const from = await resolveOrchestrationTerminalHandle(senderFlags(flags), cwd, client, 'from')
     const result = await client.call<
       { message: { id: string } } | { messages: { id: string }[]; recipients: number }
     >('orchestration.send', {
@@ -361,11 +370,12 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
   },
 
   'orchestration dispatch': async ({ flags, client, cwd, json }) => {
-    const from = await resolveOrchestrationTerminalHandle(flags, cwd, client, 'from')
+    const from = await resolveOrchestrationTerminalHandle(senderFlags(flags), cwd, client, 'from')
     const dryRun = flags.has('dry-run') ? true : undefined
     const returnPreamble = flags.has('return-preamble') ? true : undefined
     // Why: --to is only required for non-dry-run; the RPC handler re-enforces.
-    const to = dryRun ? getOptionalStringFlag(flags, 'to') : getRequiredStringFlag(flags, 'to')
+    const rawTo = dryRun ? getOptionalStringFlag(flags, 'to') : getRequiredStringFlag(flags, 'to')
+    const to = rawTo ? await resolveTerminalAddress(rawTo, flags, cwd, client) : rawTo
     const result = await client.call<{
       dispatch: { id: string; task_id: string; status: string } | null
       injected?: boolean

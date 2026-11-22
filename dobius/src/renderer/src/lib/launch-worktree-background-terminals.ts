@@ -7,6 +7,7 @@ import { getSettingsForWorktreeRuntimeOwner } from '@/lib/worktree-runtime-owner
 import { getActiveRuntimeTarget } from '@/runtime/runtime-rpc-client'
 import { singlePaneLayoutSnapshot } from '@/store/slices/terminal-helpers'
 import { useAppStore } from '@/store'
+import { boardConsoleIdentityEnv } from '@/components/board/console-card/board-console-identity-env'
 import { translate } from '@/i18n/i18n'
 import { isWindowsAbsolutePathLike } from '../../../shared/cross-platform-path'
 import { makePaneKey } from '../../../shared/stable-pane-id'
@@ -55,7 +56,8 @@ function buildPaneEnv(
     ...env,
     DOBIUS_PANE_KEY: makePaneKey(tabId, leafId),
     DOBIUS_TAB_ID: tabId,
-    DOBIUS_WORKTREE_ID: worktreeId
+    DOBIUS_WORKTREE_ID: worktreeId,
+    ...boardConsoleIdentityEnv(useAppStore.getState(), worktreeId, tabId)
   }
 }
 

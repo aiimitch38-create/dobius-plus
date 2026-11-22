@@ -19548,6 +19548,11 @@ export class DobiusRuntimeService {
     }
   }
 
+  /** The pane a tab currently shows as focused; null when the renderer graph has no such tab. */
+  getTerminalTabActiveLeafId(tabId: string): string | null {
+    return this.tabs.get(tabId)?.activeLeafId ?? null
+  }
+
   private buildPtyTerminalSummary(
     pty: RuntimePtyWorktreeRecord,
     worktreesById: Map<string, ResolvedWorktree>
@@ -19562,6 +19567,7 @@ export class DobiusRuntimeService {
       branch: worktree?.branch ?? '',
       tabId: `pty:${pty.ptyId}`,
       leafId: `pty:${pty.ptyId}`,
+      originTabId: pty.tabId,
       title: getLatestPtyTitle(pty),
       connected: pty.connected,
       writable: pty.connected,

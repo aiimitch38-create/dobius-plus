@@ -6,7 +6,7 @@ export const ORCHESTRATION_COMMAND_SPECS: CommandSpec[] = [
     path: ['orchestration', 'send'],
     summary: 'Send an inter-agent message',
     usage:
-      'dobius orchestration send --to <handle> --subject <text> [--from <handle>] [--body <text>] [--type <type>] [--priority <level>] [--thread-id <id>] [--payload <json>] [--task-id <id>] [--dispatch-id <id>] [--files-modified <csv>] [--report-path <path>] [--phase <text>] [--json]',
+      'dobius orchestration send --to <handle|card:<id-or-title>> --subject <text> [--worktree <selector>] [--from <handle>] [--body <text>] [--type <type>] [--priority <level>] [--thread-id <id>] [--payload <json>] [--task-id <id>] [--dispatch-id <id>] [--files-modified <csv>] [--report-path <path>] [--phase <text>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'to',
@@ -21,10 +21,13 @@ export const ORCHESTRATION_COMMAND_SPECS: CommandSpec[] = [
       'dispatch-id',
       'files-modified',
       'report-path',
-      'phase'
+      'phase',
+      'worktree'
     ],
     notes: [
       'On Windows PowerShell, quote group addresses such as --to "@all" or --to "@worktree:<id>".',
+      '--to card:<id-or-title> targets a Board console card, looked up at send time; an unknown, ambiguous or not-running card is an error. Prefer the card id: titles can repeat.',
+      '--worktree picks the Board the card is on (default: the worktree enclosing the current directory). It only affects card: addresses.',
       'worker_done and heartbeat must target a concrete coordinator terminal handle; use status for broadcast updates.',
       'Prefer --task-id/--dispatch-id/etc. over raw --payload JSON in worker commands; PowerShell strips JSON quotes easily.'
     ]
@@ -91,8 +94,21 @@ export const ORCHESTRATION_COMMAND_SPECS: CommandSpec[] = [
     path: ['orchestration', 'dispatch'],
     summary: 'Dispatch a task to a terminal',
     usage:
-      'dobius orchestration dispatch --task <task_id> --to <handle> [--from <handle>] [--inject] [--dry-run] [--return-preamble] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'task', 'to', 'from', 'inject', 'dry-run', 'return-preamble']
+      'dobius orchestration dispatch --task <task_id> --to <handle|card:<id-or-title>> [--worktree <selector>] [--from <handle>] [--inject] [--dry-run] [--return-preamble] [--json]',
+    allowedFlags: [
+      ...GLOBAL_FLAGS,
+      'task',
+      'to',
+      'from',
+      'inject',
+      'dry-run',
+      'return-preamble',
+      'worktree'
+    ],
+    notes: [
+      '--to card:<id-or-title> targets a Board console card, looked up at dispatch time; an unknown, ambiguous or not-running card is an error. Prefer the card id: titles can repeat.',
+      '--worktree picks the Board the card is on (default: the worktree enclosing the current directory). It only affects card: addresses.'
+    ]
   },
   {
     path: ['orchestration', 'dispatch-show'],

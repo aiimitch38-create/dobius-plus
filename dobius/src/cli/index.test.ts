@@ -117,6 +117,16 @@ import { buildWorktree, okFixture, queueFixtures, worktreeListFixture } from './
 import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../shared/pairing'
 import { TERMINAL_HANDLERS } from './handlers/terminal'
 
+describe('card: addressing flags', () => {
+  it.each(['terminal send', 'orchestration send', 'orchestration dispatch', 'board send'])(
+    '%s accepts --worktree so a card on another Board can be named',
+    (path) => {
+      const spec = COMMAND_SPECS.find((candidate) => candidate.path.join(' ') === path)
+      expect(spec?.allowedFlags).toContain('worktree')
+    }
+  )
+})
+
 describe('COMMAND_SPECS collision check', () => {
   it('has no duplicate command paths', () => {
     const seen = new Set<string>()

@@ -194,6 +194,40 @@ export async function getBrowserWorktreeSelector(
   }
 }
 
+export const BOARD_CARD_ADDRESS_PREFIX = 'card:'
+
+/**
+ * Turns `card:<title>` into that Board console's current terminal handle; any
+ * other value is returned untouched. Why looked up per call: handles change
+ * when a console restarts, the card title does not. An unknown, ambiguous or
+ * not-running card is an error from the runtime; nothing else is ever targeted.
+ */
+export async function resolveTerminalAddress(
+  address: string,
+  flags: Map<string, string | boolean>,
+  cwd: string,
+  client: RuntimeClient
+): Promise<string> {
+  if (!address.startsWith(BOARD_CARD_ADDRESS_PREFIX)) {
+    return address
+  }
+  const card = address.slice(BOARD_CARD_ADDRESS_PREFIX.length).trim()
+  if (card.length === 0) {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      'Missing card name after "card:". Use card:<title>, for example card:"Builder 1".'
+    )
+  }
+  const worktree =
+    (await getOptionalWorktreeSelector(flags, 'worktree', cwd, client)) ??
+    (await resolveCurrentWorktreeSelector(cwd, client))
+  const response = await client.call<{ handle: string }>('board.resolveConsole', {
+    worktree,
+    card
+  })
+  return response.result.handle
+}
+
 // Why: mirrors browser's implicit active-tab targeting. When --terminal is
 // omitted, resolve the active terminal in the current worktree so commands
 // like `dobius terminal send --text "hello" --enter` Just Work.
@@ -202,9 +236,17 @@ export async function getTerminalHandle(
   cwd: string,
   client: RuntimeClient
 ): Promise<string> {
-  const explicit = getOptionalStringFlag(flags, 'terminal')
-  if (explicit) {
-    return explicit
+  if (flags.has('terminal')) {
+    const raw = flags.get('terminal')
+    // Why: `--terminal "$HANDLE"` with an unset variable used to fall through
+    // to the active terminal and type into whatever agent had focus.
+    if (typeof raw !== 'string' || raw.trim().length === 0) {
+      throw new RuntimeClientError(
+        'invalid_argument',
+        '--terminal was given without a value. Pass a terminal handle or card:<title>, or leave --terminal out to use the active terminal.'
+      )
+    }
+    return await resolveTerminalAddress(raw, flags, cwd, client)
   }
   const worktree = await getBrowserWorktreeSelector(flags, cwd, client)
   const response = await client.call<{ handle: string }>('terminal.resolveActive', { worktree })

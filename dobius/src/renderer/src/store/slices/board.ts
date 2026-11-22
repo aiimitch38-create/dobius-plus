@@ -61,7 +61,8 @@ export function getBoard(
   state: Pick<BoardSlice, 'boardsByWorktree'>,
   worktreeId: string | null
 ): BoardState {
-  return (worktreeId && state.boardsByWorktree[worktreeId]) || EMPTY_BOARD
+  // Why: PTY exit handlers read the board before boards hydrate (and in store mocks).
+  return (worktreeId && state.boardsByWorktree?.[worktreeId]) || EMPTY_BOARD
 }
 
 function topZ(cards: readonly BoardCard[]): number {

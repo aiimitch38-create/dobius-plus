@@ -373,6 +373,8 @@ export type RuntimeTerminalSummary = {
   branch: string
   tabId: string
   leafId: string
+  /** Set only on PTY-only rows (tabId is then `pty:<ptyId>`): the tab the PTY was spawned in. */
+  originTabId?: string | null
   title: string | null
   connected: boolean
   writable: boolean
