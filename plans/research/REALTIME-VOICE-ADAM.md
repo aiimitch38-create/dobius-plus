@@ -395,6 +395,7 @@ Order matters: 1 and 2 prove the call works before anything is built on it. Task
    Recommended default: **`gpt-live-1.1`**. It is the one he named, and standby pricing suits an all-day session.
 2. **Who is the brain?** An OpenAI backend model with ADAM's tools, with real Hermes ADAM one tool call away. Or Hermes ADAM as the only brain.
    Recommended default: **OpenAI backend plus `ask_adam`** for version 1. Simpler and faster to build. Revisit after a week of use.
+   **DECIDED 2026-11-22 by Carson: Hermes ADAM is the only brain. Voice is a tool ADAM uses, not a second agent.** Build `client` delegation, not a separate OpenAI backend brain. Everything said out loud (Carson's words and ADAM's spoken reply, from the transcript events) is written into the same Board thread and the same Hermes ADAM session as typed messages. One conversation, two ways in.
 3. **Always listening or push-to-talk?**
    Recommended default: **muted until the shortcut is pressed**. Hands-free is a switch he turns on when he wants it.
 4. **Daily spend cap?**
