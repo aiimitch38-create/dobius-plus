@@ -119,6 +119,7 @@ type RelayRuntime = Pick<
   | 'listTerminals'
   | 'getTerminalTabActiveLeafId'
   | 'getTerminalAgentStatus'
+  | 'isCursorAgentTerminal'
   | 'sendTerminal'
   | 'getOrchestrationDb'
   | 'notifyMessageArrived'
@@ -197,6 +198,8 @@ export async function relayToBoardOrchestrator(
   orchestratorCardId: string
   refused: RelayRefusal[]
   skipped: RelaySkip[]
+  /** Cursor Agent consoles: the text is typed in, Enter is left to the user. */
+  typedNotSubmitted: { cardId: string; title: string; handle: string }[]
 }> {
   if (params.type === 'worker_done' || params.type === 'heartbeat') {
     throw new Error(
@@ -243,6 +246,7 @@ export async function relayToBoardOrchestrator(
   const threadId = params.threadId ?? relayThreadId(found.cardId, now())
   const delivered: MessageRow[] = []
   const refused: RelayRefusal[] = []
+  const typedNotSubmitted: { cardId: string; title: string; handle: string }[] = []
   for (const target of targets) {
     const handle = target.terminal.handle
     let partlyTyped = false
@@ -260,10 +264,17 @@ export async function relayToBoardOrchestrator(
         payload: params.payload
       })
       const sent = message
+      // Why stamped now, before any await: the runtime's unguarded push-on-idle
+      // must never pick this row up and type it again (with its own Enter)
+      // while this guarded send waits. It stays readable with `orchestration check`.
+      db.markAsDelivered([sent.id])
+      // Why: Cursor treats injected text as editable prompt input; submitting it
+      // stays with the user, same as push-on-idle.
+      const submit = !runtime.isCursorAgentTerminal(handle)
       // Why: text, a settle delay, then Enter, each write rechecked (sendTerminal).
       await runtime.sendTerminal(
         handle,
-        { text: formatMessagesForInjection([sent]), enter: true },
+        { text: formatMessagesForInjection([sent]), enter: submit },
         {
           beforeWrite: async () => {
             await assertDeliverable(runtime, handle)
@@ -272,6 +283,9 @@ export async function relayToBoardOrchestrator(
         }
       )
       delivered.push(sent)
+      if (!submit) {
+        typedNotSubmitted.push({ cardId: target.cardId, title: target.title, handle })
+      }
     } catch (error) {
       refused.push({
         cardId: target.cardId,
@@ -282,9 +296,6 @@ export async function relayToBoardOrchestrator(
       })
     } finally {
       if (message) {
-        // Why: stamped even when refused, so the runtime's unguarded push-on-idle
-        // never types it later; it stays readable with `orchestration check`.
-        db.markAsDelivered([message.id])
         runtime.notifyMessageArrived(handle, message.type)
       }
     }
@@ -304,6 +315,7 @@ export async function relayToBoardOrchestrator(
     recipients: delivered.length,
     orchestratorCardId: found.cardId,
     refused,
-    skipped
+    skipped,
+    typedNotSubmitted
   }
 }

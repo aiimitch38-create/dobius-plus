@@ -204,6 +204,7 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
           // Why optional: only a board:<orchestrator> relay reports these.
           refused?: { title: string; reason: string; partlyTyped: boolean }[]
           skipped?: { title: string; reason: string }[]
+          typedNotSubmitted?: { title: string }[]
         }
     >('orchestration.send', {
       from,
@@ -225,6 +226,9 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
         lines.push(
           `Not delivered to "${x.title}": ${x.reason}${x.partlyTyped ? ' (text may be partly typed; Enter was not pressed)' : ''}`
         )
+      }
+      for (const x of r.typedNotSubmitted ?? []) {
+        lines.push(`Typed into "${x.title}" (Cursor Agent); Enter was left for you to press`)
       }
       for (const x of r.skipped ?? []) {
         lines.push(`Skipped "${x.title}": ${x.reason}`)

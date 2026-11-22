@@ -57,6 +57,7 @@ function makeRuntime(
   opts: {
     status?: (handle: string, call: number) => AgentStatus
     activeLeafByTab?: Record<string, string>
+    cursorHandles?: string[]
   } = {}
 ) {
   db = new OrchestrationDb(':memory:')
@@ -72,15 +73,23 @@ function makeRuntime(
       calls.set(handle, n)
       return { handle, ...(opts.status?.(handle, n) ?? { isRunningAgent: true, status: 'idle' }) }
     }),
+    isCursorAgentTerminal: (handle: string) => opts.cursorHandles?.includes(handle) ?? false,
+    // What the runtime's push-on-idle would see while this send is in flight.
+    undeliveredDuringSend: [] as number[],
     // Mirrors writeTerminalAction: beforeWrite before the text, then again before Enter.
     sendTerminal: vi.fn(
       async (
         handle: string,
-        _action: { text?: string; enter?: boolean },
+        action: { text?: string; enter?: boolean },
         options: { beforeWrite?: (ptyId: string) => void | Promise<void> } = {}
       ) => {
+        runtime.undeliveredDuringSend.push(
+          orchestrationDb.getUndeliveredUnreadMessages(handle).length
+        )
         await options.beforeWrite?.('pty')
-        await options.beforeWrite?.('pty')
+        if (action.enter) {
+          await options.beforeWrite?.('pty')
+        }
         return { handle, accepted: true, bytesWritten: 1 }
       }
     ),
@@ -227,6 +236,40 @@ describe('relayToBoardOrchestrator guarded delivery', () => {
     await expect(
       relayToBoardOrchestrator(asRuntime(runtime), { to: 'board:orch-1', subject: 'hi' })
     ).rejects.toThrow('the crew is paused; text may be partly typed, Enter was not pressed')
+  })
+})
+
+describe('relay and the runtime push-on-idle', () => {
+  it('excludes the stored row from automatic delivery before the guarded send starts', async () => {
+    const runtime = makeRuntime([consoleCard(1), orchestrator(['c1'])], [live(1)])
+    await relayToBoardOrchestrator(asRuntime(runtime), { to: 'board:orch-1', subject: 'hi' })
+    // Why: during the 500 ms settle an idle push would otherwise re-type it with an unguarded Enter.
+    expect(runtime.undeliveredDuringSend).toEqual([0])
+  })
+
+  it('types into a Cursor Agent console without pressing Enter', async () => {
+    const runtime = makeRuntime(
+      [consoleCard(1), consoleCard(2), orchestrator(['c1', 'c2'])],
+      [live(1), live(2)],
+      { cursorHandles: ['term_1'] }
+    )
+    const result = await relayToBoardOrchestrator(asRuntime(runtime), {
+      to: 'board:orch-1',
+      subject: 'hi'
+    })
+    expect(runtime.sendTerminal).toHaveBeenCalledWith(
+      'term_1',
+      expect.objectContaining({ enter: false }),
+      expect.anything()
+    )
+    expect(runtime.sendTerminal).toHaveBeenCalledWith(
+      'term_2',
+      expect.objectContaining({ enter: true }),
+      expect.anything()
+    )
+    expect(result.typedNotSubmitted).toEqual([
+      { cardId: 'c1', title: 'Builder 1', handle: 'term_1' }
+    ])
   })
 })
 

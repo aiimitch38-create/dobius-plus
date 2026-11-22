@@ -11106,6 +11106,34 @@ describe('DobiusRuntimeService', () => {
     }
   })
 
+  it('isCursorAgentTerminal uses the push-on-idle Cursor titles (board: relay skips Enter)', async () => {
+    const runtime = new DobiusRuntimeService(store)
+    runtime.setPtyController({ write: vi.fn().mockReturnValue(true), kill: vi.fn(), getForegroundProcess: async () => null })
+    syncSinglePty(runtime)
+    const [terminal] = (await runtime.listTerminals()).terminals
+    expect(runtime.isCursorAgentTerminal(terminal.handle)).toBe(false)
+    runtime.onPtyData('pty-1', '\x1b]0;\u280b Cursor Agent\x07', 100)
+    expect(runtime.isCursorAgentTerminal(terminal.handle)).toBe(true)
+    runtime.onPtyData('pty-1', '\x1b]0;. Investigate Cursor Agent\x07', 101)
+    expect(runtime.isCursorAgentTerminal(terminal.handle)).toBe(false)
+    expect(runtime.isCursorAgentTerminal('term_unknown')).toBe(false)
+  })
+
+  it('isCursorAgentTerminal sees Cursor on a pty: handle whose title was renamed later', async () => {
+    const runtime = new DobiusRuntimeService(store)
+    runtime.registerPty('pty-cur', TEST_WORKTREE_ID)
+    runtime.onPtyData('pty-cur', '\x1b]0;Cursor ready\x07', 100)
+    // A later rename is the newest title; push-on-idle still treats it as Cursor.
+    ;(
+      runtime as unknown as {
+        recordPtyWorktree: (id: string, wt: string, state: { title: string }) => void
+      }
+    ).recordPtyWorktree('pty-cur', TEST_WORKTREE_ID, { title: 'Builder' })
+    const terminal = (await runtime.listTerminals()).terminals.find((t) => t.ptyId === 'pty-cur')
+    expect(terminal?.tabId.startsWith('pty:')).toBe(true)
+    expect(runtime.isCursorAgentTerminal(terminal!.handle)).toBe(true)
+  })
+
   it('does not replay an already-delivered message on a later idle transition', async () => {
     vi.useFakeTimers()
     try {
