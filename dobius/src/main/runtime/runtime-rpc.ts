@@ -440,6 +440,13 @@ function injectDeviceScope(response: string, scope: DeviceScope): string {
   }
 }
 
+const CONFIRMATION_GATED_METHODS = new Set([
+  'crew.setPaused',
+  'crew.draftApprove',
+  'crew.decide',
+  'agentApprovals.grant'
+])
+
 export class DobiusRuntimeRpcServer {
   private readonly runtime: DobiusRuntimeService
   private readonly dispatcher: RpcDispatcher
@@ -1006,7 +1013,8 @@ export class DobiusRuntimeRpcServer {
         authenticatedLocalSocket: true,
         ...(agentKey ? { agentKey: true as const } : {}),
         adamPeerEvidence: context?.adamPeerEvidence,
-        signal: longPoll ? context?.signal : undefined
+        // Why: confirmation-gated methods close their in-app dialog when the caller disconnects.
+        signal: longPoll || CONFIRMATION_GATED_METHODS.has(request.method) ? context?.signal : undefined
       })
     } finally {
       if (longPoll) {
