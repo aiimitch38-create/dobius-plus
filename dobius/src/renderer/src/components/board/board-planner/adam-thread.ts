@@ -13,7 +13,7 @@ export type AdamTransport = (message: string) => Promise<JarvisAskResult>
 
 /** Why the existing IPC: it already owns ADAM's Hermes session, approvals and timeout. */
 export function hermesAdamTransport(): AdamTransport {
-  return (message) => window.api.jarvis.askAdamText(message)
+  return (message) => window.api.jarvis.askAdamText(message, 'thread')
 }
 
 // Main refuses a request over 16,000 characters (adam-hermes-voice.ts); stay under it.

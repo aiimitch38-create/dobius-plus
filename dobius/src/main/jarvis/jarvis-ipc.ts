@@ -1,10 +1,11 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { getDefaultVoiceSettings } from '../../shared/constants'
-import type { VoiceSettings } from '../../shared/speech-types'
+import type { AdamTurnSource, VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { adamProjectDirectory } from '../adam-connection'
+import { ADAM_TURN_CHANNEL, AdamConversation } from './adam-conversation'
 import { AdamHermesVoice } from './adam-hermes-voice'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
 import { SelfEditStore, selfEditRoots } from './self-edit'
@@ -83,12 +84,33 @@ function getAdamVoice(): AdamHermesVoice {
   return adamVoice
 }
 
+let adamConversation: AdamConversation | null = null
+
+/**
+ * The single entry point to ADAM for every caller in main (voice turns, the
+ * Board thread, a future live voice engine). One Hermes session, one turn at a
+ * time, and every turn is sent to the window so it lands in the Board thread.
+ */
+export function askAdam(
+  text: string,
+  options: { source: AdamTurnSource; said?: string }
+): ReturnType<AdamConversation['ask']> {
+  if (!adamConversation) {
+    const broadcast = createBroadcastPort()
+    adamConversation = new AdamConversation(
+      { ask: (prompt) => getAdamVoice().ask(prompt) },
+      (event) => broadcast(ADAM_TURN_CHANNEL, event)
+    )
+  }
+  return adamConversation.ask(text, options)
+}
+
 function createJarvisDeps(store: Store): JarvisServiceDeps {
   return {
     store,
     broadcast: createBroadcastPort(),
     shortcut: createGlobalShortcutPort(),
-    askAgent: (utterance) => getAdamVoice().ask(utterance),
+    askAgent: (utterance) => askAdam(utterance, { source: 'voice' }),
     cancelAgent: () => adamVoice?.cancel()
   }
 }
@@ -282,8 +304,11 @@ function registerHandlers(store: Store, service: JarvisService): void {
   // Why a text-only ask: during a live conversation the AGENT speaks, so
   // service.ask() would talk over it with a second voice.
   ipcMain.removeHandler('jarvis:askAdamText')
-  ipcMain.handle('jarvis:askAdamText', (_event, utterance: string) =>
-    getAdamVoice().ask(typeof utterance === 'string' ? utterance : '')
+  ipcMain.handle('jarvis:askAdamText', (_event, utterance: string, source?: unknown) =>
+    // Why voice by default: the only caller without a source is the live voice agent's tool.
+    askAdam(typeof utterance === 'string' ? utterance : '', {
+      source: source === 'thread' ? 'thread' : 'voice'
+    })
   )
 }
 

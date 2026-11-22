@@ -402,6 +402,8 @@ import type {
 } from '../shared/rate-limit-types'
 import type {
   ElevenLabsKeyStatus,
+  AdamTurnEvent,
+  AdamTurnSource,
   JarvisAskResult,
   JarvisSpeakOutcome,
   JarvisStateEvent,
@@ -3370,7 +3372,9 @@ export type PreloadApi = {
     clearElevenLabsKey: () => Promise<ElevenLabsKeyStatus>
     /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
     cancelAsk: () => Promise<{ ok: true }>
-    askAdamText: (utterance: string) => Promise<JarvisAskResult>
+    askAdamText: (utterance: string, source?: AdamTurnSource) => Promise<JarvisAskResult>
+    /** Every accepted ADAM turn, voice or typed: the words asked, then the reply. */
+    onAdamTurn: (callback: (event: AdamTurnEvent) => void) => () => void
     onState: (callback: (event: JarvisStateEvent) => void) => () => void
     onPttPressed: (callback: (data: { at: number }) => void) => () => void
     onPttReleased: (callback: (data: { at: number }) => void) => () => void

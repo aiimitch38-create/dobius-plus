@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useAppStore } from '@/store'
+import { useAdamVoiceThread } from '../board/board-route/adam-voice-thread'
 import { useJarvisTurn } from '../jarvis/use-jarvis-turn'
 import { useJarvisVoiceSettings } from '../jarvis/use-jarvis-voice-settings'
 import { useVoiceAgent } from '../jarvis/use-voice-agent'
@@ -20,6 +21,7 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
   const partialTranscript = useAppStore((s) => s.partialTranscript)
   const setVoiceOrbLabel = useAppStore((s) => s.setVoiceOrbLabel)
   const jarvis = useJarvisTurn()
+  useAdamVoiceThread()
   const agent = useVoiceAgent()
   const toggleAgent = agent.toggle
   const { flags } = useJarvisVoiceSettings()

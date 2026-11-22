@@ -187,6 +187,8 @@ import type {
 import type { AgentInterruptInferenceRequest } from '../shared/agent-interrupt-intent'
 import type {
   ElevenLabsKeyStatus,
+  AdamTurnEvent,
+  AdamTurnSource,
   JarvisAskResult,
   JarvisSpeakOutcome,
   JarvisStateEvent,
@@ -4641,8 +4643,14 @@ const api = {
     clearElevenLabsKey: (): Promise<ElevenLabsKeyStatus> =>
       ipcRenderer.invoke('jarvis:clearElevenLabsKey'),
     cancelAsk: (): Promise<{ ok: true }> => ipcRenderer.invoke('jarvis:cancelAsk'),
-    askAdamText: (utterance: string): Promise<JarvisAskResult> =>
-      ipcRenderer.invoke('jarvis:askAdamText', utterance),
+    askAdamText: (utterance: string, source?: AdamTurnSource): Promise<JarvisAskResult> =>
+      ipcRenderer.invoke('jarvis:askAdamText', utterance, source),
+    onAdamTurn: (callback: (event: AdamTurnEvent) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: AdamTurnEvent): void =>
+        callback(data)
+      ipcRenderer.on('jarvis:adam-turn', listener)
+      return () => ipcRenderer.removeListener('jarvis:adam-turn', listener)
+    },
     onState: (callback: (event: JarvisStateEvent) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: JarvisStateEvent): void =>
         callback(data)

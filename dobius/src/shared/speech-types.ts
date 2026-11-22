@@ -124,6 +124,15 @@ export type JarvisAskResult =
   | { kind: 'job'; text: string; jobId?: string }
   | { kind: 'error'; text: string }
 
+/** Which way in a turn with ADAM came from. Both share one Hermes session. */
+export type AdamTurnSource = 'voice' | 'thread'
+
+/** Sent to the window for each accepted ADAM turn: first the words asked, then the reply. */
+export type AdamTurnEvent = { turnId: string; source: AdamTurnSource; at: number } & (
+  | { phase: 'asked'; text: string }
+  | { phase: 'answered'; result: JarvisAskResult }
+)
+
 export type JarvisSpeakOutcome = {
   played: boolean
   reason?: string

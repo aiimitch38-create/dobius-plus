@@ -12,13 +12,13 @@ export function boardThreadStorageKey(repoId: string): string {
 /** Only the fields that can round-trip through JSON; drops action callbacks and transient rows. */
 export type PersistedBoardThreadMessage = Pick<
   BoardThreadMessage,
-  'id' | 'role' | 'text' | 'tone' | 'report'
+  'id' | 'role' | 'text' | 'tone' | 'report' | 'voice'
 >
 
 export function serializeBoardThread(messages: readonly BoardThreadMessage[]): string {
   const persistable: PersistedBoardThreadMessage[] = messages
     .filter((message) => !message.transient)
-    .map(({ id, role, text, tone, report }) => ({ id, role, text, tone, report }))
+    .map(({ id, role, text, tone, report, voice }) => ({ id, role, text, tone, report, voice }))
     .slice(-BOARD_THREAD_HISTORY_CAP)
   return JSON.stringify(persistable)
 }

@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { translate } from '@/i18n/i18n'
 import type { BoardThreadMessage, BoardThreadReport } from '../board-command-bar/BoardThread'
 import {
-  boardThreadStorageKey,
-  deserializeBoardThread,
-  serializeBoardThread
-} from './board-thread-persistence'
+  appendToBoardThread,
+  onBoardThreadAppend,
+  readStoredThread,
+  writeStoredThread
+} from './board-thread-store'
 
 const POLL_MS = 1500
 const POLL_FOR_MS = 3 * 60 * 1000
@@ -26,29 +27,6 @@ export type BoardConductor = {
   appendTo: (repoId: string | null, message: NewMessage) => void
   /** Shows a waiting row (never saved) in one repo's thread; call the returned function to take it away. */
   showThinkingIn: (repoId: string | null, text: string) => () => void
-}
-
-/** Best-effort: a storage failure (private window, quota, hardened context) must never break the thread. */
-function readStoredThread(repoId: string | null): BoardThreadMessage[] {
-  if (!repoId) {
-    return []
-  }
-  try {
-    return deserializeBoardThread(window.localStorage.getItem(boardThreadStorageKey(repoId)))
-  } catch {
-    return []
-  }
-}
-
-function writeStoredThread(repoId: string | null, messages: BoardThreadMessage[]): void {
-  if (!repoId) {
-    return
-  }
-  try {
-    window.localStorage.setItem(boardThreadStorageKey(repoId), serializeBoardThread(messages))
-  } catch {
-    // Storage can be unavailable or full; the in-memory thread still works this session.
-  }
 }
 
 export function useBoardConductor(
@@ -106,15 +84,24 @@ export function useBoardConductor(
     setMessages([])
   }, [])
 
-  const appendTo = useCallback((target: string | null, message: NewMessage) => {
-    const row = { ...message, id: crypto.randomUUID() }
-    if (loadedRepoId.current === target) {
-      setMessages((prev) => [...prev, row])
-      return
-    }
-    // Why storage: that repo's thread is not mounted; it reads this back when Carson returns.
-    writeStoredThread(target, [...readStoredThread(target), row])
-  }, [])
+  // Rows for the thread on screen go into state (and are saved from there); the
+  // store saves rows for any other repo itself.
+  useEffect(
+    () =>
+      onBoardThreadAppend((target, row) => {
+        if (loadedRepoId.current !== target) {
+          return false
+        }
+        setMessages((prev) => [...prev, row])
+        return true
+      }),
+    []
+  )
+
+  const appendTo = useCallback(
+    (target: string | null, message: NewMessage) => appendToBoardThread(target, message),
+    []
+  )
 
   const showThinkingIn = useCallback((target: string | null, text: string) => {
     const row: BoardThreadMessage = {

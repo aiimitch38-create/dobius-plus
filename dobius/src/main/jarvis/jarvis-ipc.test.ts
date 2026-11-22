@@ -183,6 +183,21 @@ describe('Adam Hermes voice routing', () => {
     ).toEqual(['thinking', 'speaking', 'idle'])
     await electron.handlers.get('jarvis:askAdamText')?.({}, 'live tool question')
     expect(adam.ask).toHaveBeenLastCalledWith('live tool question')
+    await electron.handlers.get('jarvis:askAdamText')?.({}, 'typed question', 'thread')
+    // Voice and the thread go through one entry point to the one ADAM session.
+    expect(adam.created).toHaveBeenCalledTimes(1)
+    expect(
+      main.webContents.send.mock.calls
+        .filter(([channel]) => channel === 'jarvis:adam-turn')
+        .map(([, data]) => `${data.source}:${data.phase}`)
+    ).toEqual([
+      'voice:asked',
+      'voice:answered',
+      'voice:asked',
+      'voice:answered',
+      'thread:asked',
+      'thread:answered'
+    ])
     expect(adam.speak).toHaveBeenCalledTimes(1)
     expect(adam.created).toHaveBeenCalledTimes(1)
     expect(adam.created).toHaveBeenCalledWith(
