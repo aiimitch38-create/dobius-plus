@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type {
   AdamLookingAt,
+  AdamThreadRow,
   AdamTurnEvent,
   AdamTurnSource,
   JarvisAskResult
@@ -45,6 +46,41 @@ export function voiceMessage(utterance: string, lookingAt: AdamLookingAt): strin
     encode(utterance),
     '</carson_message>'
   ].join('\n')
+}
+
+/**
+ * The thread row for one event of a spoken turn (typed turns write their own
+ * rows). Written by main, so a voice turn is kept even if no window is open.
+ * The ids come from the turn, so a turn can never be written twice.
+ * The wording matches the Board thread's own (adam-thread.ts in the renderer).
+ */
+export function voiceTurnRow(event: AdamTurnEvent): AdamThreadRow | null {
+  if (event.source !== 'voice') {
+    return null
+  }
+  if (event.phase === 'asked') {
+    return { id: `${event.turnId}:asked`, role: 'user', text: event.text, voice: true }
+  }
+  const id = `${event.turnId}:answered`
+  const text = event.result.text.trim()
+  if (event.result.kind === 'cancelled') {
+    return {
+      id,
+      role: 'system',
+      text: 'ADAM’s answer was stopped before it finished. Send your message again.',
+      voice: true
+    }
+  }
+  if (event.result.kind === 'error' || !text) {
+    return {
+      id,
+      role: 'system',
+      tone: 'error',
+      text: `ADAM could not answer. ${text || 'He sent back an empty reply. Try again.'}`,
+      voice: true
+    }
+  }
+  return { id, role: 'assistant', text, voice: true }
 }
 
 type AdamBrain = { ask: (text: string) => Promise<JarvisAskResult> }

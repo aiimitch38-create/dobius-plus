@@ -46,6 +46,21 @@ describe('AdamThreadStore: main owns the one thread', () => {
     expect(JSON.parse(await readFile(file, 'utf8'))).toHaveLength(ADAM_THREAD_CAP)
   })
 
+  it('reports a failed write, keeps the row, and writes it with the next change', async () => {
+    const store = open()
+    await store.append(row('a'))
+    // The folder vanishes (disk trouble): the write must fail loudly.
+    await rm(directory, { recursive: true, force: true })
+    await writeFile(directory, 'a file where the folder was')
+    await expect(store.append(row('b'))).rejects.toThrow()
+    expect(texts(await store.get())).toEqual(['a', 'b'])
+    expect(texts(announced.at(-1)!)).toEqual(['a', 'b'])
+    // Disk is back: the next row saves, and the unsaved one goes with it.
+    await rm(directory, { force: true })
+    await store.append(row('c'))
+    expect(texts(await open().get())).toEqual(['a', 'b', 'c'])
+  })
+
   it('clears for every window and survives a corrupt file', async () => {
     await writeFile(file, '{not json')
     const store = open()

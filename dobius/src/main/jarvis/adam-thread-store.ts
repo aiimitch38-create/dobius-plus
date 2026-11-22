@@ -59,7 +59,11 @@ export class AdamThreadStore {
     return this.loading
   }
 
-  /** Adds a row once (a repeated id is ignored) and tells every window. */
+  /**
+   * Adds a row once (a repeated id is ignored) and tells the window. Rejects
+   * when the thread could not be written to disk; the row stays in memory and
+   * is written again with the next change.
+   */
   async append(row: AdamThreadRow): Promise<void> {
     await this.get()
     // Why read here, with no await before the set: appends that arrive together
@@ -68,23 +72,22 @@ export class AdamThreadStore {
     if (rows.some((existing) => existing.id === row.id)) {
       return
     }
-    this.set([...rows, row].slice(-ADAM_THREAD_CAP))
-    await this.saving
+    await this.set([...rows, row].slice(-ADAM_THREAD_CAP))
   }
 
   async clear(): Promise<void> {
     await this.get()
-    this.set([])
-    await this.saving
+    await this.set([])
   }
 
-  private set(rows: AdamThreadRow[]): void {
+  private set(rows: AdamThreadRow[]): Promise<void> {
     this.rows = rows
     this.announce(rows)
-    // One write at a time, each writing the newest rows, so a slow write cannot land last with old ones.
-    this.saving = this.saving.then(() => this.save()).catch((error) => {
-      console.warn('ADAM thread could not be saved:', error)
-    })
+    // One write at a time, each writing the newest rows, so a slow write cannot land
+    // last with old ones. A failed write is the caller's to report; it does not stop later ones.
+    const saved = this.saving.then(() => this.save())
+    this.saving = saved.catch(() => undefined)
+    return saved
   }
 
   private async save(): Promise<void> {

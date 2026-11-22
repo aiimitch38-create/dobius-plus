@@ -14456,7 +14456,8 @@
       "unreachable": "This window could not reach ADAM’s Hermes connection. Quit and reopen Dobius+, then send your message again.",
       "cancelled": "ADAM’s answer was stopped before it finished. Send your message again.",
       "emptyReply": "He sent back an empty reply. Try again.",
-      "tooLong": "That message is too long for one turn. Send it in shorter parts."
+      "tooLong": "That message is too long for one turn. Send it in shorter parts.",
+      "threadNotSaved": "ADAM’s thread could not be saved to disk. It is still shown here, and Dobius+ will try again with the next message. If this keeps happening, check free disk space."
     }
   },
   "start": "Start",

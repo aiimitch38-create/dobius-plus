@@ -318,6 +318,42 @@ describe('terminal send RPC', () => {
     })
   })
 
+  it('reports the bytes typed when the input floor is lost part-way through a long text', async () => {
+    const text = 'a'.repeat(16 * 1024 + 10)
+    const runtime = stubRuntime({
+      resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
+      getDriver: vi.fn().mockReturnValue({ kind: 'desktop' }),
+      getTerminalAgentStatus: vi
+        .fn()
+        .mockResolvedValue({ handle: 'terminal-1', isRunningAgent: true, status: 'working' }),
+      sendTerminal: vi.fn(
+        async (
+          _handle: string,
+          _action: unknown,
+          options: { beforeWrite?: (ptyId: string) => Promise<void> }
+        ) => {
+          await options.beforeWrite?.('pty-1')
+          // Someone else takes the terminal between two chunks.
+          throw new Error('terminal_guard_not_writable')
+        }
+      )
+    })
+    const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('terminal.send', {
+        terminal: 'terminal-1',
+        text,
+        requireAgentStatus: 'sendable',
+        client: { id: 'desktop-1', type: 'desktop' }
+      })
+    )
+
+    expect(response.ok && response.result).toEqual({
+      send: { handle: 'terminal-1', accepted: false, bytesWritten: 16 * 1024 }
+    })
+  })
+
   it('allows guarded terminal sends when the agent is sendable', async () => {
     const runtime = stubRuntime({
       resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),

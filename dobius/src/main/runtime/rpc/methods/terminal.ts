@@ -433,7 +433,10 @@ async function handleTerminalSend(
     )
   } catch (error) {
     if (isTerminalSendGuardNotWritable(error) || isTerminalRuntimeBindingMismatch(error)) {
-      return refusedTerminalSend(params.terminal)
+      // Why not 0: the input floor or the runtime can change after some text is already typed.
+      return {
+        send: { handle: params.terminal, accepted: false, bytesWritten: writtenBeforeRefusal() }
+      }
     }
     const refusedReason = getTerminalSendGuardRefusedReason(error)
     if (refusedReason) {
@@ -449,7 +452,8 @@ async function handleTerminalSend(
     throw error
   }
   if (isBound && runtime.getRuntimeId() !== expectedRuntimeId) {
-    return refusedTerminalSend(params.terminal)
+    // The write finished before the runtime changed: all of it is on the terminal.
+    return { send: { handle: params.terminal, accepted: false, bytesWritten: result.bytesWritten } }
   }
   // Why: deliberate mobile input is a take-floor action. Drives the
   // `* → mobile{clientId}` driver transition so the desktop banner remounts

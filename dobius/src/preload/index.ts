@@ -4651,9 +4651,9 @@ const api = {
     askAdamText: (utterance: string, source?: AdamTurnSource): Promise<JarvisAskResult> =>
       ipcRenderer.invoke('jarvis:askAdamText', utterance, source),
     adamThreadGet: (): Promise<AdamThreadRow[]> => ipcRenderer.invoke('jarvis:adamThreadGet'),
-    adamThreadAppend: (row: AdamThreadRow): Promise<{ ok: boolean }> =>
+    adamThreadAppend: (row: AdamThreadRow): Promise<{ ok: boolean; error?: 'not-saved' }> =>
       ipcRenderer.invoke('jarvis:adamThreadAppend', row),
-    adamThreadClear: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('jarvis:adamThreadClear'),
+    adamThreadClear: (): Promise<{ ok: boolean; error?: 'not-saved' }> => ipcRenderer.invoke('jarvis:adamThreadClear'),
     onAdamThread: (callback: (rows: AdamThreadRow[]) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, rows: AdamThreadRow[]): void =>
         callback(rows)

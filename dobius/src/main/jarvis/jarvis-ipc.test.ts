@@ -239,7 +239,27 @@ describe('Adam Hermes voice routing', () => {
       ok: false
     })
     expect(await electron.handlers.get('jarvis:adamThreadAppend')?.(top, rowA)).toEqual({ ok: true })
-    expect(await electron.handlers.get('jarvis:adamThreadGet')?.({})).toEqual([rowA])
+    // Reading is for the main window's top frame too, and only that window is sent the thread.
+    expect(await electron.handlers.get('jarvis:adamThreadGet')?.({})).toEqual([])
+    const stored = (await electron.handlers.get('jarvis:adamThreadGet')?.(top)) as {
+      id: string
+      text: string
+      voice?: boolean
+    }[]
+    expect(stored.find((row) => row.id === 'a')).toEqual(rowA)
+    // Main wrote the spoken turns itself, with no window writing them back; typed turns are not its job.
+    expect(stored.filter((row) => row.voice).map((row) => row.text)).toEqual([
+      'hello Adam',
+      'Adam Hermes reply',
+      'live tool question',
+      'Adam Hermes reply',
+      'run the tests here',
+      'Adam Hermes reply'
+    ])
+    expect(stored.some((row) => row.text === 'typed question')).toBe(false)
+    expect(
+      main.webContents.send.mock.calls.filter(([channel]) => channel === 'jarvis:adam-thread').length
+    ).toBeGreaterThan(0)
     // Voice and the thread go through one entry point to the one ADAM session.
     expect(adam.created).toHaveBeenCalledTimes(1)
     expect(

@@ -1,11 +1,9 @@
 import { useEffect } from 'react'
 import { useAppStore } from '@/store'
-import type { AdamLookingAt, AdamTurnEvent } from '../../../../../shared/speech-types'
-import { adamReplyMessage } from '../board-planner/adam-thread'
-import { appendToBoardThread } from './board-thread-store'
+import type { AdamLookingAt } from '../../../../../shared/speech-types'
 
-// Voice and typed messages are one conversation with ADAM, so every spoken turn
-// is written into his thread too. Typed turns add their own rows.
+// Voice and typed messages are one conversation with ADAM. Main writes every spoken
+// turn into his thread itself; this file only tells main which project is on screen.
 
 /** The project on screen right now, for ADAM's "carson_is_looking_at". */
 export function currentlyLookingAt(): AdamLookingAt | null {
@@ -21,33 +19,11 @@ export function currentlyLookingAt(): AdamLookingAt | null {
   }
 }
 
-/** Returns the handler for ADAM turn events: each voice turn becomes two thread rows. */
-export function createVoiceTurnRecorder(
-  append: typeof appendToBoardThread = appendToBoardThread
-): (event: AdamTurnEvent) => void {
-  return (event) => {
-    if (event.source !== 'voice') {
-      return
-    }
-    // Why ids from the turn: a turn heard twice (a reload, a second window) must be written once.
-    if (event.phase === 'asked') {
-      append({ role: 'user', text: event.text, voice: true }, `${event.turnId}:asked`)
-      return
-    }
-    append(
-      { ...adamReplyMessage({ ok: true, result: event.result }), voice: true },
-      `${event.turnId}:answered`
-    )
-  }
-}
-
 /**
- * Mounted once, app-wide, so voice turns are kept even when the Board is not
- * open, and main always knows which project is on screen: a wake-word turn
- * starts in main and has no other way to learn what "this project" means.
+ * Mounted once, app-wide, so main always knows which project is on screen: a
+ * wake-word turn starts in main and has no other way to learn what "this project" means.
  */
 export function useAdamVoiceThread(): void {
-  useEffect(() => window.api.jarvis.onAdamTurn(createVoiceTurnRecorder()), [])
   useEffect(() => {
     let last: string | undefined
     const report = (): void => {

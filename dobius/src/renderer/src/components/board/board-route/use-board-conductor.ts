@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { BoardThreadMessage, BoardThreadReport } from '../board-command-bar/BoardThread'
-import { appendToBoardThread, threadFromMain } from './board-thread-store'
+import { appendToBoardThread, reportUnsaved, threadFromMain } from './board-thread-store'
 
 type NewMessage = Omit<BoardThreadMessage, 'id'>
 
@@ -52,9 +52,7 @@ export function useBoardConductor(): BoardConductor {
   )
 
   const clearThread = useCallback(() => {
-    void window.api.jarvis.adamThreadClear().catch((error: unknown) => {
-      console.warn('ADAM thread could not be cleared:', error)
-    })
+    void reportUnsaved(window.api.jarvis.adamThreadClear())
   }, [])
 
   const showThinking = useCallback((text: string) => {

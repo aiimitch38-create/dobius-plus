@@ -3384,8 +3384,8 @@ export type PreloadApi = {
     askAdamText: (utterance: string, source?: AdamTurnSource) => Promise<JarvisAskResult>
     /** ADAM's one thread, owned by main: read it, add a row, clear it, and hear every change. */
     adamThreadGet: () => Promise<AdamThreadRow[]>
-    adamThreadAppend: (row: AdamThreadRow) => Promise<{ ok: boolean }>
-    adamThreadClear: () => Promise<{ ok: boolean }>
+    adamThreadAppend: (row: AdamThreadRow) => Promise<{ ok: boolean; error?: 'not-saved' }>
+    adamThreadClear: () => Promise<{ ok: boolean; error?: 'not-saved' }>
     onAdamThread: (callback: (rows: AdamThreadRow[]) => void) => () => void
     /** Tells main which project is on screen, for turns that start there (the wake word). */
     reportLookingAt: (lookingAt: AdamLookingAt | null) => Promise<void>
