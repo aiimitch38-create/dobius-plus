@@ -28,3 +28,5 @@ NOT tonight, needs Carson: install, live voice test call, the OpenAI key, the He
 
 ## Done tonight
 (appended as items merge)
+- Bug auto-fix merged (9aa09b10): bug card on Kanban starts a restricted Claude fix agent; restricted on every relaunch/resume/wake path
+- Started: 1.1 + 5.1/5.2/5.4 bug button (wb/bug-button)
