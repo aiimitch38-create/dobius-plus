@@ -19,6 +19,7 @@ export type CommandSpec = {
 export const GLOBAL_FLAGS = ['help', 'json', 'pairing-code', 'environment']
 export const BOOLEAN_FLAGS = new Set([
   'all',
+  'allow-dirty',
   'attachments',
   'children',
   'comments',
@@ -30,6 +31,7 @@ export const BOOLEAN_FLAGS = new Set([
   'focus',
   'force',
   'full',
+  'generate',
   'help',
   'inject',
   'interrupt',
@@ -54,6 +56,7 @@ export const BOOLEAN_FLAGS = new Set([
   'tasks',
   'text-stdin',
   'unread',
+  'unresolved',
   'value-stdin',
   'wait'
 ])
@@ -143,7 +146,9 @@ export function supportsBrowserPageFlag(commandPath: string[]): boolean {
       'emulator',
       'note',
       'diagnostics',
-      'linear'
+      'linear',
+      'git',
+      'pr'
     ].includes(commandPath[0])
   ) {
     return false
@@ -188,7 +193,9 @@ export function isCommandGroup(commandPath: string[]): boolean {
         'tasks',
         'board',
         'lead',
-        'crew'
+        'crew',
+        'git',
+        'pr'
       ].includes(commandPath[0])) ||
     (commandPath.length === 2 && commandPath[0] === 'agent' && commandPath[1] === 'hooks') ||
     (commandPath.length === 2 &&

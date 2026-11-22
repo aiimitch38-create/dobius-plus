@@ -10,7 +10,7 @@ const flagsOf = (entries: [string, string | boolean][] = []) =>
 beforeEach(() => {
   callMock.mockReset().mockImplementation(async (method: string) => {
     if (method === 'worktree.list') {
-      return { result: { worktrees: [{ id: 'wt-1', path: '/repo' }] } }
+      return { result: { worktrees: [{ id: 'wt-1', path: '/repo', hostId: 'local' }] } }
     }
     if (method === 'board.resolveConsole') {
       return { result: { handle: 'term_live' } }
@@ -64,7 +64,7 @@ describe('resolveTerminalAddress', () => {
   it('passes the runtime error through and never asks for the active terminal', async () => {
     callMock.mockImplementation(async (method: string) => {
       if (method === 'worktree.list') {
-        return { result: { worktrees: [{ id: 'wt-1', path: '/repo' }] } }
+        return { result: { worktrees: [{ id: 'wt-1', path: '/repo', hostId: 'local' }] } }
       }
       throw new Error('board_card_not_found: no console card named "Nope"')
     })
@@ -115,9 +115,9 @@ describe('getTerminalHandle', () => {
   })
 
   it('resolves --terminal card:<title>', async () => {
-    expect(await getTerminalHandle(flagsOf([['terminal', 'card:Builder 1']]), '/repo', client)).toBe(
-      'term_live'
-    )
+    expect(
+      await getTerminalHandle(flagsOf([['terminal', 'card:Builder 1']]), '/repo', client)
+    ).toBe('term_live')
   })
 
   it('still uses the active terminal when --terminal is left out', async () => {
@@ -128,10 +128,13 @@ describe('getTerminalHandle', () => {
     ['an empty string', ''],
     ['only spaces', '   '],
     ['no value (parsed as a bare flag)', true]
-  ] as const)('errors when --terminal is %s instead of using the active terminal', async (_n, v) => {
-    await expect(getTerminalHandle(flagsOf([['terminal', v]]), '/repo', client)).rejects.toThrow(
-      '--terminal was given without a value'
-    )
-    expect(callMock).not.toHaveBeenCalled()
-  })
+  ] as const)(
+    'errors when --terminal is %s instead of using the active terminal',
+    async (_n, v) => {
+      await expect(getTerminalHandle(flagsOf([['terminal', v]]), '/repo', client)).rejects.toThrow(
+        '--terminal was given without a value'
+      )
+      expect(callMock).not.toHaveBeenCalled()
+    }
+  )
 })
