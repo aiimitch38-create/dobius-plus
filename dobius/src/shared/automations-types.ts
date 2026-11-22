@@ -90,6 +90,8 @@ export type AutomationPrecheckResult = {
   error: string | null
   startedAt: number
   completedAt: number
+  /** Set only when processes the command started could not be stopped. */
+  processGroupAlive?: boolean
 }
 
 export type Automation = {

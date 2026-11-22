@@ -1,3 +1,5 @@
+import type { AutomationPrecheckResult } from './automations-types'
+
 export const AGENT_COLORS = [
   '#b9bcc2',
   '#7aa2f7',
@@ -109,6 +111,8 @@ export const CHANNEL_AGENT_BASELINE_TOOLS = [
 
 export type AgentRunStatus = 'running' | 'success' | 'error' | 'cancelled'
 export type AgentRunSource = 'manual' | 'heartbeat' | 'channel' | 'asana'
+/** How a checked run ended: the check passed, it could not be fixed, or a person must look. */
+export type AgentRunOutcome = 'verified' | 'blocked' | 'needs-review'
 
 export type AgentRunContext = {
   correlationId: string
@@ -160,6 +164,17 @@ export type AgentRun = {
   costUsd?: number
   /** Tool requests refused because nobody could approve them (headless runs). */
   permissionDenials?: AgentRunPermissionDenial[]
+  // Run loop (check after the run, retry). All absent on a run with no check.
+  /** 1 for the first run of a loop, 2 for its retry. */
+  attempt?: number
+  /** The first run of the loop this run belongs to. */
+  rootRunId?: string
+  /** Result of the check the app ran after this run settled. */
+  postcheck?: AutomationPrecheckResult
+  /** Set on the last run of a loop. Absent = no check, or the app quit mid-loop. */
+  outcome?: AgentRunOutcome
+  /** Total spend across the loop's attempts, on the last run. */
+  loopCostUsd?: number
 }
 
 export type AgentRunPermissionDenial = {

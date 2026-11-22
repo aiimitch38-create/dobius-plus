@@ -19,6 +19,8 @@ export type GuardedRunEndCallbacks = {
   onResult: (message: SDKResultMessage) => void
   onRunEnded: (status: 'error' | 'cancelled', summary: string) => void
   onSettled: () => void
+  /** A run that must continue one exact session: a failed resume is an error, never a fresh start. */
+  noFreshSessionFallback?: boolean
 }
 
 function logCallbackError(name: string, error: unknown): void {

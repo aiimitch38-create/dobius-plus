@@ -16,6 +16,7 @@ type CodexRunRequest = {
   maxBudgetUsd?: number
   outputFormat?: unknown
   onResult?: unknown
+  postcheck?: unknown
 }
 
 export class CodexRunUnsupportedError extends Error {
@@ -41,6 +42,11 @@ export function codexRunRejection(options: CodexRunRequest | undefined): string 
   }
   if (options?.outputFormat !== undefined || options?.onResult !== undefined) {
     return 'Codex agents cannot return a structured result: use a Claude agent for this run.'
+  }
+  if (options?.postcheck !== undefined) {
+    // Codex reports no tool calls or file changes, so neither "did it act
+    // outside this Mac" nor "did it change tooling" can be answered.
+    return 'Codex agents cannot run with a check: Codex reports no tool activity to judge the run by. Use a Claude agent.'
   }
   return null
 }
