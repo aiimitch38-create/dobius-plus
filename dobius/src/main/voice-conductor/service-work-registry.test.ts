@@ -12,7 +12,10 @@ state.userData = mkdtempSync(path.join(tmpdir(), 'conductor-service-'))
 vi.mock('electron', () => ({ app: { getPath: () => state.userData } }))
 vi.mock('../agents/agents-store', () => ({ listAgents: () => [] }))
 vi.mock('../agents/agent-runner', () => ({ startAgentRun: vi.fn() }))
-vi.mock('../agents/default-claude-launch', () => ({ getDefaultPrepareClaudeLaunch: () => null }))
+vi.mock('../agents/default-claude-launch', () => ({
+  getDefaultPrepareClaudeLaunch: () => async () => ({}),
+  onDefaultPrepareClaudeLaunchRegistered: () => () => {}
+}))
 vi.mock('./conductor', () => ({
   createVoiceConductor: () => ({
     start: vi.fn(async () => {}),
