@@ -697,7 +697,7 @@ describe('registerPtyHandlers', () => {
         getSelectedCodexHomePath,
         getSettings as never
       )
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         ...(argsEnv ? { env: argsEnv } : {}),
@@ -723,7 +723,7 @@ describe('registerPtyHandlers', () => {
   }): Promise<[string, string[], { cwd: string; env: Record<string, string> }]> {
     handlers.clear()
     registerPtyHandlers(mainWindow as never)
-    await handlers.get('pty:spawn')!(null, {
+    await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       ...args
@@ -776,7 +776,7 @@ describe('registerPtyHandlers', () => {
       store as never
     )
 
-    const claim = await handlers.get('pty:claimAgentResume')!(null, owner)
+    const claim = await handlers.get('pty:claimAgentResume')!(mainWindowIpcEvent, owner)
     expect(claim).toMatchObject({ ok: true })
     session.sleepingAgentSessionsByPaneKey = {}
 
@@ -786,7 +786,7 @@ describe('registerPtyHandlers', () => {
       target: (claim as { target: AgentResumeSpawnTarget }).target
     })
     await expect(
-      handlers.get('pty:spawn')!(null, {
+      handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         worktreeId: 'different-worktree',
@@ -799,7 +799,7 @@ describe('registerPtyHandlers', () => {
     ).rejects.toThrow('Automatic agent-resume ownership changed before PTY spawn')
     expect(spawnMock).not.toHaveBeenCalled()
 
-    await handlers.get('pty:spawn')!(null, {
+    await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       worktreeId: owner.worktreeId,
@@ -874,7 +874,7 @@ describe('registerPtyHandlers', () => {
       store as never
     )
 
-    expect(handlers.get('pty:claimAgentResume')!(null, owner)).toBeNull()
+    expect(handlers.get('pty:claimAgentResume')!(mainWindowIpcEvent, owner)).toBeNull()
   })
 
   it('refuses an owner claim when the persisted per-leaf PTY no longer matches', async () => {
@@ -923,7 +923,7 @@ describe('registerPtyHandlers', () => {
       store as never
     )
 
-    expect(handlers.get('pty:claimAgentResume')!(null, owner)).toBeNull()
+    expect(handlers.get('pty:claimAgentResume')!(mainWindowIpcEvent, owner)).toBeNull()
   })
 
   it('refuses an SSH owner claim when the current hook authority differs', () => {
@@ -979,7 +979,7 @@ describe('registerPtyHandlers', () => {
       store as never
     )
 
-    expect(handlers.get('pty:claimAgentResume')!(null, owner)).toBeNull()
+    expect(handlers.get('pty:claimAgentResume')!(mainWindowIpcEvent, owner)).toBeNull()
   })
 
   describe('spawn environment', () => {
@@ -992,7 +992,7 @@ describe('registerPtyHandlers', () => {
       }))
       registerPtyHandlers(mainWindow as never, undefined, undefined, undefined, prepareClaudeAuth)
 
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         command: 'claude'
@@ -1001,7 +1001,7 @@ describe('registerPtyHandlers', () => {
       expect(prepareClaudeAuth).toHaveBeenCalledTimes(1)
       expect(hasLiveClaudePtys()).toBe(true)
 
-      await handlers.get('pty:kill')!(null, { id: spawnResult.id })
+      await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: spawnResult.id })
 
       expect(hasLiveClaudePtys()).toBe(false)
     })
@@ -1488,7 +1488,7 @@ describe('registerPtyHandlers', () => {
         enableGitHubAttribution: true
       })) as never)
 
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         env: {}
@@ -1640,7 +1640,7 @@ describe('registerPtyHandlers', () => {
             getSelectedCodexHomePath,
             getSettings as never
           )
-          await handlers.get('pty:spawn')!(null, {
+          await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
             cols: 80,
             rows: 24,
             ...spawnArgs,
@@ -1970,7 +1970,7 @@ describe('registerPtyHandlers', () => {
           undefined,
           store as never
         )
-        const claim = (await handlers.get('pty:claimAgentResume')!(null, owner)) as {
+        const claim = (await handlers.get('pty:claimAgentResume')!(mainWindowIpcEvent, owner)) as {
           token: string
           target: AgentResumeSpawnTarget
         }
@@ -2274,7 +2274,7 @@ describe('registerPtyHandlers', () => {
         const daemonSpawn = setupDaemonAdapter()
         handlers.clear()
         registerPtyHandlers(mainWindow as never)
-        await handlers.get('pty:spawn')!(null, {
+        await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           env: {}
@@ -2291,7 +2291,7 @@ describe('registerPtyHandlers', () => {
         const daemonSpawn = setupDaemonAdapter()
         handlers.clear()
         registerPtyHandlers(mainWindow as never)
-        await handlers.get('pty:spawn')!(null, {
+        await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           env: {},
@@ -2310,7 +2310,7 @@ describe('registerPtyHandlers', () => {
         const daemonSpawn = setupDaemonAdapter()
         handlers.clear()
         registerPtyHandlers(mainWindow as never)
-        await handlers.get('pty:spawn')!(null, {
+        await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           env: {},
@@ -2357,7 +2357,7 @@ describe('registerPtyHandlers', () => {
         const argsEnv: Record<string, string> = { FOO: 'bar' }
         handlers.clear()
         registerPtyHandlers(mainWindow as never)
-        await handlers.get('pty:spawn')!(null, {
+        await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           env: argsEnv
@@ -2378,7 +2378,7 @@ describe('registerPtyHandlers', () => {
         handlers.clear()
         registerPtyHandlers(mainWindow as never)
         await expect(
-          handlers.get('pty:spawn')!(null, {
+          handlers.get('pty:spawn')!(mainWindowIpcEvent, {
             cols: 80,
             rows: 24,
             env: {},
@@ -2411,7 +2411,7 @@ describe('registerPtyHandlers', () => {
         handlers.clear()
         registerPtyHandlers(mainWindow as never)
         await expect(
-          handlers.get('pty:spawn')!(null, { cols: 80, rows: 24, env: {} })
+          handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24, env: {} })
         ).rejects.toThrow(/spawn boom/)
         expect(openCodeClearPtyMock).toHaveBeenCalled()
         expect(piClearPtyMock).toHaveBeenCalled()
@@ -2439,7 +2439,7 @@ describe('registerPtyHandlers', () => {
         handlers.clear()
         registerPtyHandlers(mainWindow as never)
         await expect(
-          handlers.get('pty:spawn')!(null, {
+          handlers.get('pty:spawn')!(mainWindowIpcEvent, {
             cols: 80,
             rows: 24,
             env: {},
@@ -2493,7 +2493,7 @@ describe('registerPtyHandlers', () => {
           store as never
         )
         const leafId = '11111111-1111-4111-8111-111111111111'
-        await handlers.get('pty:spawn')!(null, {
+        await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           env: { FOO: 'bar', DOBIUS_PANE_KEY: makePaneKey('tab-1', leafId) },
@@ -2546,7 +2546,7 @@ describe('registerPtyHandlers', () => {
 
         store.upsertSshRemotePtyLease.mockClear()
         store.persistPtyBinding.mockClear()
-        await handlers.get('pty:spawn')!(null, {
+        await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           env: { DOBIUS_PANE_KEY: 'tab-1:pane:1' },
@@ -2601,7 +2601,7 @@ describe('registerPtyHandlers', () => {
         )
 
         await expect(
-          handlers.get('pty:spawn')!(null, {
+          handlers.get('pty:spawn')!(mainWindowIpcEvent, {
             cols: 80,
             rows: 24,
             env: {},
@@ -2656,7 +2656,7 @@ describe('registerPtyHandlers', () => {
 
         try {
           await expect(
-            handlers.get('pty:spawn')!(null, {
+            handlers.get('pty:spawn')!(mainWindowIpcEvent, {
               cols: 80,
               rows: 24,
               env: {},
@@ -3295,7 +3295,7 @@ describe('registerPtyHandlers', () => {
         const prevFlag = process.env.DOBIUS_FEATURE_REMOTE_AGENT_HOOKS
         process.env.DOBIUS_FEATURE_REMOTE_AGENT_HOOKS = '0'
         try {
-          await handlers.get('pty:spawn')!(null, {
+          await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
             cols: 80,
             rows: 24,
             env: {
@@ -3357,7 +3357,7 @@ describe('registerPtyHandlers', () => {
         try {
           const leafId = '22222222-2222-4222-8222-222222222222'
           const paneKey = makePaneKey('tab-2', leafId)
-          await handlers.get('pty:spawn')!(null, {
+          await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
             cols: 80,
             rows: 24,
             env: {
@@ -3573,7 +3573,7 @@ describe('registerPtyHandlers', () => {
       }
     )
 
-    const pendingSpawn = handlers.get('pty:spawn')!(null, {
+    const pendingSpawn = handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24
     }) as Promise<{ id: string }>
@@ -3616,7 +3616,7 @@ describe('registerPtyHandlers', () => {
         }
       )
 
-      const pendingSpawn = handlers.get('pty:spawn')!(null, {
+      const pendingSpawn = handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         sessionId: 'daemon-session'
@@ -3727,7 +3727,7 @@ describe('registerPtyHandlers', () => {
     )
 
     await expect(
-      handlers.get('pty:spawn')!(null, {
+      handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         connectionId: 'ssh-1',
@@ -3765,8 +3765,8 @@ describe('registerPtyHandlers', () => {
       getProfiles: vi.fn()
     } as never)
 
-    await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
-    const sessions = (await handlers.get('pty:listSessions')!(null, undefined)) as {
+    await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
+    const sessions = (await handlers.get('pty:listSessions')!(mainWindowIpcEvent, undefined)) as {
       id: string
       cwd: string
       title: string
@@ -3779,7 +3779,7 @@ describe('registerPtyHandlers', () => {
       ])
     )
 
-    await handlers.get('pty:kill')!(null, { id: 'remote-pty' })
+    await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'remote-pty' })
     expect(sshShutdown).toHaveBeenCalledWith('remote-pty', {
       immediate: true,
       keepHistory: false
@@ -4103,7 +4103,7 @@ describe('registerPtyHandlers', () => {
       undefined,
       store as never
     )
-    await handlers.get('pty:spawn')!(null, {
+    await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       connectionId: 'ssh-1',
@@ -4122,14 +4122,14 @@ describe('registerPtyHandlers', () => {
       listenerFor('pty:write')(mainWindowIpcEvent, { id: 'remote-pty', data: 'x' })
     ).not.toThrow()
     expect(() =>
-      listenerFor('pty:resize')(null, { id: 'remote-pty', cols: 100, rows: 30 })
+      listenerFor('pty:resize')(mainWindowIpcEvent, { id: 'remote-pty', cols: 100, rows: 30 })
     ).not.toThrow()
-    expect(() => listenerFor('pty:ackColdRestore')(null, { id: 'remote-pty' })).not.toThrow()
+    expect(() => listenerFor('pty:ackColdRestore')(mainWindowIpcEvent, { id: 'remote-pty' })).not.toThrow()
     expect(() =>
-      listenerFor('pty:signal')(null, { id: 'remote-pty', signal: 'SIGINT' })
+      listenerFor('pty:signal')(mainWindowIpcEvent, { id: 'remote-pty', signal: 'SIGINT' })
     ).not.toThrow()
 
-    await expect(handlers.get('pty:kill')!(null, { id: 'remote-pty' })).resolves.toBeUndefined()
+    await expect(handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'remote-pty' })).resolves.toBeUndefined()
     expect(store.markSshRemotePtyLease).toHaveBeenCalledWith('ssh-1', 'remote-pty', 'terminated')
   })
 
@@ -4214,7 +4214,7 @@ describe('registerPtyHandlers', () => {
       setupProviderWithAppliedSize({ applied: { cols: 200, rows: 50 } })
       handlers.clear()
       registerPtyHandlers(mainWindow as never)
-      const spawn = await handlers.get('pty:spawn')!(null, { cols: 200, rows: 50, env: {} })
+      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 200, rows: 50, env: {} })
       const id = (spawn as { id: string }).id
 
       // Renderer forwards a corrective narrow resize; it is dropped daemon-side.
@@ -4222,7 +4222,7 @@ describe('registerPtyHandlers', () => {
 
       // pty:getSize must surface the applied wide size so the renderer detects
       // drift (xterm=80 vs PTY=200) and re-asserts — NOT the requested 80.
-      const reported = await handlers.get('pty:getSize')!(null, { id })
+      const reported = await handlers.get('pty:getSize')!(mainWindowIpcEvent, { id })
       expect(reported).toEqual({ cols: 200, rows: 50 })
     })
 
@@ -4245,11 +4245,11 @@ describe('registerPtyHandlers', () => {
       } as never)
       handlers.clear()
       registerPtyHandlers(mainWindow as never)
-      const spawn = await handlers.get('pty:spawn')!(null, { cols: 200, rows: 50, env: {} })
+      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 200, rows: 50, env: {} })
       const id = (spawn as { id: string }).id
       resizeListener()(mainWindowIpcEvent, { id, cols: 80, rows: 24 })
 
-      const reported = await handlers.get('pty:getSize')!(null, { id })
+      const reported = await handlers.get('pty:getSize')!(mainWindowIpcEvent, { id })
       expect(reported).toEqual({ cols: 80, rows: 24 })
     })
 
@@ -4263,10 +4263,10 @@ describe('registerPtyHandlers', () => {
       })
       handlers.clear()
       registerPtyHandlers(mainWindow as never)
-      const spawn = await handlers.get('pty:spawn')!(null, { cols: 100, rows: 30, env: {} })
+      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 100, rows: 30, env: {} })
       const id = (spawn as { id: string }).id
 
-      const reported = await handlers.get('pty:getSize')!(null, { id })
+      const reported = await handlers.get('pty:getSize')!(mainWindowIpcEvent, { id })
       expect(reported).toEqual({ cols: 100, rows: 30 })
     })
 
@@ -4286,7 +4286,7 @@ describe('registerPtyHandlers', () => {
       }
       handlers.clear()
       registerPtyHandlers(mainWindow as never, runtime as never)
-      const spawn = await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24, env: {} })
+      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24, env: {} })
       const id = (spawn as { id: string }).id
 
       resizeListener()(mainWindowIpcEvent, { id, cols: 120, rows: 30 })
@@ -4318,7 +4318,7 @@ describe('registerPtyHandlers', () => {
       }
       handlers.clear()
       registerPtyHandlers(mainWindow as never, runtime as never)
-      const spawn = await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24, env: {} })
+      const spawn = await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24, env: {} })
       const id = (spawn as { id: string }).id
 
       resizeListener()(mainWindowIpcEvent, { id, cols: 120, rows: 30 })
@@ -4357,7 +4357,7 @@ describe('registerPtyHandlers', () => {
     }
 
     registerPtyHandlers(mainWindow as never, runtime as never)
-    await handlers.get('pty:spawn')!(null, {
+    await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       connectionId: 'ssh-1',
@@ -4545,7 +4545,7 @@ describe('registerPtyHandlers', () => {
     }
 
     registerPtyHandlers(mainWindow as never, runtime as never)
-    const result = (await handlers.get('pty:spawn')!(null, {
+    const result = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       connectionId: 'ssh-reattach-1',
@@ -4785,7 +4785,7 @@ describe('registerPtyHandlers', () => {
 
     // Why: SSH can strip DOBIUS_PANE_KEY before spawn; tab/leaf metadata must
     // still dedupe against runtime materialization.
-    const rendererSpawn = handlers.get('pty:spawn')!(null, {
+    const rendererSpawn = handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       cwd: '/tmp',
@@ -4885,7 +4885,7 @@ describe('registerPtyHandlers', () => {
     )
     const leafId = '33333333-3333-4333-8333-333333333333'
     const paneKey = makePaneKey('tab-race', leafId)
-    const rendererSpawn = handlers.get('pty:spawn')!(null, {
+    const rendererSpawn = handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       cwd: '/tmp',
@@ -4942,12 +4942,12 @@ describe('registerPtyHandlers', () => {
       throw new Error('boom: post-spawn registration failed')
     })
 
-    await expect(handlers.get('pty:spawn')!(null, spawnArgs)).rejects.toThrow('boom')
+    await expect(handlers.get('pty:spawn')!(mainWindowIpcEvent, spawnArgs)).rejects.toThrow('boom')
 
     // A second spawn for the same pane must run a fresh spawn rather than await
     // the leaked (never-settled) reservation promise.
     let hangTimer: ReturnType<typeof setTimeout> | undefined
-    const second = handlers.get('pty:spawn')!(null, spawnArgs) as Promise<{ id: string }>
+    const second = handlers.get('pty:spawn')!(mainWindowIpcEvent, spawnArgs) as Promise<{ id: string }>
     const result = await Promise.race([
       second,
       new Promise<never>((_, reject) => {
@@ -5776,7 +5776,7 @@ describe('registerPtyHandlers', () => {
     }
 
     registerPtyHandlers(mainWindow as never, runtime as never)
-    await handlers.get('pty:spawn')!(null, {
+    await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       env: { DOBIUS_TERMINAL_HANDLE: 'term_untrusted' }
@@ -5804,7 +5804,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never, runtime as never)
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         shellOverride: 'wsl.exe'
@@ -5896,7 +5896,7 @@ describe('registerPtyHandlers', () => {
       process.env.COMSPEC = 'C:\\Windows\\system32\\cmd.exe'
 
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
       expect(spawnMock).toHaveBeenCalledWith(
         'C:\\Windows\\system32\\cmd.exe',
@@ -5909,7 +5909,7 @@ describe('registerPtyHandlers', () => {
       process.env.COMSPEC = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
 
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
       expect(spawnMock).toHaveBeenCalledWith(
         'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
@@ -5922,7 +5922,7 @@ describe('registerPtyHandlers', () => {
       process.env.COMSPEC = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
 
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
       expect(spawnMock).toHaveBeenCalledWith(
         'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -5935,7 +5935,7 @@ describe('registerPtyHandlers', () => {
       process.env.COMSPEC = 'C:\\Windows\\system32\\cmd.exe'
 
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
       const spawnCall = spawnMock.mock.calls.at(-1)!
       const env = spawnCall[2].env as Record<string, string>
@@ -5947,7 +5947,7 @@ describe('registerPtyHandlers', () => {
       process.env.PYTHONUTF8 = '0'
 
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
       const spawnCall = spawnMock.mock.calls.at(-1)!
       const env = spawnCall[2].env as Record<string, string>
@@ -5958,7 +5958,7 @@ describe('registerPtyHandlers', () => {
       process.env.COMSPEC = 'C:\\Program Files\\Git\\bin\\bash.exe'
 
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
       expect(spawnMock).toHaveBeenCalledWith(
         'C:\\Program Files\\Git\\bin\\bash.exe',
@@ -5983,7 +5983,7 @@ describe('registerPtyHandlers', () => {
             terminalWindowsShell: 'powershell.exe'
           }) as never
       )
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
       expect(spawnMock).toHaveBeenCalledWith(
         RESOLVED_WINDOWS_POWERSHELL,
@@ -6005,7 +6005,7 @@ describe('registerPtyHandlers', () => {
             terminalWindowsWslDistro: 'Debian'
           }) as never
       )
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         projectRuntime: {
@@ -6040,7 +6040,7 @@ describe('registerPtyHandlers', () => {
             terminalWindowsWslDistro: 'Debian'
           }) as never
       )
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: 'C:\\Users\\test\\repo',
@@ -6076,7 +6076,7 @@ describe('registerPtyHandlers', () => {
       )
 
       await expect(
-        handlers.get('pty:spawn')!(null, {
+        handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           projectRuntime: {
@@ -6107,7 +6107,7 @@ describe('registerPtyHandlers', () => {
             terminalWindowsPowerShellImplementation: 'powershell.exe'
           }) as never
       )
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
       expect(spawnMock).toHaveBeenCalledWith(
         RESOLVED_WINDOWS_POWERSHELL,
@@ -6130,7 +6130,7 @@ describe('registerPtyHandlers', () => {
             terminalWindowsPowerShellImplementation: 'pwsh.exe'
           }) as never
       )
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
       expect(spawnMock).toHaveBeenCalledWith(
         RESOLVED_PWSH7,
@@ -6153,7 +6153,7 @@ describe('registerPtyHandlers', () => {
             terminalWindowsPowerShellImplementation: 'pwsh.exe'
           }) as never
       )
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
       expect(spawnMock).toHaveBeenCalledWith(
         RESOLVED_PWSH7,
@@ -6177,7 +6177,7 @@ describe('registerPtyHandlers', () => {
             terminalWindowsPowerShellImplementation: 'pwsh.exe'
           }) as never
       )
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24, shellOverride: 'pwsh.exe' })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24, shellOverride: 'pwsh.exe' })
 
       expect(spawnMock).toHaveBeenCalledWith(
         RESOLVED_PWSH7,
@@ -6201,7 +6201,7 @@ describe('registerPtyHandlers', () => {
             terminalWindowsPowerShellImplementation: 'pwsh.exe'
           }) as never
       )
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
       expect(spawnMock).toHaveBeenCalledWith(
         'cmd.exe',
@@ -6224,7 +6224,7 @@ describe('registerPtyHandlers', () => {
             terminalWindowsPowerShellImplementation: 'pwsh.exe'
           }) as never
       )
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
       const spawnOptions = spawnMock.mock.calls.at(-1)?.[2] as { env: Record<string, string> }
       expect(spawnMock).toHaveBeenCalledWith('wsl.exe', expect.any(Array), expect.any(Object))
@@ -6246,7 +6246,7 @@ describe('registerPtyHandlers', () => {
             terminalWindowsPowerShellImplementation: 'pwsh.exe'
           }) as never
       )
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         shellOverride: 'wsl.exe'
@@ -6264,7 +6264,7 @@ describe('registerPtyHandlers', () => {
     // against trusted-directory grants before it reaches pty:spawn.
     registerPtyHandlers(mainWindow as never)
 
-    await handlers.get('pty:spawn')!(null, {
+    await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       cwd: '/tmp/floating-notes',
@@ -6298,7 +6298,7 @@ describe('registerPtyHandlers', () => {
       registerPtyHandlers(mainWindow as never)
 
       await expect(
-        handlers.get('pty:spawn')!(null, {
+        handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           cwd: '\\\\wsl.localhost\\Ubuntu\\home\\jin\\missing',
@@ -6501,7 +6501,7 @@ describe('registerPtyHandlers', () => {
 
       try {
         registerPtyHandlers(mainWindow as never)
-        await handlers.get('pty:spawn')!(null, {
+        await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           cwd: '/tmp',
@@ -6533,7 +6533,7 @@ describe('registerPtyHandlers', () => {
 
       try {
         registerPtyHandlers(mainWindow as never)
-        await handlers.get('pty:spawn')!(null, {
+        await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           cwd: '/tmp',
@@ -6565,7 +6565,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp',
@@ -6605,7 +6605,7 @@ describe('registerPtyHandlers', () => {
 
       try {
         registerPtyHandlers(mainWindow as never)
-        await handlers.get('pty:spawn')!(null, {
+        await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           cwd: '/tmp',
@@ -6635,7 +6635,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp',
@@ -6663,7 +6663,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp',
@@ -6690,7 +6690,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -6719,7 +6719,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -6727,7 +6727,7 @@ describe('registerPtyHandlers', () => {
       const setRendererPtyVisible = getPtySetRendererPtyVisibleListener()
       mainWindow.webContents.send.mockClear()
 
-      setRendererPtyVisible(null, { id: spawnResult.id, visible: true })
+      setRendererPtyVisible(mainWindowIpcEvent, { id: spawnResult.id, visible: true })
       mockProc.emitData('visible output')
       vi.advanceTimersByTime(8)
       expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:data', {
@@ -6736,9 +6736,9 @@ describe('registerPtyHandlers', () => {
       })
 
       mainWindow.webContents.send.mockClear()
-      setRendererPtyVisible(null, { id: spawnResult.id, visible: false })
+      setRendererPtyVisible(mainWindowIpcEvent, { id: spawnResult.id, visible: false })
       mockProc.emitData('\x1b[2Khidden-width redraw')
-      setRendererPtyVisible(null, { id: spawnResult.id, visible: true })
+      setRendererPtyVisible(mainWindowIpcEvent, { id: spawnResult.id, visible: true })
       vi.advanceTimersByTime(8)
 
       expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:data', {
@@ -6758,7 +6758,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -6767,7 +6767,7 @@ describe('registerPtyHandlers', () => {
       const handleRendererLoading = getMainWindowWebContentsListener('did-start-loading')
       mainWindow.webContents.send.mockClear()
 
-      setRendererPtyVisible(null, { id: spawnResult.id, visible: true })
+      setRendererPtyVisible(mainWindowIpcEvent, { id: spawnResult.id, visible: true })
       handleRendererLoading()
       mockProc.emitData('reload-gap output')
       vi.advanceTimersByTime(8)
@@ -6779,7 +6779,7 @@ describe('registerPtyHandlers', () => {
       })
 
       mainWindow.webContents.send.mockClear()
-      setRendererPtyVisible(null, { id: spawnResult.id, visible: true })
+      setRendererPtyVisible(mainWindowIpcEvent, { id: spawnResult.id, visible: true })
       mockProc.emitData('visible output')
       vi.advanceTimersByTime(8)
 
@@ -6799,7 +6799,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -6808,9 +6808,9 @@ describe('registerPtyHandlers', () => {
       const resizePty = getPtyResizeListener()
       mainWindow.webContents.send.mockClear()
 
-      setRendererPtyVisible(null, { id: spawnResult.id, visible: false })
-      resizePty(null, { id: spawnResult.id, cols: 72, rows: 24 })
-      setRendererPtyVisible(null, { id: spawnResult.id, visible: true })
+      setRendererPtyVisible(mainWindowIpcEvent, { id: spawnResult.id, visible: false })
+      resizePty(mainWindowIpcEvent, { id: spawnResult.id, cols: 72, rows: 24 })
+      setRendererPtyVisible(mainWindowIpcEvent, { id: spawnResult.id, visible: true })
       mockProc.emitData('\x1b[2Khidden-resize redraw')
       vi.advanceTimersByTime(8)
 
@@ -6821,7 +6821,7 @@ describe('registerPtyHandlers', () => {
       })
 
       mainWindow.webContents.send.mockClear()
-      resizePty(null, { id: spawnResult.id, cols: 80, rows: 24 })
+      resizePty(mainWindowIpcEvent, { id: spawnResult.id, cols: 80, rows: 24 })
       mockProc.emitData('visible repaint')
       vi.advanceTimersByTime(8)
 
@@ -6841,7 +6841,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -6851,9 +6851,9 @@ describe('registerPtyHandlers', () => {
       const writePty = getPtyWriteListener()
       mainWindow.webContents.send.mockClear()
 
-      setRendererPtyVisible(null, { id: spawnResult.id, visible: false })
-      resizePty(null, { id: spawnResult.id, cols: 72, rows: 24 })
-      setRendererPtyVisible(null, { id: spawnResult.id, visible: true })
+      setRendererPtyVisible(mainWindowIpcEvent, { id: spawnResult.id, visible: false })
+      resizePty(mainWindowIpcEvent, { id: spawnResult.id, cols: 72, rows: 24 })
+      setRendererPtyVisible(mainWindowIpcEvent, { id: spawnResult.id, visible: true })
       writePty(mainWindowIpcEvent, { id: spawnResult.id, data: 'x' })
       mockProc.emitData('x')
       vi.advanceTimersByTime(8)
@@ -6874,7 +6874,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp',
@@ -6908,7 +6908,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp',
@@ -6942,7 +6942,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp',
@@ -6974,7 +6974,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp',
@@ -7039,7 +7039,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp',
@@ -7110,7 +7110,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never, runtime as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp',
@@ -7147,7 +7147,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -7181,7 +7181,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -7206,7 +7206,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -7240,7 +7240,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -7277,7 +7277,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -7311,7 +7311,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -7347,12 +7347,12 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const firstSpawn = (await handlers.get('pty:spawn')!(null, {
+      const firstSpawn = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
       })) as { id: string }
-      const secondSpawn = (await handlers.get('pty:spawn')!(null, {
+      const secondSpawn = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -7396,12 +7396,12 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const firstSpawn = (await handlers.get('pty:spawn')!(null, {
+      const firstSpawn = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
       })) as { id: string }
-      const secondSpawn = (await handlers.get('pty:spawn')!(null, {
+      const secondSpawn = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -7443,7 +7443,7 @@ describe('registerPtyHandlers', () => {
         data: 'second-terminal-output'
       })
 
-      ackData(null, { id: firstSpawn.id, charCount: 16 * 1024 })
+      ackData(mainWindowIpcEvent, { id: firstSpawn.id, charCount: 16 * 1024 })
       vi.advanceTimersByTime(1)
 
       expect(mainWindow.webContents.send).toHaveBeenCalledTimes(34)
@@ -7545,13 +7545,13 @@ describe('registerPtyHandlers', () => {
     try {
       registerPtyHandlers(mainWindow as never)
       for (const _proc of bulkProcs) {
-        await handlers.get('pty:spawn')!(null, {
+        await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           cwd: '/tmp'
         })
       }
-      const interactiveSpawn = (await handlers.get('pty:spawn')!(null, {
+      const interactiveSpawn = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -7615,7 +7615,7 @@ describe('registerPtyHandlers', () => {
       const spawns: { id: string }[] = []
       for (const _proc of procs) {
         spawns.push(
-          (await handlers.get('pty:spawn')!(null, {
+          (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
             cols: 80,
             rows: 24,
             cwd: '/tmp'
@@ -7634,7 +7634,7 @@ describe('registerPtyHandlers', () => {
       }
 
       expect(mainWindow.webContents.send).toHaveBeenCalledTimes(512)
-      ackData(null, { id: spawns[0].id, charCount: 16 * 1024 })
+      ackData(mainWindowIpcEvent, { id: spawns[0].id, charCount: 16 * 1024 })
       vi.advanceTimersByTime(1)
 
       expect(mainWindow.webContents.send).toHaveBeenCalledTimes(513)
@@ -7655,7 +7655,7 @@ describe('registerPtyHandlers', () => {
       const spawns: { id: string }[] = []
       for (const _proc of procs) {
         spawns.push(
-          (await handlers.get('pty:spawn')!(null, {
+          (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
             cols: 80,
             rows: 24,
             cwd: '/tmp'
@@ -7677,7 +7677,7 @@ describe('registerPtyHandlers', () => {
 
       const activeIndex = procs.length - 1
       procs[activeIndex]!.emitData('active-output')
-      setActiveRendererPty(null, { id: spawns[activeIndex]!.id, active: true })
+      setActiveRendererPty(mainWindowIpcEvent, { id: spawns[activeIndex]!.id, active: true })
       vi.advanceTimersByTime(8)
 
       expect(mainWindow.webContents.send).toHaveBeenCalledTimes(513)
@@ -7690,7 +7690,7 @@ describe('registerPtyHandlers', () => {
         pendingPtyCount: procs.length - 1,
         rendererInFlightChars: 8 * 1024 * 1024 + 'active-output'.length
       })
-      ackData(null, { id: spawns[0]!.id, charCount: 16 * 1024 })
+      ackData(mainWindowIpcEvent, { id: spawns[0]!.id, charCount: 16 * 1024 })
     } finally {
       vi.useRealTimers()
     }
@@ -7703,7 +7703,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const activeSpawn = (await handlers.get('pty:spawn')!(null, {
+      const activeSpawn = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -7725,7 +7725,7 @@ describe('registerPtyHandlers', () => {
         maxRendererInFlightCharsByPty: 512 * 1024
       })
 
-      setActiveRendererPty(null, { id: activeSpawn.id, active: true })
+      setActiveRendererPty(mainWindowIpcEvent, { id: activeSpawn.id, active: true })
       vi.advanceTimersByTime(1)
 
       expect(mainWindow.webContents.send).toHaveBeenCalledTimes(33)
@@ -7750,7 +7750,7 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(mainWindow as never)
-      const spawnResult = (await handlers.get('pty:spawn')!(null, {
+      const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp'
@@ -7789,7 +7789,7 @@ describe('registerPtyHandlers', () => {
       process.env.SHELL = '/opt/homebrew/bin/bash'
 
       registerPtyHandlers(mainWindow as never)
-      const result = await handlers.get('pty:spawn')!(null, {
+      const result = await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp',
@@ -7830,7 +7830,7 @@ describe('registerPtyHandlers', () => {
       process.env.SHELL = '/opt/homebrew/bin/bash'
 
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp',
@@ -7867,7 +7867,7 @@ describe('registerPtyHandlers', () => {
     const mockProc = createMockProc()
     spawnMock.mockReturnValue(mockProc.proc)
     registerPtyHandlers(mainWindow as never)
-    const result = (await handlers.get('pty:spawn')!(null, {
+    const result = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24
     })) as { id: string }
@@ -7892,7 +7892,7 @@ describe('registerPtyHandlers', () => {
     const mockProc = createMockProc()
     spawnMock.mockReturnValue(mockProc.proc)
     registerPtyHandlers(mainWindow as never)
-    const result = (await handlers.get('pty:spawn')!(null, {
+    const result = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24
     })) as { id: string }
@@ -7918,7 +7918,7 @@ describe('registerPtyHandlers', () => {
     const mockProc = createMockProc()
     spawnMock.mockReturnValue(mockProc.proc)
     registerPtyHandlers(mainWindow as never)
-    const result = (await handlers.get('pty:spawn')!(null, {
+    const result = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24
     })) as { id: string }
@@ -7939,7 +7939,7 @@ describe('registerPtyHandlers', () => {
     const mockProc = createMockProc()
     spawnMock.mockReturnValue(mockProc.proc)
     registerPtyHandlers(mainWindow as never)
-    const result = (await handlers.get('pty:spawn')!(null, {
+    const result = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24
     })) as { id: string }
@@ -7963,7 +7963,7 @@ describe('registerPtyHandlers', () => {
     const mockProc = createMockProc()
     spawnMock.mockReturnValue(mockProc.proc)
     registerPtyHandlers(mainWindow as never)
-    const result = (await handlers.get('pty:spawn')!(null, {
+    const result = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24
     })) as { id: string }
@@ -8007,7 +8007,7 @@ describe('registerPtyHandlers', () => {
     }
     registerPtyHandlers(mainWindow as never, runtime as never)
 
-    await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+    await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
     expect(runtime.seedHeadlessTerminal).toHaveBeenCalledWith(
       'pty-cold-restore',
@@ -8021,7 +8021,7 @@ describe('registerPtyHandlers', () => {
     registerPtyHandlers(mainWindow as never)
     const leafId = '11111111-1111-4111-8111-111111111111'
     const stablePaneKey = makePaneKey('tab-1', leafId)
-    await handlers.get('pty:spawn')!(null, {
+    await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       worktreeId: 'wt-1',
@@ -8043,7 +8043,7 @@ describe('registerPtyHandlers', () => {
     expect(clearMigrationUnsupportedPtysForPaneKeyMock).toHaveBeenCalledWith(stablePaneKey)
     expect(setMigrationUnsupportedPtyMock).not.toHaveBeenCalled()
 
-    await handlers.get('pty:spawn')!(null, {
+    await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       worktreeId: 'wt-1',
@@ -8059,7 +8059,7 @@ describe('registerPtyHandlers', () => {
     )
     expect(clearMigrationUnsupportedPtysForPaneKeyMock).toHaveBeenCalledWith(stablePaneKey)
 
-    await handlers.get('pty:spawn')!(null, {
+    await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       worktreeId: 'wt-1',
@@ -8080,7 +8080,7 @@ describe('registerPtyHandlers', () => {
     const leafId = '11111111-1111-4111-8111-111111111111'
     const stablePaneKey = makePaneKey('tab-1', leafId)
 
-    const first = (await handlers.get('pty:spawn')!(null, {
+    const first = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       worktreeId: 'wt-1',
@@ -8088,7 +8088,7 @@ describe('registerPtyHandlers', () => {
       leafId,
       env: { DOBIUS_PANE_KEY: stablePaneKey }
     })) as { id: string }
-    const second = (await handlers.get('pty:spawn')!(null, {
+    const second = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       worktreeId: 'wt-1',
@@ -8114,7 +8114,7 @@ describe('registerPtyHandlers', () => {
     const leafId = '11111111-1111-4111-8111-111111111111'
     const stablePaneKey = makePaneKey('tab-1', leafId)
 
-    const current = (await handlers.get('pty:spawn')!(null, {
+    const current = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24,
       worktreeId: 'wt-1',
@@ -8146,7 +8146,7 @@ describe('registerPtyHandlers', () => {
       process.env.SHELL = '/bin/bash'
 
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         cwd: '/tmp',
@@ -8201,12 +8201,12 @@ describe('registerPtyHandlers', () => {
     spawnMock.mockReturnValue(proc)
 
     registerPtyHandlers(mainWindow as never)
-    const spawnResult = (await handlers.get('pty:spawn')!(null, {
+    const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24
     })) as { id: string }
 
-    await handlers.get('pty:kill')!(null, { id: spawnResult.id })
+    await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: spawnResult.id })
 
     expect(openCodeClearPtyMock).toHaveBeenCalledWith(spawnResult.id)
     expect(piClearPtyMock).toHaveBeenCalledWith(spawnResult.id)
@@ -8232,12 +8232,12 @@ describe('registerPtyHandlers', () => {
     spawnMock.mockReturnValue(proc)
 
     registerPtyHandlers(mainWindow as never)
-    const spawnResult = (await handlers.get('pty:spawn')!(null, {
+    const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24
     })) as { id: string }
 
-    await handlers.get('pty:kill')!(null, { id: spawnResult.id })
+    await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: spawnResult.id })
 
     expect(onDataDisposable.dispose.mock.invocationCallOrder[0]).toBeLessThan(
       killSpy.mock.invocationCallOrder[0]
@@ -8270,7 +8270,7 @@ describe('registerPtyHandlers', () => {
     spawnMock.mockReturnValue(proc)
 
     registerPtyHandlers(mainWindow as never, runtime as never)
-    const spawnResult = (await handlers.get('pty:spawn')!(null, {
+    const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24
     })) as { id: string }
@@ -8314,7 +8314,7 @@ describe('registerPtyHandlers', () => {
       ([eventName]) => eventName === 'did-finish-load'
     )?.[1] as (() => void) | undefined
     expect(didFinishLoad).toBeTypeOf('function')
-    await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+    await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
 
     // The first load after spawn only advances generation. The second one sees
     // this PTY as belonging to a prior page load and kills it as orphaned.
@@ -8414,7 +8414,7 @@ describe('registerPtyHandlers', () => {
     )?.[1] as (() => void) | undefined
     expect(didFinishLoad).toBeTypeOf('function')
 
-    const spawnResult = (await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })) as {
+    const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })) as {
       id: string
     }
 
@@ -8468,7 +8468,7 @@ describe('registerPtyHandlers', () => {
       ([eventName]) => eventName === 'did-finish-load'
     )?.[1] as (() => void) | undefined
 
-    const spawnResult = (await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })) as {
+    const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })) as {
       id: string
     }
 
@@ -8519,7 +8519,7 @@ describe('registerPtyHandlers', () => {
       process: 'zsh',
       pid: 111
     })
-    const ptyA = (await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })) as { id: string }
+    const ptyA = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })) as { id: string }
 
     // Advance the generation without sweeping (recovery-in-flight), then spawn a
     // second PTY so the two live in different load generations.
@@ -8534,7 +8534,7 @@ describe('registerPtyHandlers', () => {
       process: 'zsh',
       pid: 222
     })
-    const ptyB = (await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })) as { id: string }
+    const ptyB = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })) as { id: string }
 
     didFinishLoad?.()
 
@@ -8560,14 +8560,14 @@ describe('registerPtyHandlers', () => {
     spawnMock.mockReturnValue(proc)
 
     registerPtyHandlers(mainWindow as never)
-    const spawnResult = (await handlers.get('pty:spawn')!(null, {
+    const spawnResult = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
       cols: 80,
       rows: 24
     })) as { id: string }
 
-    await handlers.get('pty:kill')!(null, { id: spawnResult.id })
+    await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: spawnResult.id })
 
-    expect(await handlers.get('pty:hasChildProcesses')!(null, { id: spawnResult.id })).toBe(false)
+    expect(await handlers.get('pty:hasChildProcesses')!(mainWindowIpcEvent, { id: spawnResult.id })).toBe(false)
     expect(openCodeClearPtyMock).toHaveBeenCalledWith(spawnResult.id)
     expect(piClearPtyMock).toHaveBeenCalledWith(spawnResult.id)
   })
@@ -8580,7 +8580,7 @@ describe('registerPtyHandlers', () => {
     it('emits agent_started after a successful spawn when telemetry is supplied', async () => {
       handlers.clear()
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         telemetry: {
@@ -8599,14 +8599,14 @@ describe('registerPtyHandlers', () => {
     it('does not emit agent_started when telemetry is omitted (bare-shell tab)', async () => {
       handlers.clear()
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, { cols: 80, rows: 24 })
       expect(trackMock).not.toHaveBeenCalled()
     })
 
     it('drops the event when any telemetry field is outside its closed enum', async () => {
       handlers.clear()
       registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, {
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
         cols: 80,
         rows: 24,
         telemetry: {
@@ -8639,7 +8639,7 @@ describe('registerPtyHandlers', () => {
       handlers.clear()
       registerPtyHandlers(mainWindow as never)
       await expect(
-        handlers.get('pty:spawn')!(null, {
+        handlers.get('pty:spawn')!(mainWindowIpcEvent, {
           cols: 80,
           rows: 24,
           command: 'claude',
@@ -8720,7 +8720,7 @@ describe('registerPtyHandlers', () => {
       expect(responseChannelRegistrations.length).toBe(1)
       // Drain the in-flight requests so the test doesn't leak timers.
       for (const requestId of getSentRequestIds()) {
-        listener(null, { requestId, snapshot: null })
+        listener(mainWindowIpcEvent, { requestId, snapshot: null })
       }
       await Promise.all(inflight)
     })
@@ -8733,11 +8733,11 @@ describe('registerPtyHandlers', () => {
       const requestIdA = ids[0]
       const requestIdB = ids[1]
 
-      listener(null, {
+      listener(mainWindowIpcEvent, {
         requestId: requestIdB,
         snapshot: { data: 'B-data', cols: 80, rows: 24 }
       })
-      listener(null, {
+      listener(mainWindowIpcEvent, {
         requestId: requestIdA,
         snapshot: { data: 'A-data', cols: 100, rows: 30, lastTitle: 'A-title' }
       })
@@ -8756,11 +8756,11 @@ describe('registerPtyHandlers', () => {
       const pending = controller.serializeBuffer('pty-1')
       const realRequestId = getSentRequestIds()[0]
 
-      listener(null, {
+      listener(mainWindowIpcEvent, {
         requestId: 'not-a-real-id',
         snapshot: { data: 'irrelevant', cols: 1, rows: 1 }
       })
-      listener(null, { requestId: undefined, snapshot: null })
+      listener(mainWindowIpcEvent, { requestId: undefined, snapshot: null })
 
       let resolved = false
       void pending.then(() => {
@@ -8769,7 +8769,7 @@ describe('registerPtyHandlers', () => {
       await new Promise((r) => setTimeout(r, 0))
       expect(resolved).toBe(false)
 
-      listener(null, { requestId: realRequestId, snapshot: { data: 'ok', cols: 80, rows: 24 } })
+      listener(mainWindowIpcEvent, { requestId: realRequestId, snapshot: { data: 'ok', cols: 80, rows: 24 } })
       await expect(pending).resolves.toEqual({ data: 'ok', cols: 80, rows: 24 })
     })
 
@@ -8789,7 +8789,7 @@ describe('registerPtyHandlers', () => {
       const { listener, controller } = setup()
       const pending = controller.serializeBuffer('pty-bad')
       const requestId = getSentRequestIds()[0]
-      listener(null, { requestId, snapshot: { data: 'ok', cols: 'not-a-number' } })
+      listener(mainWindowIpcEvent, { requestId, snapshot: { data: 'ok', cols: 'not-a-number' } })
       await expect(pending).resolves.toBeNull()
     })
   })
@@ -8810,7 +8810,7 @@ describe('registerPtyHandlers', () => {
       handlers.clear()
       registerPtyHandlers(mainWindow as never, runtime as never)
 
-      const result = await handlers.get('pty:getMainBufferSnapshot')!(null, {
+      const result = await handlers.get('pty:getMainBufferSnapshot')!(mainWindowIpcEvent, {
         id: 'pty-1',
         opts: { scrollbackRows: 999_999 }
       })

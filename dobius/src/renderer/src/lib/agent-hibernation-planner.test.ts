@@ -50,6 +50,9 @@ function entry(overrides: Partial<AgentStatusEntry> = {}): AgentStatusEntry {
     agentType: 'claude',
     providerSession: { key: 'session_id', id: 'session-1' },
     stateHistory: [],
+    ptyId: 'pty-1',
+    connectionId: null,
+    launchToken: 'launch-1',
     ...overrides
   }
 }
@@ -119,6 +122,18 @@ describe('agent sleep planner', () => {
     expect(
       plannedWorktrees(snapshot({ agentStatusByPaneKey: { [unsupported.paneKey]: unsupported } }))
     ).toEqual([])
+  })
+
+  it('skips panes that could not be woken (no resume owner preconditions)', () => {
+    for (const unresumable of [
+      entry({ launchToken: undefined }),
+      entry({ connectionId: undefined }),
+      entry({ ptyId: 'pty-stale' })
+    ]) {
+      expect(
+        plannedWorktrees(snapshot({ agentStatusByPaneKey: { [unresumable.paneKey]: unresumable } }))
+      ).toEqual([])
+    }
   })
 
   it('requires the idle threshold and blocks input after done', () => {
@@ -279,7 +294,8 @@ describe('agent sleep planner', () => {
     const siblingEntry = entry({
       paneKey: `tab-2:${OTHER_LEAF}`,
       tabId: 'tab-2',
-      providerSession: { key: 'session_id', id: 'session-2' }
+      providerSession: { key: 'session_id', id: 'session-2' },
+      ptyId: 'pty-2'
     })
 
     expect(
@@ -389,6 +405,9 @@ describe('agent sleep planner', () => {
   it('matches wrapped remote renderer PTY IDs to raw runtime PTY IDs', () => {
     const [candidate] = planAgentHibernationCandidates(
       snapshot({
+        agentStatusByPaneKey: {
+          [`tab-1:${LEAF}`]: entry({ ptyId: 'remote:env-1@@terminal-1' })
+        },
         terminalLayoutsByTabId: { 'tab-1': layout(LEAF, 'remote:env-1@@terminal-1') },
         ptyIdsByTabId: { 'tab-1': ['remote:env-1@@terminal-1'] },
         runtimeLivePtyIdsByWorktreeId: { 'wt-bg': ['terminal-1'] },
@@ -475,7 +494,8 @@ describe('agent sleep planner', () => {
     expect(plannedWorktrees(snapshot())).toEqual(['wt-bg'])
     const second = entry({
       paneKey: `tab-1:${OTHER_LEAF}`,
-      providerSession: { key: 'session_id', id: 'session-2' }
+      providerSession: { key: 'session_id', id: 'session-2' },
+      ptyId: 'pty-2'
     })
     expect(
       plannedPaneKeys(

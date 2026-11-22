@@ -177,6 +177,11 @@ function getEligiblePane(args: {
   if (!livePane) {
     return null
   }
+  // Why: mirrors the resumeOwner preconditions in agent-status; without them
+  // the pane could be killed but never woken, so it must not be a candidate.
+  if (!entry.launchToken || entry.connectionId === undefined || entry.ptyId !== livePane.ptyId) {
+    return null
+  }
   const { leafId, ptyId } = livePane
   const runtimePtyId = toRuntimePtyId(ptyId)
   if (!livePtyIds.has(runtimePtyId) || mobileLockedPtyIds.has(runtimePtyId)) {

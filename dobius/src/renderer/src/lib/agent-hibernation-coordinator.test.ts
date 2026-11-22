@@ -68,7 +68,10 @@ function entry(): AgentStatusEntry {
     worktreeId: 'wt-bg',
     agentType: 'claude',
     providerSession: { key: 'session_id', id: 'session-1' },
-    stateHistory: []
+    stateHistory: [],
+    ptyId: 'pty-1',
+    connectionId: null,
+    launchToken: 'launch-1'
   }
 }
 
@@ -502,7 +505,8 @@ describe('agent sleep coordinator', () => {
     const e = {
       ...entry(),
       paneKey: `tab-1:${secondLeaf}`,
-      providerSession: { key: 'session_id' as const, id: 'session-2' }
+      providerSession: { key: 'session_id' as const, id: 'session-2' },
+      ptyId: 'pty-2'
     }
     const shutdown = installEligibleState(vi.fn().mockResolvedValue(undefined), {
       settings: {
