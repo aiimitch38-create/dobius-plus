@@ -92,13 +92,13 @@ describe('assertAgentReadAllowed', () => {
     ).rejects.toThrow(/secret-looking/)
   })
 
-  it('remote worktrees get the lexical checks only', async () => {
+  it('refuses remote (SSH) worktrees: no remote realpath, so symlinks could not be checked', async () => {
     await expect(
       assertAgentReadAllowed({ worktreeRoot: '/remote/wt', relativePath: 'a.ts', connectionId: 'c' })
-    ).resolves.toBeUndefined()
+    ).rejects.toThrow(/isn't available for remote worktrees yet/)
     await expect(
-      assertAgentReadAllowed({ worktreeRoot: '/remote/wt', relativePath: '../x', connectionId: 'c' })
-    ).rejects.toThrow(/inside the worktree/)
+      assertAgentWriteAllowed({ worktreeRoot: '/remote/wt', relativePath: 'a.ts', connectionId: 'c' }, [])
+    ).rejects.toThrow(/isn't available for remote worktrees yet/)
   })
 })
 

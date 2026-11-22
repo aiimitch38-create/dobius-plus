@@ -4,7 +4,7 @@
 // the shared file methods already do. Writes additionally go through the
 // mobile write guard (symlinks, dot-files, agent-instruction files, Dobius data).
 import { realpath } from 'node:fs/promises'
-import { isAbsolute, join, posix, relative } from 'node:path'
+import { isAbsolute, join, relative } from 'node:path'
 import { assertMobileWriteAllowed, foldApfsName } from './mobile-write-path-guard'
 
 export class AgentFileRefusedError extends Error {
@@ -71,18 +71,26 @@ function isInsideFolded(child: string, parent: string): boolean {
 export type AgentFileTarget = {
   worktreeRoot: string
   relativePath: string
-  // SSH worktrees: the host cannot resolve the remote filesystem, so only the
-  // lexical checks apply (the same limit the mobile write guard has).
+  // SSH worktrees are refused: the symlink and secret checks need a realpath
+  // of the remote filesystem, which this guard does not do yet.
   connectionId?: string
+}
+
+// Why: without a remote realpath a symlink in an SSH worktree could lead to a
+// secret or out of the worktree unseen, so remote targets are refused outright.
+function assertLocalTarget(target: AgentFileTarget): void {
+  if (target.connectionId) {
+    throw new AgentFileRefusedError(
+      "file read/write isn't available for remote worktrees yet"
+    )
+  }
 }
 
 /** Read: the file must exist and, after following symlinks, still be inside
  *  the worktree and still not look like a secret. */
 export async function assertAgentReadAllowed(target: AgentFileTarget): Promise<void> {
   assertAgentRelativePath(target.relativePath)
-  if (target.connectionId) {
-    return
-  }
+  assertLocalTarget(target)
   const realRoot = await realpath(target.worktreeRoot)
   let realTarget: string
   try {
@@ -108,13 +116,11 @@ export async function assertAgentWriteAllowed(
   dataRoots?: readonly string[]
 ): Promise<void> {
   assertAgentRelativePath(target.relativePath)
+  assertLocalTarget(target)
   try {
     await assertMobileWriteAllowed({
       worktreeRoot: target.worktreeRoot,
-      targetPath: target.connectionId
-        ? posix.join(target.worktreeRoot, target.relativePath)
-        : join(target.worktreeRoot, target.relativePath),
-      connectionId: target.connectionId,
+      targetPath: join(target.worktreeRoot, target.relativePath),
       allowOutsideWorktree: false,
       ...(dataRoots ? { dataRoots } : {})
     })

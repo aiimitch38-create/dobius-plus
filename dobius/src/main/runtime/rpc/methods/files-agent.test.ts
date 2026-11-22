@@ -58,6 +58,26 @@ describe('files.agentRead', () => {
   })
 })
 
+describe('remote (SSH) worktrees', () => {
+  it('refuses files.agentRead and files.agentWrite without touching the runtime file commands', async () => {
+    runtime.resolveMobileWriteRoot.mockResolvedValue({ root: '/remote/wt', connectionId: 'ssh-1' })
+    const read = await call('files.agentRead', { worktree: 'id:wt', relativePath: 'src/app.ts' })
+    const write = await call('files.agentWrite', {
+      worktree: 'id:wt',
+      relativePath: 'src/app.ts',
+      content: 'x'
+    })
+    for (const response of [read, write]) {
+      expect(response).toMatchObject({
+        ok: false,
+        error: { message: expect.stringContaining("isn't available for remote worktrees yet") }
+      })
+    }
+    expect(runtime.readMobileFile).not.toHaveBeenCalled()
+    expect(runtime.writeFileExplorerFile).not.toHaveBeenCalled()
+  })
+})
+
 describe('files.agentWrite', () => {
   it('writes inside the worktree and reports the byte count', async () => {
     const response = await call('files.agentWrite', {

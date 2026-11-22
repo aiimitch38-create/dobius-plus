@@ -54,7 +54,8 @@ export const FILE_COMMAND_SPECS: CommandSpec[] = [
     notes: [
       'The path is relative to the worktree and must stay inside it, also after following symlinks.',
       'Secret-looking files are refused: .env*, names with key, secret, credential, token or password, dobius-runtime*.json, .pem and SSH keys.',
-      'Large files are cut short (truncated: true in the JSON). Binary files are refused.'
+      'Large files are cut short (truncated: true in the JSON). Binary files are refused.',
+      'Local worktrees only for now: remote (SSH) worktrees are refused.'
     ],
     examples: ['dobius file read src/App.tsx --json', 'dobius file read --path README.md --worktree active']
   },
@@ -68,7 +69,7 @@ export const FILE_COMMAND_SPECS: CommandSpec[] = [
     notes: [
       'Replaces the whole file. Only inside the Dobius-managed worktree: ".." and symlinks that lead elsewhere are refused.',
       'Refused: secret-looking files (as for file read), every dot-file or dot-folder (.git, .claude, .github, .env...), agent instruction files (CLAUDE.md, AGENTS.md...), package.json, dobius.yaml, and Dobius data.',
-      '--content "" writes an empty file on purpose. 5 MB max.'
+      '--content "" writes an empty file on purpose. 5 MB max. Local worktrees only for now: remote (SSH) worktrees are refused.'
     ],
     examples: [
       'dobius file write notes/plan.md --content "# Plan" --json',
