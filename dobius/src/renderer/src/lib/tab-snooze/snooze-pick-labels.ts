@@ -41,7 +41,12 @@ export function snoozeMenuPicks(now: number = Date.now()): SnoozeMenuPick[] {
     at: pick.at
   }))
   if (import.meta.env.DEV) {
-    picks.unshift({ key: 'dev-1m', label: '1 minute (dev only)', hint: null, at: now + 60_000 })
+    picks.unshift({
+      key: 'dev-1m',
+      label: translate('lib.tabSnooze.pick.devMinute', '1 minute (dev only)'),
+      hint: null,
+      at: now + 60_000
+    })
   }
   return picks
 }
