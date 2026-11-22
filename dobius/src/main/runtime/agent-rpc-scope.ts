@@ -29,6 +29,9 @@ export const AGENT_RPC_METHOD_ALLOWLIST: ReadonlySet<string> = new Set([
   'board.agentState',
   // `dobius board list`: read-only card list. Card actions stay full-key only.
   'board.listCards',
+  // `dobius board snapshots list|read`: read-only. Capture writes a file, so it is full-key only.
+  'board.snapshotList',
+  'board.snapshotRead',
   // Crew: only whether it is paused. Decisions and drafts hold tool inputs and
   // Asana text; every crew change stays full-key only.
   'crew.state',
