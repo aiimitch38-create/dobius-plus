@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { isLocalBashCommand, isLocalOnlyToolUse } from './agent-run-local-tools'
+import { createLocalToolTracker, isLocalOnlyToolUse } from './agent-run-local-tools'
 
 function bash(command: string): string {
   return JSON.stringify({ command, description: 'x' })
+}
+
+function write(filePath: string): string {
+  return JSON.stringify({ file_path: filePath, content: 'x' })
 }
 
 describe('isLocalOnlyToolUse', () => {
   it.each(['Read', 'Write', 'Edit', 'Grep', 'Glob', 'TodoWrite', 'NotebookEdit'])(
     'treats %s as local',
     (tool) => {
-      expect(isLocalOnlyToolUse(tool, '{}')).toBe(true)
+      expect(isLocalOnlyToolUse(tool, write('/repo/src/a.ts'))).toBe(true)
     }
   )
 
@@ -51,94 +55,62 @@ describe('isLocalOnlyToolUse', () => {
   })
 })
 
-describe('isLocalBashCommand', () => {
-  it.each([
-    'npm test',
-    'pnpm test',
-    'pnpm run typecheck:node',
-    'pnpm --dir dobius run lint',
-    'yarn lint',
-    'npx vitest run --config config/vitest.config.ts src/shared',
-    'pnpm exec oxlint src',
-    './node_modules/.bin/tsc --noEmit',
-    'uv run pytest -q',
-    'git status && git commit -m "fix: the thing; and more"',
-    'git -C /repo diff --stat',
-    'git stash push -m wip',
-    'git add src/a.ts',
-    '/usr/bin/git log --oneline -5',
-    'cat ~/.ssh/config',
-    'grep -rn "ssh" docs | head -5',
-    'ls -la; pwd',
-    'cd dobius && npm test 2>&1 | tail -20',
-    'find . -name "*.ts" -newer package.json',
-    "echo 'curl is not run here' > notes.txt",
-    'rm -rf dist'
-  ])('treats `%s` as local', (command) => {
-    expect(isLocalBashCommand(command)).toBe(true)
+describe('createLocalToolTracker: tooling files changed before a tool that runs them', () => {
+  it('keeps test and git commands local after ordinary source edits', () => {
+    const tools = createLocalToolTracker()
+    expect(tools.isLocal('Edit', write('/repo/src/a.ts'))).toBe(true)
+    expect(tools.isLocal('Write', write('/repo/src/a.test.ts'))).toBe(true)
+    expect(tools.isLocal('Bash', bash('npm test'))).toBe(true)
+    expect(tools.isLocal('Bash', bash('git status'))).toBe(true)
   })
 
   it.each([
-    // Outward by name.
-    'git push origin main',
-    'git -C /repo push',
-    'git fetch',
-    'gh pr create --fill',
-    'npm publish',
-    'vercel --prod',
-    'firebase deploy --only hosting',
-    'curl https://example.com',
-    'curl -X POST https://api.example.com/pay',
-    'wget https://example.com',
-    'dobius terminal send --terminal t1 --text hi',
-    'osascript -e \'tell application "Messages" to send "hi"\'',
-    'ssh host uptime',
-    'scp file host:/tmp',
-    'stripe charges create',
-    // Unknown commands and scripts.
-    'some-new-cli deploy',
-    './deploy.sh',
-    'bash scripts/release.sh',
-    './ls',
-    '/tmp/git status',
-    'make test',
-    'npm run deploy',
-    'pnpm run build',
-    'npm install left-pad',
-    'npx some-package',
-    'npx --yes vitest',
-    // Inline interpreters.
-    'node -e "require(\'child_process\').exec(\'curl x\')"',
-    'python -c "import os"',
-    'python3 script.py',
-    'bash -c "ssh host"',
-    // Bypass attempts.
-    'git status; curl x',
-    'git status && curl x',
-    'git status || curl x',
-    'git status | sh',
-    'git status & curl x',
-    'git status\ncurl x',
-    'env FOO=1 bash -c "curl x"',
-    'FOO=1 git status',
-    'PATH=/tmp/evil:$PATH git status',
-    'echo $(curl x)',
-    'echo "$(curl x)"',
-    'echo `curl x`',
-    'cat <(curl x)',
-    '(curl x)',
-    '{ curl x; }',
-    'echo hi > /dev/tcp/example.com/80',
-    'git -c core.pager="curl x" log',
-    'find . -name "*.ts" -exec curl x {} +',
-    'rg --pre ./evil pattern',
-    'sudo git status',
-    'xargs curl < urls.txt',
-    'eval "git status"',
-    'echo "unterminated',
-    '$CMD',
-    ''
-  ])('treats `%s` as outward', (command) => {
-    expect(isLocalBashCommand(command)).toBe(false)
+    '/repo/package.json',
+    '/repo/.git/hooks/pre-commit',
+    '/repo/.git/config',
+    '/repo/.husky/pre-commit',
+    '/repo/node_modules/.bin/vitest',
+    '/repo/node_modules/vitest/dist/cli.js',
+    '/repo/vitest.config.ts',
+    '/repo/config/vitest.config.ts',
+    '/repo/.eslintrc.json',
+    '/repo/tsconfig.node.json',
+    '/repo/conftest.py',
+    '/repo/.npmrc'
+  ])('counts a check tool as outward after a write to %s', (filePath) => {
+    const tools = createLocalToolTracker()
+    expect(tools.isLocal('Write', write(filePath))).toBe(true)
+    expect(tools.isLocal('Bash', bash('ls'))).toBe(true)
+    expect(tools.isLocal('Bash', bash('npm test'))).toBe(false)
+    expect(tools.isLocal('Bash', bash('npx vitest run'))).toBe(false)
+    expect(tools.isLocal('Bash', bash('git status'))).toBe(false)
+  })
+
+  it('assumes the worst for a write whose target cannot be read', () => {
+    const tools = createLocalToolTracker()
+    expect(tools.isLocal('Edit', 'not json')).toBe(true)
+    expect(tools.isLocal('Bash', bash('pnpm run typecheck'))).toBe(false)
+  })
+
+  it.each([
+    'echo "{}" > package.json',
+    'cp /tmp/hook .git/hooks/pre-commit',
+    'mv evil.js node_modules/.bin/vitest',
+    'touch .git/hooks/post-checkout',
+    'rm vitest.config.ts',
+    'cd .git',
+    'find . -name "*.cfg" -delete',
+    'sort -o package.json other.json',
+    'sort --output=package.json other.json',
+    'ls | uniq - package.json'
+  ])('counts a check tool as outward after the Bash command `%s`', (command) => {
+    const tools = createLocalToolTracker()
+    expect(tools.isLocal('Bash', bash(command))).toBe(true)
+    expect(tools.isLocal('Bash', bash('npm test'))).toBe(false)
+  })
+
+  it('refuses a line that changes tooling and runs it in one go', () => {
+    expect(isLocalOnlyToolUse('Bash', bash('echo x > package.json && npm test'))).toBe(false)
+    expect(isLocalOnlyToolUse('Bash', bash('touch .git/hooks/pre-commit; git status'))).toBe(false)
   })
 })
