@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { BoardThreadMessage } from '../board-command-bar/BoardThread'
 import {
   BOARD_THREAD_HISTORY_CAP,
-  ADAM_THREAD_STORAGE_KEY,
   deserializeBoardThread,
   serializeBoardThread
 } from './board-thread-persistence'
@@ -10,12 +9,6 @@ import {
 function message(id: string, extra: Partial<BoardThreadMessage> = {}): BoardThreadMessage {
   return { id, role: 'user', text: `text-${id}`, ...extra }
 }
-
-describe('ADAM_THREAD_STORAGE_KEY', () => {
-  it('is one key for every project, apart from the old per-project keys', () => {
-    expect(ADAM_THREAD_STORAGE_KEY).toBe('dobius.adam.thread.v1')
-  })
-})
 
 describe('serializeBoardThread', () => {
   it('caps to the most recent BOARD_THREAD_HISTORY_CAP messages', () => {

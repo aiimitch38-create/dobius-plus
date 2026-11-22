@@ -1,54 +1,26 @@
+import type { AdamThreadRow } from '../../../../../shared/speech-types'
 import type { BoardThreadMessage } from '../board-command-bar/BoardThread'
-import {
-  ADAM_THREAD_STORAGE_KEY,
-  deserializeBoardThread,
-  serializeBoardThread
-} from './board-thread-persistence'
+import { deserializeBoardThread } from './board-thread-persistence'
 
-// ADAM has one thread, shown on every project's Board. This is the one place
-// that adds a row to it, whether or not a Board is on screen: a late reply or
-// a voice turn must still land in the thread.
+// ADAM has one thread, shown on every project's Board. The main process owns
+// it: a window asks main to add a row and is sent the whole thread back, so
+// two windows can never overwrite each other's rows, and a late reply or a
+// voice turn is kept whether or not a Board is on screen.
 
-/** Best-effort: a storage failure (private window, quota, hardened context) must never break the thread. */
-export function readStoredThread(): BoardThreadMessage[] {
-  try {
-    return deserializeBoardThread(window.localStorage.getItem(ADAM_THREAD_STORAGE_KEY))
-  } catch {
-    return []
-  }
+/** Rows as main sent them, checked before they are shown. */
+export function threadFromMain(rows: unknown): BoardThreadMessage[] {
+  return deserializeBoardThread(JSON.stringify(rows ?? []))
 }
 
-export function writeStoredThread(messages: BoardThreadMessage[]): void {
-  try {
-    window.localStorage.setItem(ADAM_THREAD_STORAGE_KEY, serializeBoardThread(messages))
-  } catch {
-    // Storage can be unavailable or full; the in-memory thread still works this session.
-  }
-}
-
-type Taker = (row: BoardThreadMessage) => void
-const takers = new Set<Taker>()
-
-/** A mounted thread registers here and then owns saving the rows it is handed. */
-export function onBoardThreadAppend(taker: Taker): () => void {
-  takers.add(taker)
-  return () => {
-    takers.delete(taker)
-  }
-}
-
-/** `id` makes a row safe to add twice (one turn announced to more than one window). */
+/** `id` makes a row safe to send twice (main adds a given id once). */
 export function appendToBoardThread(
   message: Omit<BoardThreadMessage, 'id'>,
   id: string = crypto.randomUUID()
 ): void {
-  const row = { ...message, id }
-  if (takers.size > 0) {
-    takers.forEach((taker) => taker(row))
-    return
-  }
-  const stored = readStoredThread()
-  if (!stored.some((existing) => existing.id === id)) {
-    writeStoredThread([...stored, row])
-  }
+  // Only what can be saved crosses to main (no buttons, no waiting rows).
+  const { role, text, tone, report, voice } = message
+  const row = JSON.parse(JSON.stringify({ id, role, text, tone, report, voice })) as AdamThreadRow
+  void window.api.jarvis.adamThreadAppend(row).catch((error: unknown) => {
+    console.warn('ADAM thread row could not be saved:', error)
+  })
 }

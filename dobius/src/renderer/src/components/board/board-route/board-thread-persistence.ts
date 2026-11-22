@@ -4,9 +4,9 @@ import type { BoardThreadMessage } from '../board-command-bar/BoardThread'
 // (`action.onClick`), or resurrect a "thinking" placeholder on reload.
 export const BOARD_THREAD_HISTORY_CAP = 200
 
-// ADAM has one thread for every project. The older per-project threads
-// (`dobius.board.thread.v1.<repoId>`) are left in storage untouched and are no longer shown.
-export const ADAM_THREAD_STORAGE_KEY = 'dobius.adam.thread.v1'
+// ADAM has one thread for every project, kept by the main process (adam-thread-store.ts).
+// The older per-project threads in this window's storage (`dobius.board.thread.v1.<repoId>`)
+// are left untouched and are no longer shown.
 
 /** Only the fields that can round-trip through JSON; drops action callbacks and transient rows. */
 export type PersistedBoardThreadMessage = Pick<

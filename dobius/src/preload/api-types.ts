@@ -404,6 +404,7 @@ import type {
   ElevenLabsKeyStatus,
   AdamTurnEvent,
   AdamLookingAt,
+  AdamThreadRow,
   AdamTurnSource,
   JarvisAskResult,
   JarvisSpeakOutcome,
@@ -3381,6 +3382,13 @@ export type PreloadApi = {
     /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
     cancelAsk: () => Promise<{ ok: true }>
     askAdamText: (utterance: string, source?: AdamTurnSource) => Promise<JarvisAskResult>
+    /** ADAM's one thread, owned by main: read it, add a row, clear it, and hear every change. */
+    adamThreadGet: () => Promise<AdamThreadRow[]>
+    adamThreadAppend: (row: AdamThreadRow) => Promise<{ ok: boolean }>
+    adamThreadClear: () => Promise<{ ok: boolean }>
+    onAdamThread: (callback: (rows: AdamThreadRow[]) => void) => () => void
+    /** Tells main which project is on screen, for turns that start there (the wake word). */
+    reportLookingAt: (lookingAt: AdamLookingAt | null) => Promise<void>
     /** Every accepted ADAM turn, voice or typed: the words asked, then the reply. */
     onAdamTurn: (callback: (event: AdamTurnEvent) => void) => () => void
     onState: (callback: (event: JarvisStateEvent) => void) => () => void

@@ -171,6 +171,14 @@ export type JarvisAskResult =
 /** The project on Carson's screen when he started talking or typing; tells ADAM what "this project" means. */
 export type AdamLookingAt = { project: string; workspace: string; folder: string | null }
 
+/** One saved row of ADAM's thread. Main owns the thread; extra fields (tone, voice, report) pass through. */
+export type AdamThreadRow = {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  text: string
+  [extra: string]: unknown
+}
+
 /** Which way in a turn with ADAM came from. Both share one Hermes session. */
 export type AdamTurnSource = 'voice' | 'thread'
 

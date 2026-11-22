@@ -2,16 +2,44 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdamTurnEvent } from '../../../../../shared/speech-types'
 import { createVoiceTurnRecorder, currentlyLookingAt } from './adam-voice-thread'
-import { ADAM_THREAD_STORAGE_KEY, deserializeBoardThread } from './board-thread-persistence'
-import { appendToBoardThread, onBoardThreadAppend } from './board-thread-store'
+import { appendToBoardThread } from './board-thread-store'
 
 const store = vi.hoisted(() => ({ state: {} as Record<string, unknown> }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => store.state } }))
 
+// Stands in for the main process, which owns the thread: adds a row once and tells the window.
+type Row = { id: string; role: string; text: string; voice?: boolean; tone?: string }
+let mainRows: Row[]
+let tell: ((rows: Row[]) => void) | null
+function installMain(): void {
+  mainRows = []
+  tell = null
+  ;(window as unknown as { api: unknown }).api = {
+    jarvis: {
+      adamThreadGet: async () => mainRows,
+      adamThreadAppend: async (row: Row) => {
+        if (!mainRows.some((existing) => existing.id === row.id)) {
+          mainRows = [...mainRows, row]
+          tell?.(mainRows)
+        }
+        return { ok: true }
+      },
+      adamThreadClear: async () => {
+        mainRows = []
+        tell?.(mainRows)
+        return { ok: true }
+      },
+      onAdamThread: (callback: (rows: Row[]) => void) => {
+        tell = callback
+        return () => {
+          tell = null
+        }
+      }
+    }
+  }
+}
 const thread = () =>
-  deserializeBoardThread(window.localStorage.getItem(ADAM_THREAD_STORAGE_KEY)).map(
-    ({ role, text, voice, tone }) => ({ role, text, voice, tone })
-  )
+  mainRows.map(({ role, text, voice, tone }) => ({ role, text, voice, tone }))
 const asked = (
   turnId: string,
   text: string,
@@ -29,7 +57,7 @@ const answered = (
   at: 2
 })
 
-beforeEach(() => window.localStorage.clear())
+beforeEach(installMain)
 
 describe('voice turns in ADAM’s thread', () => {
   it('lands a voice turn and a typed turn in the one thread, in order, voice marked', () => {
@@ -81,14 +109,6 @@ describe('voice turns in ADAM’s thread', () => {
     expect(thread()[1].text).toContain('ADAM is busy with another message.')
   })
 
-  it('hands the row to the thread on screen instead of writing storage behind it', () => {
-    const taken: string[] = []
-    const off = onBoardThreadAppend((row) => taken.push(row.text))
-    createVoiceTurnRecorder()(asked('v1', 'hello'))
-    off()
-    expect(taken).toEqual(['hello'])
-    expect(thread()).toEqual([])
-  })
 })
 
 describe('currentlyLookingAt', () => {

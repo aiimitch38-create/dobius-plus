@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { getDefaultVoiceSettings } from '../../shared/constants'
-import type { JarvisAskResult, VoiceSettings } from '../../shared/speech-types'
+import type { AdamLookingAt, JarvisAskResult, VoiceSettings } from '../../shared/speech-types'
+import { ADAM_THREAD_CHANNEL, AdamThreadStore, adamThreadRowOf } from './adam-thread-store'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { adamProjectDirectory } from '../adam-connection'
@@ -68,6 +69,20 @@ function createBroadcastPort(): JarvisBroadcastPort {
 }
 
 let adamVoice: AdamHermesVoice | null = null
+// What the main window last said was on screen. Wake-word turns start in main and use it.
+let lastLookingAt: AdamLookingAt | null = null
+let adamThread: AdamThreadStore | null = null
+
+function getAdamThread(): AdamThreadStore {
+  adamThread ??= new AdamThreadStore(join(getUserDataRoot(), 'adam-thread.json'), (rows) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send(ADAM_THREAD_CHANNEL, rows)
+      }
+    }
+  })
+  return adamThread
+}
 
 function getAdamVoice(): AdamHermesVoice {
   if (!adamVoice) {
@@ -122,7 +137,8 @@ function createJarvisDeps(store: Store): JarvisServiceDeps {
         source: 'voice',
         said: utterance
       }),
-    cancelAgent: () => adamVoice?.cancel()
+    cancelAgent: () => adamVoice?.cancel(),
+    lookingAt: () => lastLookingAt
   }
 }
 
@@ -319,6 +335,32 @@ function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.handle('jarvis:ask', (event, utterance: string, lookingAt?: unknown) =>
     trustedLiveSender(event) ? service.ask(utterance, lookingAtOf(lookingAt)) : ADAM_UNTRUSTED_SENDER
   )
+
+  // ADAM's thread lives in main so every window shows the same rows and none can overwrite another's.
+  ipcMain.removeHandler('jarvis:adamThreadGet')
+  ipcMain.handle('jarvis:adamThreadGet', () => getAdamThread().get())
+  ipcMain.removeHandler('jarvis:adamThreadAppend')
+  ipcMain.handle('jarvis:adamThreadAppend', async (event, raw: unknown) => {
+    const row = trustedLiveSender(event) ? adamThreadRowOf(raw) : null
+    if (row) {
+      await getAdamThread().append(row)
+    }
+    return { ok: row !== null }
+  })
+  ipcMain.removeHandler('jarvis:adamThreadClear')
+  ipcMain.handle('jarvis:adamThreadClear', async (event) => {
+    if (!trustedLiveSender(event)) {
+      return { ok: false }
+    }
+    await getAdamThread().clear()
+    return { ok: true }
+  })
+  ipcMain.removeHandler('jarvis:lookingAt')
+  ipcMain.handle('jarvis:lookingAt', (event, raw: unknown) => {
+    if (trustedLiveSender(event)) {
+      lastLookingAt = lookingAtOf(raw)
+    }
+  })
 
   ipcMain.removeHandler('jarvis:cancelAsk')
   ipcMain.handle('jarvis:cancelAsk', () => {

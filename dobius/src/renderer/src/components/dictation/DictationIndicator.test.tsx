@@ -28,6 +28,7 @@ vi.mock('@/store', () => ({
       setVoiceOrbLabel: voice.setLabel
     })
 }))
+vi.mock('../board/board-route/adam-voice-thread', () => ({ useAdamVoiceThread: () => undefined }))
 vi.mock('../jarvis/use-jarvis-turn', () => ({ useJarvisTurn: () => voice.jarvis }))
 vi.mock('../jarvis/use-voice-agent', () => ({ useVoiceAgent: () => voice.agent }))
 vi.mock('../jarvis/use-jarvis-voice-settings', () => ({
@@ -94,9 +95,7 @@ beforeEach(() => {
     getInputLevel: vi.fn(() => 0.6),
     getOutputLevel: vi.fn(() => 0.8)
   }
-  window.api = {
-    jarvis: { onPttPressed: vi.fn(() => vi.fn()), onAdamTurn: vi.fn(() => vi.fn()) }
-  } as unknown as typeof window.api
+  window.api = { jarvis: { onPttPressed: vi.fn(() => vi.fn()) } } as unknown as typeof window.api
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)

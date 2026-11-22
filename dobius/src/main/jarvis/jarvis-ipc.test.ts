@@ -45,7 +45,7 @@ vi.mock('electron', () => ({
     getPath: () => electron.userData
   },
   dialog: { showMessageBox: vi.fn(async () => ({ response: 0 })) },
-  BrowserWindow: { getFocusedWindow: () => electron.focused },
+  BrowserWindow: { getFocusedWindow: () => electron.focused, getAllWindows: () => [] },
   globalShortcut: {
     register: (_accelerator: string, handler: () => void) => {
       electron.shortcutHandler = handler
@@ -232,6 +232,14 @@ describe('Adam Hermes voice routing', () => {
         ([channel, data]) => channel === 'jarvis:adam-turn' && data.phase === 'asked'
       )?.[1].text
     ).toBe('run the tests here')
+    // The thread is kept in main: only the main window's top frame may add to it.
+    const rowA = { id: 'a', role: 'user', text: 'hello' }
+    expect(await electron.handlers.get('jarvis:adamThreadAppend')?.({}, rowA)).toEqual({ ok: false })
+    expect(await electron.handlers.get('jarvis:adamThreadAppend')?.(top, { id: 'x' })).toEqual({
+      ok: false
+    })
+    expect(await electron.handlers.get('jarvis:adamThreadAppend')?.(top, rowA)).toEqual({ ok: true })
+    expect(await electron.handlers.get('jarvis:adamThreadGet')?.({})).toEqual([rowA])
     // Voice and the thread go through one entry point to the one ADAM session.
     expect(adam.created).toHaveBeenCalledTimes(1)
     expect(

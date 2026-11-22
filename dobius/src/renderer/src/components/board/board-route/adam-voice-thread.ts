@@ -29,7 +29,7 @@ export function createVoiceTurnRecorder(
     if (event.source !== 'voice') {
       return
     }
-    // Why ids from the turn: every window hears the same turn, and it must be written once.
+    // Why ids from the turn: a turn heard twice (a reload, a second window) must be written once.
     if (event.phase === 'asked') {
       append({ role: 'user', text: event.text, voice: true }, `${event.turnId}:asked`)
       return
@@ -41,7 +41,24 @@ export function createVoiceTurnRecorder(
   }
 }
 
-/** Mounted once, app-wide, so voice turns are kept even when the Board is not open. */
+/**
+ * Mounted once, app-wide, so voice turns are kept even when the Board is not
+ * open, and main always knows which project is on screen: a wake-word turn
+ * starts in main and has no other way to learn what "this project" means.
+ */
 export function useAdamVoiceThread(): void {
   useEffect(() => window.api.jarvis.onAdamTurn(createVoiceTurnRecorder()), [])
+  useEffect(() => {
+    let last: string | undefined
+    const report = (): void => {
+      const lookingAt = currentlyLookingAt()
+      const next = JSON.stringify(lookingAt)
+      if (next !== last) {
+        last = next
+        void window.api.jarvis.reportLookingAt(lookingAt).catch(() => undefined)
+      }
+    }
+    report()
+    return useAppStore.subscribe(report)
+  }, [])
 }

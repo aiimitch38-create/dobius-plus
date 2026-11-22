@@ -189,6 +189,7 @@ import type {
   ElevenLabsKeyStatus,
   AdamTurnEvent,
   AdamLookingAt,
+  AdamThreadRow,
   AdamTurnSource,
   JarvisAskResult,
   JarvisSpeakOutcome,
@@ -4649,6 +4650,18 @@ const api = {
     cancelAsk: (): Promise<{ ok: true }> => ipcRenderer.invoke('jarvis:cancelAsk'),
     askAdamText: (utterance: string, source?: AdamTurnSource): Promise<JarvisAskResult> =>
       ipcRenderer.invoke('jarvis:askAdamText', utterance, source),
+    adamThreadGet: (): Promise<AdamThreadRow[]> => ipcRenderer.invoke('jarvis:adamThreadGet'),
+    adamThreadAppend: (row: AdamThreadRow): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('jarvis:adamThreadAppend', row),
+    adamThreadClear: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('jarvis:adamThreadClear'),
+    onAdamThread: (callback: (rows: AdamThreadRow[]) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, rows: AdamThreadRow[]): void =>
+        callback(rows)
+      ipcRenderer.on('jarvis:adam-thread', listener)
+      return () => ipcRenderer.removeListener('jarvis:adam-thread', listener)
+    },
+    reportLookingAt: (lookingAt: AdamLookingAt | null): Promise<void> =>
+      ipcRenderer.invoke('jarvis:lookingAt', lookingAt),
     onAdamTurn: (callback: (event: AdamTurnEvent) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: AdamTurnEvent): void =>
         callback(data)
