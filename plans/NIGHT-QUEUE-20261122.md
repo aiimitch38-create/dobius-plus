@@ -46,3 +46,4 @@ NOT tonight, needs Carson: install, live voice test call, the OpenAI key, the He
 - 1.8 Pre-Flight Primer merged (3121d8d2): every new terminal tab's brief carries git, other tabs, lesson headings, MCP names, spend
 - INSTALLED 2.3.6 (build 79, commit 18e6f3c1, clean) with Carson's OK + take-over; rollback copy of 2.1.9 kept. Carson testing live.
 - Next update: wb/ui-trio (7.5 cloud job buttons, 7.6 hook status; 7.7 already covered by Settings > Stats)
+- INSTALLED 2.3.8 (build 81, commit c76739d7): orb follows Settings changes, voice errors toast + live-voice-errors.log. Next update: Codex P2 log hardening (bc23e47b on wb/voice-press-fix)
