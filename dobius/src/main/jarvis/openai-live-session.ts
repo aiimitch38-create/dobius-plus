@@ -8,18 +8,14 @@ import { hasOpenAiSpeechApiKey, readOpenAiSpeechApiKey } from '../speech/openai-
 /**
  * The one place the Live API address, model and request shape live.
  *
- * UNVERIFIED against a real call (no key was available when this was written).
- * The endpoint and model come from plans/research/REALTIME-VOICE-ADAM.md
- * sections 1.2 and 1.6. The design doc does not give the wire format, so the
- * multipart `sdp` + `session` body and the answer parsing below follow the
- * shape OpenAI uses for its Realtime WebRTC calls and must be checked on the
- * first live test.
+ * Wire format from the Live API reference (developers.openai.com/api/reference/
+ * resources/live/methods/create), checked 2026-11-22 after the first real call
+ * was refused for not being JSON: a JSON body of `session` + `transport`
+ * ({ type: 'webrtc', sdp }), answered by 201 with session.id and transport.sdp.
  */
 export const OPENAI_LIVE_API = {
   sessionsUrl: 'https://api.openai.com/v1/live/sessions',
-  model: 'gpt-live-1.1',
-  offerField: 'sdp',
-  sessionField: 'session'
+  model: 'gpt-live-1.1'
 } as const
 
 export const OPENAI_LIVE_REQUEST_TIMEOUT_MS = 15_000
@@ -118,7 +114,7 @@ function isValidSessionOptions(options: OpenAiLiveSessionOptions): boolean {
 function buildSessionConfig(options: OpenAiLiveSessionOptions): Record<string, unknown> {
   return {
     model: OPENAI_LIVE_API.model,
-    voice: options.voice,
+    audio: { output: { voice: options.voice } },
     // Why always: without standby the session bills the full active rate for
     // as long as it is open (design doc section 4.3, rule 6).
     wake_policy: { type: 'speech' },
@@ -192,6 +188,7 @@ function parseSuccess(response: Response, raw: string): { answerSdp: string; ses
     }
     return {
       answerSdp:
+        readNestedField(parsed, 'transport', 'sdp') ||
         readStringField(parsed, 'sdp') ||
         readNestedField(parsed, 'answer', 'sdp') ||
         readStringField(parsed, 'answer'),
@@ -242,9 +239,10 @@ export async function createOpenAiLiveSession(
     return fail('no-key')
   }
 
-  const body = new FormData()
-  body.set(OPENAI_LIVE_API.offerField, offerSdp)
-  body.set(OPENAI_LIVE_API.sessionField, JSON.stringify(buildSessionConfig(options)))
+  const body = JSON.stringify({
+    session: buildSessionConfig(options),
+    transport: { type: 'webrtc', sdp: offerSdp }
+  })
 
   if (deps.signal?.aborted) {
     return fail('cancelled')
@@ -255,7 +253,7 @@ export async function createOpenAiLiveSession(
   try {
     response = await (deps.fetchImpl ?? fetch)(OPENAI_LIVE_API.sessionsUrl, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body,
       signal: deps.signal ? AbortSignal.any([timeoutSignal, deps.signal]) : timeoutSignal
     })
