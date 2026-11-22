@@ -15,23 +15,13 @@ import {
 } from './adam-conversation'
 import { AdamHermesVoice } from './adam-hermes-voice'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
-import { SelfEditStore, selfEditRoots } from './self-edit'
-import { resolveSelfEditRepoRoot } from './self-edit-repo-root'
-import { closeSelfEditWindow, showSelfEditProposal } from '../window/self-edit-window'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
-import { createOpenAiLiveSession, liveVoiceFailure } from './openai-live-session'
-import type { OpenAiLiveSessionOptions } from './openai-live-session'
-import { OPENAI_LIVE_CALL_READY, resolveLiveVoiceSettings } from '../../shared/live-voice-settings'
-import type { OpenAiLiveFailure } from '../../shared/speech-types'
-import {
-  clearElevenLabsApiKey,
-  dropLegacyElevenLabsKeyFromSettings,
-  getElevenLabsApiKeyStatus,
-  migrateElevenLabsKeyOutOfSettings,
-  resolveElevenLabsApiKey,
-  saveElevenLabsApiKey,
-  type ElevenLabsApiKeyStatus
-} from './elevenlabs-key-store'
+import { registerLiveVoiceIpc } from './live-voice-ipc'
+
+export { getActiveLiveSessionForTest } from './live-voice-ipc'
+import { migrateElevenLabsKeyOutOfSettings, resolveElevenLabsApiKey } from './elevenlabs-key-store'
+import { registerElevenLabsKeyHandlers } from './elevenlabs-key-ipc'
+import { registerSelfEditHandlers } from './self-edit-ipc'
 import { fetchRecentConversationSummaries, formatConversationMemory } from './conversation-memory'
 import { pickJarvisTargetWindow } from './jarvis-target-window'
 import {
@@ -127,6 +117,11 @@ export function askAdam(text: string, options: AdamAskOptions): ReturnType<AdamC
   return adamConversation.ask(text, options)
 }
 
+/** True while ADAM is answering any turn (voice, live call or Board). */
+function isAdamBusy(): boolean {
+  return adamConversation?.busy ?? false
+}
+
 function createJarvisDeps(store: Store): JarvisServiceDeps {
   return {
     store,
@@ -155,98 +150,21 @@ export function registerJarvisIpcHandlers(store: Store, mainWindow: BrowserWindo
   const service = getJarvisService(createJarvisDeps(store))
   registerHandlers(store, service)
   registerElevenLabsKeyHandlers(store)
-  registerLiveSessionHandlers(store)
+  registerLiveVoiceIpc(store, {
+    trustedSender: trustedLiveSender,
+    askAdam,
+    isAdamBusy,
+    cancelAdam: () => adamVoice?.cancel(),
+    lookingAt: () => lastLookingAt,
+    thread: getAdamThread
+  })
   wireWakeWordObservation(store, service)
   restorePersistedMode(store, service)
 }
 
-function elevenLabsKeyStatus(store: Store): ElevenLabsApiKeyStatus {
-  const status = getElevenLabsApiKeyStatus()
-  // A legacy settings key that could not be migrated still counts as configured.
-  const legacy = store.getSettings().voice?.elevenlabsApiKey?.trim()
-  return {
-    ...status,
-    configured: status.configured || Boolean(legacy),
-    // The legacy key still works, so an unreadable file is not a dead end.
-    unreadable: status.unreadable && !legacy
-  }
-}
-
-// Why separate channels: the key is written to the protected store only and is
-// never sent back to the renderer (#24); Settings learns only whether one exists.
-function registerElevenLabsKeyHandlers(store: Store): void {
-  ipcMain.removeHandler('jarvis:getElevenLabsKeyStatus')
-  ipcMain.handle('jarvis:getElevenLabsKeyStatus', () => elevenLabsKeyStatus(store))
-
-  ipcMain.removeHandler('jarvis:saveElevenLabsKey')
-  ipcMain.handle('jarvis:saveElevenLabsKey', (_event, apiKey: unknown) => {
-    const status = saveElevenLabsApiKey(typeof apiKey === 'string' ? apiKey : '')
-    if (!status.sessionOnly) {
-      dropLegacyElevenLabsKeyFromSettings(store)
-    }
-    return elevenLabsKeyStatus(store)
-  })
-
-  ipcMain.removeHandler('jarvis:clearElevenLabsKey')
-  ipcMain.handle('jarvis:clearElevenLabsKey', () => {
-    clearElevenLabsApiKey()
-    dropLegacyElevenLabsKeyFromSettings(store)
-    return elevenLabsKeyStatus(store)
-  })
-}
-
-function liveSessionOptions(store: Store): OpenAiLiveSessionOptions {
-  // Why from the store, not the window: the window supplies only the offer, so
-  // a compromised renderer cannot pick the voice or switch standby off.
-  const live = resolveLiveVoiceSettings(store.getSettings().voice)
-  return { voice: live.voice, idleTimeoutSec: live.idleTimeoutSec }
-}
-
-// Why one at a time: every created session starts billing, so a double click
-// or a retry loop in the window must not open several at once.
-let liveSessionInFlight = false
-
-type LiveSender = Electron.WebContents
-
-/**
- * The live session a window currently owns. Holds the one 'destroyed' listener
- * on the owner so a new owner or a repeat connect replaces it, never stacks it.
- */
-let activeLiveSession: {
-  owner: LiveSender
-  sessionId: string | null
-  onOwnerDestroyed: () => void
-} | null = null
-
-function clearActiveLiveSession(): void {
-  const current = activeLiveSession
-  activeLiveSession = null
-  current?.owner.removeListener('destroyed', current.onOwnerDestroyed)
-}
-
-function setActiveLiveSession(owner: LiveSender, sessionId: string | null): void {
-  clearActiveLiveSession()
-  const onOwnerDestroyed = (): void => {
-    if (activeLiveSession?.owner === owner) {
-      clearActiveLiveSession()
-    }
-  }
-  owner.once('destroyed', onOwnerDestroyed)
-  activeLiveSession = { owner, sessionId, onOwnerDestroyed }
-}
-
-export function getActiveLiveSessionForTest(): {
-  ownerId: number
-  sessionId: string | null
-} | null {
-  return activeLiveSession
-    ? { ownerId: activeLiveSession.owner.id, sessionId: activeLiveSession.sessionId }
-    : null
-}
-
 // Why checked in main: any frame that can reach ipcRenderer could otherwise
 // start a billed call. Only the main window's top frame may.
-function trustedLiveSender(event: Electron.IpcMainInvokeEvent): LiveSender | null {
+function trustedLiveSender(event: Electron.IpcMainInvokeEvent): Electron.WebContents | null {
   const host = jarvisHostWindow
   if (!host || host.isDestroyed()) {
     return null
@@ -258,58 +176,6 @@ function trustedLiveSender(event: Electron.IpcMainInvokeEvent): LiveSender | nul
   return event.senderFrame && event.senderFrame === sender.mainFrame ? sender : null
 }
 
-async function runLiveSessionOnce<T>(
-  sender: LiveSender,
-  run: (signal: AbortSignal) => Promise<T>
-): Promise<T | OpenAiLiveFailure> {
-  if (liveSessionInFlight) {
-    return liveVoiceFailure('busy')
-  }
-  liveSessionInFlight = true
-  // Why: a create still in flight when its window closes would open a session
-  // nobody can use or hang up, so the request is aborted with the window.
-  const controller = new AbortController()
-  const abort = (): void => controller.abort()
-  sender.once('destroyed', abort)
-  try {
-    return await run(controller.signal)
-  } finally {
-    sender.removeListener('destroyed', abort)
-    liveSessionInFlight = false
-  }
-}
-
-function registerLiveSessionHandlers(store: Store): void {
-  clearActiveLiveSession()
-  ipcMain.removeHandler('jarvis:liveSessionConnect')
-  ipcMain.handle('jarvis:liveSessionConnect', async (event, payload: unknown) => {
-    const sender = trustedLiveSender(event)
-    if (!sender) {
-      return liveVoiceFailure('not-allowed')
-    }
-    const live = resolveLiveVoiceSettings(store.getSettings().voice)
-    if (live.engine !== 'openai-live' || !OPENAI_LIVE_CALL_READY) {
-      return liveVoiceFailure('not-ready')
-    }
-    const offerSdp =
-      payload && typeof payload === 'object' && !Array.isArray(payload)
-        ? (payload as { offerSdp?: unknown }).offerSdp
-        : undefined
-    // createOpenAiLiveSession validates the offer itself and reads the key.
-    const result = await runLiveSessionOnce(sender, (signal) =>
-      createOpenAiLiveSession(offerSdp, liveSessionOptions(store), { signal })
-    )
-    if (result.ok && !sender.isDestroyed()) {
-      setActiveLiveSession(sender, result.sessionId)
-    }
-    return result
-  })
-
-  // Why no connection-test handler: the only way to test the Live API is to
-  // create a session, which bills, and the design doc documents no call to
-  // close one. Settings keeps its test button disabled until that exists.
-  ipcMain.removeHandler('jarvis:liveSessionTest')
-}
 
 // Why: a turn with ADAM can run commands and is written into Carson's thread,
 // so only the main window's top frame may start one (never a web tile or embedded page).
@@ -398,53 +264,7 @@ function registerHandlers(store: Store, service: JarvisService): void {
     buildAgentContext(join(getUserDataRoot(), 'terminal-history'))
   )
 
-  const repoRoot = resolveSelfEditRepoRoot({
-    isPackaged: app.isPackaged,
-    env: process.env,
-    home: app.getPath('home'),
-    resourcesPath: process.resourcesPath
-  })
-  const selfEdits = repoRoot.ok
-    ? new SelfEditStore(selfEditRoots(app.getPath('home'), repoRoot.root))
-    : new SelfEditStore([], Date.now, repoRoot.error)
-  const selfEditBackups = join(getUserDataRoot(), 'self-edit-backups')
-
-  ipcMain.removeHandler('jarvis:proposeSelfEdit')
-  ipcMain.handle(
-    'jarvis:proposeSelfEdit',
-    (_event, path: string, content: string, description: string) => {
-      const result = selfEdits.propose(
-        String(path ?? ''),
-        String(content ?? ''),
-        String(description ?? '')
-      )
-      if (!result.ok) {
-        return result
-      }
-      showSelfEditProposal(result.proposal)
-      return { ok: true, id: result.proposal.id, displayPath: result.proposal.displayPath }
-    }
-  )
-
-  ipcMain.removeHandler('jarvis:applySelfEdit')
-  ipcMain.handle('jarvis:applySelfEdit', (_event, id: string) => {
-    const result = selfEdits.apply(String(id ?? ''), selfEditBackups)
-    if (result.ok) {
-      closeSelfEditWindow()
-    }
-    return result
-  })
-
-  // Why no window: undo is asked for by voice after the review window closed.
-  ipcMain.removeHandler('jarvis:undoSelfEdit')
-  ipcMain.handle('jarvis:undoSelfEdit', (_event, id: string) => selfEdits.undo(String(id ?? '')))
-
-  ipcMain.removeHandler('jarvis:discardSelfEdit')
-  ipcMain.handle('jarvis:discardSelfEdit', (_event, id: string) => {
-    const discarded = selfEdits.discard(String(id ?? ''))
-    closeSelfEditWindow()
-    return { ok: discarded }
-  })
+  registerSelfEditHandlers()
 
   // Why a separate call from agentContext: this hits the ElevenLabs API, so it
   // is fetched after the call connects rather than delaying the connection.

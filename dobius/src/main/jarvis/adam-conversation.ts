@@ -63,6 +63,11 @@ export class AdamConversation {
     private readonly announce: (event: AdamTurnEvent) => void
   ) {}
 
+  /** True while a turn is running; a live call checks it before asking. */
+  get busy(): boolean {
+    return this.inFlight
+  }
+
   async ask(
     text: string,
     options: AdamAskOptions

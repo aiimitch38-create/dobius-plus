@@ -136,6 +136,7 @@ export type OpenAiLiveErrorKind =
   | 'server'
   | 'rejected'
   | 'bad-response'
+  | 'over-cap'
 
 export type OpenAiLiveFailure = { ok: false; kind: OpenAiLiveErrorKind; error: string }
 
@@ -143,6 +144,17 @@ export type OpenAiLiveFailure = { ok: false; kind: OpenAiLiveErrorKind; error: s
 export type OpenAiLiveSessionResult =
   | { ok: true; answerSdp: string; sessionId: string | null }
   | OpenAiLiveFailure
+
+/** What main says back for one delegated request on a live call. */
+export type LiveDelegateResult =
+  | { ok: true; kind: JarvisAskResult['kind']; speak: string }
+  | { ok: false; error: string }
+
+/** Main tells the window owning a live call about the spending cap. */
+export type LiveVoiceNotice = { kind: 'cap-warning' | 'cap-reached'; text: string }
+
+/** Session events the window reports to main's spend meter. */
+export type LiveVoiceSessionReport = { type: 'paused' | 'resumed' | 'closed' }
 
 /** ElevenLabs key status sent to Settings; the key itself never is (#24). */
 export type ElevenLabsKeyStatus = {

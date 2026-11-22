@@ -32,7 +32,13 @@ const MAX_ERROR_DETAIL_CHARS = 200
 export type OpenAiLiveSessionOptions = {
   voice: string
   idleTimeoutSec: number
+  /** ADAM's voice instructions (live-voice-prompt.ts), built in main. */
+  instructions?: string
 }
+
+// Why: the Live API takes up to 16,384 tokens of instructions; main builds
+// them, so this is a backstop against a runaway seed, not a user limit.
+const MAX_INSTRUCTIONS_CHARS = 40_000
 
 export type OpenAiLiveSessionDeps = {
   hasKey?: () => boolean
@@ -64,7 +70,9 @@ const ERROR_TEXT: Record<OpenAiLiveErrorKind, string> = {
   timeout: 'OpenAI took too long to answer. Try again.',
   server: 'OpenAI had a problem on its side. Try again in a few minutes.',
   rejected: 'OpenAI turned the request down.',
-  'bad-response': 'OpenAI answered in a way this app did not understand.'
+  'bad-response': 'OpenAI answered in a way this app did not understand.',
+  'over-cap':
+    "Today's live voice spending cap is reached. Voice calls start again tomorrow, or raise the cap in Settings, Voice."
 }
 
 export function liveVoiceFailure(kind: OpenAiLiveErrorKind): OpenAiLiveFailure {
@@ -98,7 +106,10 @@ function isValidSessionOptions(options: OpenAiLiveSessionOptions): boolean {
     /^[a-z][a-z0-9_-]{0,31}$/.test(options.voice) &&
     Number.isInteger(options.idleTimeoutSec) &&
     options.idleTimeoutSec >= 5 &&
-    options.idleTimeoutSec <= 60
+    options.idleTimeoutSec <= 60 &&
+    (options.instructions === undefined ||
+      (typeof options.instructions === 'string' &&
+        options.instructions.length <= MAX_INSTRUCTIONS_CHARS))
   )
 }
 
@@ -109,7 +120,11 @@ function buildSessionConfig(options: OpenAiLiveSessionOptions): Record<string, u
     // Why always: without standby the session bills the full active rate for
     // as long as it is open (design doc section 4.3, rule 6).
     wake_policy: { type: 'speech' },
-    idle_timeout_s: options.idleTimeoutSec
+    idle_timeout_s: options.idleTimeoutSec,
+    // Why no delegation field: `client` delegation (our app is the brain) is
+    // the documented default (design doc section 1.3). Unverified against
+    // the live API: the exact `instructions` field placement in this body.
+    ...(options.instructions ? { instructions: options.instructions } : {})
   }
 }
 

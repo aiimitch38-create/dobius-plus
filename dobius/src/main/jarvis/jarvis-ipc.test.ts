@@ -1,10 +1,12 @@
 import { join } from 'node:path'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import type { BrowserWindow } from 'electron'
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Store } from '../persistence'
+import { localDayKey } from './live-voice-meter'
+import type * as LiveVoiceSettingsModule from '../../shared/live-voice-settings'
 
 type Handler = (...args: unknown[]) => unknown
 
@@ -68,7 +70,7 @@ vi.mock('./openai-live-session', () => ({
   liveVoiceFailure: (kind: string) => ({ ok: false, kind, error: kind })
 }))
 vi.mock('../../shared/live-voice-settings', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../shared/live-voice-settings')>()
+  const actual = await importOriginal<typeof LiveVoiceSettingsModule>()
   return {
     ...actual,
     get OPENAI_LIVE_CALL_READY() {
@@ -328,7 +330,11 @@ describe('OpenAI Live session IPC', () => {
     expect(result).toEqual({ ok: true, answerSdp: 'v=0', sessionId: 's1' })
     expect(live.create).toHaveBeenCalledWith(
       'v=0 offer',
-      { voice: 'cedar', idleTimeoutSec: 45 },
+      {
+        voice: 'cedar',
+        idleTimeoutSec: 45,
+        instructions: expect.stringContaining('You are the voice of ADAM')
+      },
       { signal: expect.any(AbortSignal) }
     )
   })
@@ -347,7 +353,10 @@ describe('OpenAI Live session IPC', () => {
 
     expect(live.create).toHaveBeenCalledTimes(3)
     for (const call of live.create.mock.calls) {
-      expect(call.slice(0, 2)).toEqual([undefined, { voice: 'marin', idleTimeoutSec: 60 }])
+      expect(call.slice(0, 2)).toEqual([
+        undefined,
+        { voice: 'marin', idleTimeoutSec: 60, instructions: expect.any(String) }
+      ])
     }
   })
 
@@ -421,6 +430,8 @@ describe('OpenAI Live session IPC', () => {
     })
 
     const pending = handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    // The thread is read first, so the create starts a moment later.
+    await vi.waitFor(() => expect(seenSignal).toBeDefined())
     expect(seenSignal?.aborted).toBe(false)
     contents.emit('destroyed')
 
@@ -475,6 +486,86 @@ describe('OpenAI Live session IPC', () => {
     await handler('jarvis:liveSessionConnect')(from(second.contents), { offerSdp: 'v=0 offer' })
     expect(second.contents.listenerCount('destroyed')).toBe(1)
     expect(getActiveLiveSessionForTest()).toMatchObject({ ownerId: 8 })
+  })
+
+  it('seeds a new session with the latest ADAM thread rows', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    await handler('jarvis:adamThreadAppend')(from(contents), {
+      id: 'r1',
+      role: 'user',
+      text: 'remember the blue button'
+    })
+    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    const options = live.create.mock.calls[0][1] as { instructions: string }
+    expect(options.instructions).toContain('remember the blue button')
+  })
+
+  it('refuses a new session once today is over the spending cap', async () => {
+    const { window, contents } = liveWindow()
+    writeFileSync(
+      join(electron.userData, 'live-voice-meter.json'),
+      JSON.stringify({ version: 1, days: { [localDayKey(Date.now())]: { activeSec: 60 * 60 * 5, standbySec: 0 } } })
+    )
+    await register(liveStore({ liveVoiceDailyCapUsd: 15 }), window)
+    expect(
+      await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    ).toMatchObject({ ok: false, kind: 'over-cap' })
+    expect(live.create).not.toHaveBeenCalled()
+  })
+
+  it('sends delegated requests to ADAM as voice turns, only from the window that owns the call', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    const delegate = handler('jarvis:liveDelegate')
+    expect(await delegate(from(contents), { request: 'status?' })).toMatchObject({ ok: false })
+
+    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    const other = liveWindow(99).contents
+    expect(
+      await delegate({ sender: other, senderFrame: other.mainFrame }, { request: 'status?' })
+    ).toMatchObject({ ok: false })
+    expect(await delegate(from(contents), { request: 'status?' })).toEqual({
+      ok: true,
+      kind: 'answer',
+      speak: 'Adam Hermes reply'
+    })
+    expect(adam.ask).toHaveBeenCalledWith(expect.stringContaining('"status?"'))
+  })
+
+  it('stop cancels the live call’s ADAM turn, and hanging up stops the call', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    let finish: (value: { kind: 'cancelled'; text: '' }) => void = () => undefined
+    adam.ask.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve as never
+        })
+    )
+    adam.cancel.mockImplementationOnce(() => finish({ kind: 'cancelled', text: '' }))
+    const answer = handler('jarvis:liveDelegate')(from(contents), { request: 'long job' })
+    expect(await handler('jarvis:liveCancel')(from(contents))).toEqual({ ok: true })
+    expect(await answer).toEqual({ ok: true, kind: 'cancelled', speak: '' })
+
+    const { getActiveLiveSessionForTest } = await import('./jarvis-ipc')
+    expect(await handler('jarvis:liveSessionReport')(from(contents), { type: 'closed' })).toEqual({
+      ok: true
+    })
+    expect(getActiveLiveSessionForTest()).toBeNull()
+  })
+
+  it('writes spoken small talk into ADAM’s thread for the owning window only', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    const transcript = handler('jarvis:liveTranscript')
+    const line = { role: 'user', text: 'hi', itemId: '1' }
+    expect(await transcript(from(contents), line)).toEqual({ ok: false })
+    await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    expect(await transcript(from(contents), line)).toEqual({ ok: true })
+    const rows = (await handler('jarvis:adamThreadGet')()) as { text: string; voice?: boolean }[]
+    expect(rows.at(-1)).toMatchObject({ text: 'hi', voice: true })
   })
 
   it('has no connection-test handler, so nothing can open a session just to test', async () => {
