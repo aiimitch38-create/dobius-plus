@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } fr
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resolveAgentRunCwd } from './agent-runner-environment'
+import { buildRunEnv, resolveAgentRunCwd } from './agent-runner-environment'
 
 describe('resolveAgentRunCwd (BUILD-005 #23)', () => {
   let base = ''
@@ -55,5 +55,17 @@ describe('resolveAgentRunCwd (BUILD-005 #23)', () => {
     const file = path.join(base, 'not-a-dir')
     writeFileSync(file, 'x')
     expect(() => resolveAgentRunCwd(file)).toThrow(/cannot be used/)
+  })
+})
+
+describe('buildRunEnv runtime key scope', () => {
+  it('marks agent runs for the limited agent key', () => {
+    const env = buildRunEnv({
+      configDir: '/tmp/claude',
+      envPatch: {},
+      stripAuthEnv: false,
+      provenance: 'test'
+    })
+    expect(env?.DOBIUS_RUNTIME_SCOPE).toBe('agent')
   })
 })

@@ -55,6 +55,7 @@ describe('Adam Hermes runtime discovery', () => {
     vi.stubEnv('HERMES_SESSION_ID', 'unrelated-tui')
     vi.stubEnv('HERMES_IGNORE_RULES', '1')
     vi.stubEnv('PYTHONPATH', '/unrelated-python')
+    vi.stubEnv('DOBIUS_RUNTIME_SCOPE', 'agent')
     const { home: _home, ...runtime } = fixture()
     const env = adamHermesEnvironment(runtime)
     expect(env.HERMES_HOME).toBe(runtime.profileHome)
@@ -63,7 +64,9 @@ describe('Adam Hermes runtime discovery', () => {
       'HERMES_SESSION_ID',
       'HERMES_TUI_SIDECAR_URL',
       'HERMES_IGNORE_RULES',
-      'PYTHONPATH'
+      'PYTHONPATH',
+      // ADAM is never scoped down to a worker's reduced command line.
+      'DOBIUS_RUNTIME_SCOPE'
     ]) {
       expect(env[key]).toBeUndefined()
     }

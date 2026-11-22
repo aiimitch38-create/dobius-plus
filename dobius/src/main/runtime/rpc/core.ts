@@ -58,6 +58,9 @@ export type RpcContext = {
   authenticatedLocal?: true
   // Set only after private socket/named-pipe token validation; IPC is excluded.
   authenticatedLocalSocket?: true
+  // Set only by the socket transport when the request used the limited agent
+  // key (agent-rpc-scope.ts); never decoded from request params.
+  agentKey?: true
   // Why: long-poll handlers (e.g. orchestration.check with wait=true) need to
   // observe the underlying socket's lifetime so they can release their slot
   // and resolve their inner waiters immediately when a client disconnects

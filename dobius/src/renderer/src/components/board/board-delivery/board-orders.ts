@@ -53,6 +53,11 @@ export function latestOrder(worktreeId: string): BoardOrder | null {
   return null
 }
 
+/** True while the order is still among the last MAX_ORDERS recorded. */
+export function isOrderRetained(orderId: string): boolean {
+  return orders.some((o) => o.id === orderId)
+}
+
 export function ordersFor(worktreeId: string): readonly BoardOrder[] {
   return orders.filter((o) => o.worktreeId === worktreeId)
 }

@@ -128,4 +128,70 @@ describe('main-process agent resume claims', () => {
     expect(claims.finishSpawn(claim.token, true)).toBe(true)
     expect(claims.claim(duplicateOwner)).toEqual({ ok: false })
   })
+
+  it('lets a snoozed tab claim its session again after its return was resumed once', () => {
+    const claims = createAgentResumeClaims()
+    const first = claims.claim(owner)
+    expect(first.ok).toBe(true)
+    if (!first.ok) {
+      return
+    }
+    // In flight (reserved, then spawning): snoozing cannot free it.
+    expect(claims.forgetStarted(owner)).toBe(false)
+    expect(claims.beginSpawn(first.token, owner, first.target)).toBe(true)
+    expect(claims.forgetStarted(owner)).toBe(false)
+    expect(claims.finishSpawn(first.token, true, 'pty-returned')).toBe(true)
+
+    // Started: a second resume of the same session is refused...
+    const returnedOwner = { ...owner, ptyId: 'pty-returned', launchToken: 'launch-returned' }
+    expect(claims.claim(returnedOwner)).toEqual({ ok: false })
+    // ...and only the terminal that claim started can give it up.
+    expect(claims.forgetStarted({ ...returnedOwner, ptyId: 'pty-elsewhere' })).toBe(false)
+    expect(claims.forgetStarted({ ...returnedOwner, worktreeId: 'wt-other' })).toBe(false)
+    expect(claims.forgetStarted(returnedOwner)).toBe(true)
+    expect(claims.claim(returnedOwner).ok).toBe(true)
+    // Still one consumer at a time.
+    expect(claims.claim(duplicateOwner)).toEqual({ ok: false })
+  })
+
+  it('a return torn down before its spawn gives the claim back; one mid-spawn is left to finish', () => {
+    const claims = createAgentResumeClaims()
+    const first = claims.claim(owner)
+    if (!first.ok) {
+      throw new Error('expected first claim')
+    }
+    // Only the exact owner can abandon it.
+    expect(claims.abandon(duplicateOwner)).toBe(false)
+    expect(claims.claim(owner)).toEqual({ ok: false })
+    // Reserved, never spawned: released, so the same return can claim again.
+    expect(claims.abandon(owner)).toBe(false)
+    const second = claims.claim(owner)
+    expect(second.ok).toBe(true)
+    if (!second.ok) {
+      return
+    }
+    // The stale token is dead.
+    expect(claims.beginSpawn(first.token, owner, first.target)).toBe(false)
+    expect(claims.beginSpawn(second.token, owner, second.target)).toBe(true)
+    // Mid-spawn: reported as in flight and left alone.
+    expect(claims.abandon(owner)).toBe(true)
+    expect(claims.finishSpawn(second.token, true, 'pty-new')).toBe(true)
+    expect(claims.abandon(owner)).toBe(false)
+    expect(claims.claim(owner)).toEqual({ ok: false })
+  })
+
+  it('a started claim whose terminal was killed again can be retried by the same owner only', () => {
+    const claims = createAgentResumeClaims()
+    const first = claims.claim(owner)
+    if (!first.ok) {
+      throw new Error('expected first claim')
+    }
+    claims.beginSpawn(first.token, owner, first.target)
+    claims.finishSpawn(first.token, true, 'pty-new')
+    expect(claims.failStarted(owner, 'pty-other')).toBe(false)
+    expect(claims.failStarted(duplicateOwner, 'pty-new')).toBe(false)
+    expect(claims.failStarted(owner, 'pty-new')).toBe(true)
+    expect(claims.claim(duplicateOwner)).toEqual({ ok: false })
+    expect(claims.claim(owner).ok).toBe(true)
+  })
 })

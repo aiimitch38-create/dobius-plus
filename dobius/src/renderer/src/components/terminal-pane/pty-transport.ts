@@ -59,6 +59,14 @@ export { extractLastOscTitle } from '../../../../shared/agent-detection'
 const SSH_SESSION_EXPIRED_ERROR = 'SSH_SESSION_EXPIRED'
 const STALE_TITLE_TIMEOUT = 3000 // ms before stale working title is cleared
 const MAX_PTY_SIDE_EFFECTS_PER_DRAIN = 64
+// Why: a hidden window's timers can be throttled to one per minute, so the
+// deferred drain falls behind a busy agent and the queue grew without bound.
+// Past this many pending facts, apply them synchronously instead (nothing is
+// dropped; the deferral only exists to let a visible terminal paint first).
+const MAX_PENDING_PTY_SIDE_EFFECTS = 1024
+// Only once the drain is this far behind do same-status titles collapse, so a
+// keeping-up drain still delivers every title.
+const TITLE_COALESCE_BACKLOG = MAX_PTY_SIDE_EFFECTS_PER_DRAIN * 4
 
 // Why: onAgentStatus callback added to IpcPtyTransportOptions in pty-dispatcher
 // so the OSC 9999 status payloads can be forwarded to the store.
@@ -197,8 +205,49 @@ export function createPtyOutputProcessor({
       pendingWorkingTitleSideEffects += workingTitleCount
       return
     }
+    if (
+      prior &&
+      pendingSideEffects.length - pendingSideEffectIndex >= TITLE_COALESCE_BACKLOG &&
+      canReplaceTitle(prior, next)
+    ) {
+      // Why: spinner frames ("⠋ Claude", "⠙ Claude", ...) only matter through
+      // their status; the tracker reacts to status changes and the store keeps
+      // the latest title, so a run of same-status titles keeps just the newest.
+      pendingWorkingTitleSideEffects += workingTitleCount - countWorkingTitles(prior.titles)
+      prior.titles = next.titles
+      prior.scannedForTitles ||= next.scannedForTitles
+      return
+    }
     pendingSideEffects.push(next)
     pendingWorkingTitleSideEffects += workingTitleCount
+    if (pendingSideEffects.length - pendingSideEffectIndex > MAX_PENDING_PTY_SIDE_EFFECTS) {
+      flushPendingSideEffects()
+    }
+  }
+
+  function isTitleOnly(effect: PendingPtySideEffect): boolean {
+    return effect.titles.length === 1 && effect.payloads.length === 0 && !effect.containsBell
+  }
+
+  function canReplaceTitle(prior: PendingPtySideEffect, next: PendingPtySideEffect): boolean {
+    if (
+      !isTitleOnly(prior) ||
+      !isTitleOnly(next) ||
+      prior.suppressAttentionEvents !== next.suppressAttentionEvents
+    ) {
+      return false
+    }
+    const [priorTitle] = prior.titles
+    const [nextTitle] = next.titles
+    // Why: the bare "Cursor Agent" title is discarded on apply (see
+    // applyObservedTerminalTitle), so it must never replace a real title.
+    if (
+      priorTitle.trim().toLowerCase() === 'cursor agent' ||
+      nextTitle.trim().toLowerCase() === 'cursor agent'
+    ) {
+      return false
+    }
+    return detectAgentStatusFromTitle(priorTitle) === detectAgentStatusFromTitle(nextTitle)
   }
 
   function schedulePtySideEffects(

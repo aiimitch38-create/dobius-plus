@@ -21,6 +21,8 @@ import { formatShortcutLabel, useOptionalShortcutLabel } from '@/hooks/useShortc
 import { translate } from '@/i18n/i18n'
 import { TabWorkspaceLayoutMenuSection } from './TabWorkspaceLayoutMenuSection'
 import { requestActiveTerminalPaneSplit } from './request-active-terminal-pane-split'
+import { SnoozePicksSubmenu } from './SnoozePicksSubmenu'
+import { snoozeTerminalTab } from '@/lib/tab-snooze/snooze-terminal-tab'
 
 const TAB_COLORS = [
   {
@@ -216,6 +218,10 @@ export function SortableTabContextMenu({
             : translate('auto.components.tab.bar.SortableTabContextMenu.60f958ec75', 'Pin Tab')}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
+        <SnoozePicksSubmenu
+          label={translate('components.tab.bar.SortableTabContextMenu.snooze', 'Snooze')}
+          onPick={(until) => void snoozeTerminalTab(tab.id, until)}
+        />
         <DropdownMenuItem onSelect={() => !isPinned && onClose(tab.id)} disabled={isPinned}>
           {translate('auto.components.tab.bar.SortableTabContextMenu.89359a36f7', 'Close')}
           {closeShortcut ? <DropdownMenuShortcut>{closeShortcut}</DropdownMenuShortcut> : null}

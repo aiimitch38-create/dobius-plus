@@ -37,7 +37,7 @@ export type BoardCommandBarProps = {
   getVoiceLevel: () => number
   listening: boolean
   onMicToggle: () => void
-  /** True while the planner is handling the last command; blocks double-submit. */
+  /** True while the planner or ADAM is handling the last message; "@Name" orders still send. */
   busy?: boolean
 }
 
@@ -165,8 +165,10 @@ export function BoardCommandBar({
 
   const adamAwake = useAppStore((s) => s.adamAwake)
   const text = draft.trim()
+  // Why "@" passes: an order typed straight at a console never waits on ADAM.
+  const blocked = busy && !text.startsWith('@')
   const submit = (): void => {
-    if (!text || busy) {
+    if (!text || blocked) {
       return
     }
     onCommand(text)
@@ -310,7 +312,7 @@ export function BoardCommandBar({
                 type="submit"
                 size="icon"
                 aria-label={translate('board.commandBar.send', 'Send')}
-                disabled={!text || busy}
+                disabled={!text || blocked}
                 className="ml-[-5px] size-[21px] rounded-full bg-[var(--board-accent)] [&_svg]:size-3 text-[var(--board-accent-fg)] hover:bg-[var(--board-accent)] disabled:bg-[var(--board-panel-2)] disabled:text-[var(--board-text-muted)] disabled:opacity-100"
               >
                 <ArrowUp />

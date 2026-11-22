@@ -29,6 +29,19 @@ describe('resolveThroughExisting', () => {
 })
 
 describe('postcheckSecretPaths', () => {
+  it('also denies other Dobius userData roots, skipping glob roots', () => {
+    const home = path.join(root, 'home')
+    mkdirSync(home)
+    const dev = path.join(root, 'Dobius+-dev')
+    const secrets = postcheckSecretPaths({
+      homeDir: home,
+      userDataDir: path.join(root, 'dobius-plus'),
+      otherUserDataDirs: [dev, path.join(root, '*')]
+    })
+    expect(secrets).toContain(dev)
+    expect(secrets.some((entry) => entry.includes('*'))).toBe(false)
+  })
+
   it('lists a symlinked sign-in folder under both of its names', () => {
     const home = path.join(root, 'home')
     const vault = path.join(root, 'vault')

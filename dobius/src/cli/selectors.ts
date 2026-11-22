@@ -195,12 +195,14 @@ export async function getBrowserWorktreeSelector(
 }
 
 export const BOARD_CARD_ADDRESS_PREFIX = 'card:'
+export const TERMINAL_TAB_ADDRESS_PREFIX = 'tab:'
 
 /**
- * Turns `card:<title>` into that Board console's current terminal handle; any
- * other value is returned untouched. Why looked up per call: handles change
- * when a console restarts, the card title does not. An unknown, ambiguous or
- * not-running card is an error from the runtime; nothing else is ever targeted.
+ * Turns `card:<title>` into that Board console's current terminal handle and
+ * `tab:<tabId>` into the running terminal of that tab; any other value is
+ * returned untouched. Why looked up per call: handles change when a console
+ * restarts, the card id and title do not. An unknown, ambiguous, closed or
+ * not-running target is an error from the runtime; nothing else is ever targeted.
  */
 export async function resolveTerminalAddress(
   address: string,
@@ -208,6 +210,17 @@ export async function resolveTerminalAddress(
   cwd: string,
   client: RuntimeClient
 ): Promise<string> {
+  if (address.startsWith(TERMINAL_TAB_ADDRESS_PREFIX)) {
+    const tabId = address.slice(TERMINAL_TAB_ADDRESS_PREFIX.length).trim()
+    if (tabId.length === 0) {
+      throw new RuntimeClientError(
+        'invalid_argument',
+        'Missing tab id after "tab:". Use tab:<tabId>, as shown by `dobius board consoles`.'
+      )
+    }
+    const response = await client.call<{ handle: string }>('terminal.resolveTab', { tabId })
+    return response.result.handle
+  }
   if (!address.startsWith(BOARD_CARD_ADDRESS_PREFIX)) {
     return address
   }
@@ -243,7 +256,7 @@ export async function getTerminalHandle(
     if (typeof raw !== 'string' || raw.trim().length === 0) {
       throw new RuntimeClientError(
         'invalid_argument',
-        '--terminal was given without a value. Pass a terminal handle or card:<title>, or leave --terminal out to use the active terminal.'
+        '--terminal was given without a value. Pass a terminal handle, card:<title> or tab:<tabId>, or leave --terminal out to use the active terminal.'
       )
     }
     return await resolveTerminalAddress(raw, flags, cwd, client)

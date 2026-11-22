@@ -10,3 +10,13 @@
 - Commit only your files (`git add <paths>`), one commit per item; message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Pre-commit hooks must pass (never `--no-verify`).
 - Bug fixes: root cause, at the shared function all callers route through, with the smallest test that fails before and passes after.
 - Your final message is DATA for the orchestrator: what you did, commit SHAs, files changed, test/typecheck results (before vs after), anything unverified (say "unverified"), open questions for Carson each with a recommended default. If blocked, say so plainly and stop; do not guess.
+
+## Before you report: self-check against what Codex keeps finding (added 2026-11-22)
+Every new IPC handler / RPC method / CLI path must pass these, or Codex sends it back:
+- **Sender check:** IPC handlers accept only a registered app window's top frame (copy `isTrustedRuntimeCallSender` in `main/ipc/runtime.ts`). Never trust renderer-supplied ids for routing or permissions; main decides.
+- **Races:** anything with an await between a check and an action re-checks after the await. Two windows / two calls at once must not double-act. Persist state before side effects; roll back exactly what this attempt did, only if it is still yours.
+- **Terminal delivery:** text sent into a terminal goes through guarded delivery (`requireAgentStatus: 'sendable'`, text then guarded Enter after the settle delay), and Pause crew (execution gate) is checked right before acting.
+- **Untrusted text:** titles, reports, thread history going into a prompt are encoded (JSON string, `<`/`>` escaped), never raw inside tags.
+- **Bounded:** every list/map/queue that grows has a cap; every timer/listener is disposed on shutdown/unmount.
+- **Failure paths:** a failed save/spawn leaves a retryable state, never a stuck one.
+Then, if the Codex CLI is available, run it once read-only on your own diff before reporting (`C="$(npm root -g)/@openai/codex/bin/codex.js"; node "$C" exec -s read-only -C <worktree> - < brief.md`, brief = what changed + "ranked list: severity, file:line, scenario, minimal fix"), fix what it finds, and include its verdict in your report.

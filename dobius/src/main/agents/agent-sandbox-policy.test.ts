@@ -97,10 +97,29 @@ describe('buildAgentRunSandboxPolicy', () => {
     )
     expect(disallowedTools).toContain(rule('Read', `${HOME}/Library/Messages/**`))
     expect(disallowedTools).toContain(rule('Read', `${USER_DATA}/claude-accounts/**`))
-    // The runtime file the dobius CLI needs stays readable.
-    expect(denyRead.some((entry) => isWithin(`${USER_DATA}/dobius-runtime.json`, entry))).toBe(
-      false
+    // The full runtime key is denied; the agent-key file the dobius CLI uses stays readable.
+    expect(denyRead).toContain(`${USER_DATA}/dobius-runtime.json`)
+    expect(disallowedTools).toContain(rule('Read', `${USER_DATA}/dobius-runtime.json`))
+    expect(
+      denyRead.some((entry) => isWithin(`${USER_DATA}/dobius-runtime-agent.json`, entry))
+    ).toBe(false)
+  })
+
+  it('denies the full runtime key and its write temp file in every Dobius userData root', () => {
+    const appData = `${HOME}/Library/Application Support`
+    const roots = [`${appData}/Dobius+-dev`, `${appData}/dobius-dev`, `${appData}/*`]
+    const { sandbox, disallowedTools } = buildAgentRunSandboxPolicy(
+      context({ runtimeKeyRoots: roots })
     )
+    const denyRead = sandbox.filesystem?.denyRead ?? []
+    for (const root of [USER_DATA, ...roots]) {
+      for (const target of [`${root}/dobius-runtime.json`, `${root}/dobius-runtime.json.*.tmp`]) {
+        expect(denyRead, target).toContain(target)
+        expect(disallowedTools, target).toContain(rule('Read', target))
+      }
+    }
+    // The limited agent key stays readable everywhere.
+    expect(denyRead.filter((entry) => entry.includes('dobius-runtime-agent'))).toEqual([])
   })
 
   it('lets Bash write only the cwd, the repo git dirs, the own agent folder, temp and caches', () => {

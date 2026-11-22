@@ -1,10 +1,21 @@
-// Why: `dobius board send` / `card:<title>` callers branch on these codes, so
+// Why: `dobius board send` / `card:<title>` / `tab:<tabId>` callers branch on these codes, so
 // they must reach the CLI as the RPC error code, not as generic runtime_error.
 export const BOARD_CONSOLE_ERROR_CODES = [
   'board_card_not_found',
   'board_card_ambiguous',
   'board_card_not_running',
-  'board_card_pane_unclear'
+  'board_card_pane_unclear',
+  // `tab:<tabId>` addresses (9.4): same rule, never a fallback terminal.
+  'terminal_tab_not_found',
+  'terminal_tab_not_running',
+  'terminal_tab_pane_unclear',
+  // `board:<orchestratorCardId>` relays (9.6).
+  'board_orchestrator_not_found',
+  'board_orchestrator_ambiguous',
+  'board_orchestrator_refused',
+  'board_orchestrator_none_running',
+  'board_orchestrator_paused',
+  'board_orchestrator_not_delivered'
 ] as const
 export type BoardConsoleErrorCode = (typeof BOARD_CONSOLE_ERROR_CODES)[number]
 

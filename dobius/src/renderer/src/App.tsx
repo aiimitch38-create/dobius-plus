@@ -18,6 +18,7 @@ import {
 import { BoardSurfaceCover } from './components/board/BoardSurfaceCover'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useIpcEvents } from './hooks/useIpcEvents'
+import { useTabSnooze } from './hooks/useTabSnooze'
 import { useConsoleTileSync } from './components/board/board-browser-link/console-tile-sync'
 import { useAutomationDispatchEvents } from './hooks/useAutomationDispatchEvents'
 import RetainedAgentsSyncGate from './components/dashboard/RetainedAgentsSyncGate'
@@ -46,6 +47,7 @@ import { useShortcutLabel } from './hooks/useShortcutLabel'
 import type { VirtualizedScrollAnchor } from './hooks/useVirtualizedScrollAnchor'
 import { resolveMountedLazyModalIds, type LazyModalId } from './lazy-modal-mount-state'
 import PinnedTabCloseDialog from './components/terminal-pane/PinnedTabCloseDialog'
+import SnoozeTabConfirmDialog from './components/tab-bar/SnoozeTabConfirmDialog'
 import { WindowControls } from './components/app-shell/WindowControls'
 import {
   AppTitlebarLeftControls,
@@ -242,6 +244,7 @@ function App(): React.JSX.Element {
 
   // Subscribe to IPC push events
   useIpcEvents()
+  useTabSnooze()
   useAutomationDispatchEvents()
   // Why: main drops a tile's console binding when its guest unregisters; the
   // App-level mirror keeps the set true while the Board is open or closed.
@@ -547,6 +550,7 @@ function App(): React.JSX.Element {
         toastOptions={{ className: 'font-sans text-sm' }}
       />
       <PinnedTabCloseDialog />
+      <SnoozeTabConfirmDialog />
       {/* Why: rendered last so it sits after all -webkit-app-region:drag elements
           in DOM order. Electron's hit-test for drag regions is DOM-order-based and
           ignores z-index — placing WindowControls earlier caused the drag region to

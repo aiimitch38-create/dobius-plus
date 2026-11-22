@@ -11,6 +11,7 @@ import {
   type ConsoleScreen,
   type GlanceSnapshotIdentity
 } from './console-output-tail'
+import { lastConsoleScreen, rememberConsoleScreen } from './console-screen-cache'
 
 /** Poll delay while the screen keeps changing (also the first backoff step). */
 export const GLANCE_REFRESH_MS = 1000
@@ -56,9 +57,8 @@ function countersFor(ptyId: string): GlanceTailCounters {
 // from a blank `screen` and waits on a fresh main-process round trip, so a
 // card that was already showing content goes blank for a frame or more right
 // at the switch — the reported "text disappears" at the live/glance zoom
-// threshold. Keyed across mounts so the last real screen is shown instantly
-// while a fresh snapshot is in flight.
-const lastKnownScreens = new Map<string, ConsoleScreen>()
+// threshold. Keyed across mounts (console-screen-cache.ts) so the last real
+// screen is shown instantly while a fresh snapshot is in flight.
 
 let lastBoardMotionAt = 0
 let boardMotionTracked = false
@@ -105,7 +105,7 @@ function trackBoardMotion(): void {
  */
 export function useConsoleOutputTail(ptyId: string | null, enabled: boolean): ConsoleScreen | null {
   const [screen, setScreen] = useState<ConsoleScreen | null>(() =>
-    ptyId ? lastKnownScreens.get(ptyId) ?? null : null
+    ptyId ? lastConsoleScreen(ptyId) : null
   )
   // Why refs: the parser and the last-seen keys survive enable/disable flips
   // (a card scrolled off and back on screen) so no xterm is rebuilt and no
@@ -218,7 +218,7 @@ export function useConsoleOutputTail(ptyId: string | null, enabled: boolean): Co
               return
             }
             const key = screenKey(next)
-            lastKnownScreens.set(ptyId, next)
+            rememberConsoleScreen(ptyId, next)
             if (key !== lastScreenKeyRef.current) {
               lastScreenKeyRef.current = key
               setScreen(next)

@@ -1,4 +1,5 @@
 import type {
+  AdamLookingAt,
   JarvisAskResult,
   JarvisConversationPhase,
   JarvisSpeakOutcome
@@ -34,8 +35,10 @@ export type JarvisServiceDeps = {
   store: JarvisSettingsStore
   broadcast: JarvisBroadcastPort
   shortcut: JarvisShortcutPort
-  askAgent?: (utterance: string) => Promise<JarvisAskResult>
+  askAgent?: (utterance: string, lookingAt: AdamLookingAt | null) => Promise<JarvisAskResult>
   cancelAgent?: () => void
+  /** The project last reported on screen; used for wake-word turns, which start in main. */
+  lookingAt?: () => AdamLookingAt | null
   fetchFn?: typeof fetch
   speakQueue?: (text: string) => Promise<SpeakOutcome>
   /** Injectable for tests — real spawns a Python/afplay subprocess. */
@@ -103,7 +106,10 @@ export class JarvisService {
   }
 
   /** Asks ADAM; speaks the reply. Never throws — failures come back as results. */
-  async ask(utteranceRaw: string): Promise<JarvisAskResult> {
+  async ask(
+    utteranceRaw: string,
+    lookingAt: AdamLookingAt | null = null
+  ): Promise<JarvisAskResult> {
     const utterance = typeof utteranceRaw === 'string' ? utteranceRaw.trim() : ''
     if (!utterance) {
       return { kind: 'error', text: 'No speech detected' }
@@ -116,7 +122,7 @@ export class JarvisService {
     let result: JarvisAskResult
     try {
       result = this.deps.askAgent
-        ? await this.deps.askAgent(utterance)
+        ? await this.deps.askAgent(utterance, lookingAt)
         : await askAdam({
             settingsEndpoint: this.deps.store.getSettings().voice?.adamEndpoint,
             utterance,
@@ -185,7 +191,7 @@ export class JarvisService {
     }
     const utterance = this.wakeMatcher.feed(transcript)
     if (utterance) {
-      void this.ask(utterance).catch(() => undefined)
+      void this.ask(utterance, this.deps.lookingAt?.() ?? null).catch(() => undefined)
     }
   }
 

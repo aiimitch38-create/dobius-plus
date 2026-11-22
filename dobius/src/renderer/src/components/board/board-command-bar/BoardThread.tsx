@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Folder, Globe, MessageSquareText } from 'lucide-react'
+import { Folder, Globe, MessageSquareText, Mic } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { formatPrCommentRelativeTime } from '@/lib/pr-comment-time'
@@ -22,6 +22,8 @@ export type BoardThreadMessage = {
   tone?: 'error'
   /** A finished-agent reply rendered as a compact report row with a "See output" viewer. */
   report?: BoardThreadReport
+  /** Said out loud (Carson's spoken words, or ADAM's reply to them); shown with a mic. */
+  voice?: boolean
   /** Never persisted — a mid-turn "thinking" placeholder or other UI-only row. */
   transient?: boolean
 }
@@ -128,9 +130,17 @@ export function BoardThread({
                     message.role === 'assistant' && 'self-start',
                     message.role === 'system' &&
                       'self-center text-[12px] text-[var(--board-text-muted)]',
-                    message.tone === 'error' && 'text-[var(--board-danger-text)]'
+                    message.tone === 'error' && 'text-[var(--board-danger-text)]',
+                    message.transient && 'animate-pulse text-[var(--board-text-muted)]'
                   )}
+                  role={message.transient ? 'status' : undefined}
                 >
+                  {message.voice ? (
+                    <Mic
+                      aria-label={translate('board.thread.spoken', 'Spoken')}
+                      className="mr-1.5 inline size-3 align-[-1px] text-[var(--board-text-muted)]"
+                    />
+                  ) : null}
                   {message.text}
                   {message.action ? (
                     <button

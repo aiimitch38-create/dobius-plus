@@ -71,6 +71,9 @@ import type {
   WorkspaceSessionState
 } from '../shared/types'
 import { normalizeWhatsNewState, raiseWhatsNewSeen, readWhatsNewSeen } from '../shared/whats-new'
+import type { SnoozedTabEntry } from '../shared/tab-snooze-types'
+import { cleanSnoozedTabEntries } from '../shared/tab-snooze-types'
+import { discardSnoozedTabsForWorktree } from './tab-snooze-active'
 import {
   deriveGlobalWindowsRuntimeDefaultFromLegacySettings,
   normalizeProjectRuntimePreference
@@ -3298,6 +3301,7 @@ export class Store {
           ),
           // Why: disk input is untrusted; a malformed record is dropped.
           whatsNew: normalizeWhatsNewState(parsed.whatsNew),
+          snoozedTabs: cleanSnoozedTabEntries(parsed.snoozedTabs),
           projectGroups: normalizedProjectGroups,
           folderWorkspaces: normalizeFolderWorkspaces(
             parsed.folderWorkspaces,
@@ -5061,6 +5065,10 @@ export class Store {
   }
 
   removeWorktreeMeta(worktreeId: string): void {
+    // Why here: every definitive worktree removal (IPC and runtime) ends in
+    // this call, and tabs snoozed in a worktree that no longer exists could
+    // only resurface in a different one recreated at the same path.
+    discardSnoozedTabsForWorktree(worktreeId)
     delete this.state.worktreeMeta[worktreeId]
     delete this.state.worktreeLineageById[worktreeId]
     delete this.state.workspaceLineageByChildKey[worktreeWorkspaceKey(worktreeId)]
@@ -5720,6 +5728,16 @@ export class Store {
       return
     }
     this.state.whatsNew = { seen: next }
+    this.scheduleSave()
+  }
+
+  /** Main-owned list of snoozed tabs (main/tab-snooze.ts cleans every read). */
+  getSnoozedTabs(): SnoozedTabEntry[] {
+    return this.state.snoozedTabs ?? []
+  }
+
+  setSnoozedTabs(entries: SnoozedTabEntry[]): void {
+    this.state.snoozedTabs = entries
     this.scheduleSave()
   }
 

@@ -19548,6 +19548,25 @@ export class DobiusRuntimeService {
     }
   }
 
+  /**
+   * True when this handle's terminal is a Cursor Agent, by the same titles the
+   * push-on-idle delivery checks. Why: Cursor treats injected text as editable
+   * prompt input, so automated senders must leave submitting it to the user.
+   */
+  isCursorAgentTerminal(handle: string): boolean {
+    const record = this.handles.get(handle)
+    if (!record) {
+      return false
+    }
+    if (record.tabId.startsWith('pty:')) {
+      const pty = record.ptyId ? this.ptysById.get(record.ptyId) : undefined
+      // Why every source, like push-on-idle: a renamed tab must not hide Cursor's OSC title.
+      return pty ? [pty.lastOscTitle, pty.title].some(isCursorAgentTitle) : false
+    }
+    const leaf = this.leaves.get(this.getLeafKey(record.tabId, record.leafId))
+    return leaf ? isCursorAgentOrchestrationTarget(leaf, this.tabs.get(leaf.tabId)?.title) : false
+  }
+
   /** The pane a tab currently shows as focused; null when the renderer graph has no such tab. */
   getTerminalTabActiveLeafId(tabId: string): string | null {
     return this.tabs.get(tabId)?.activeLeafId ?? null

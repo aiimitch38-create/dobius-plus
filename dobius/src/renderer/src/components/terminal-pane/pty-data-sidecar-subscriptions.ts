@@ -1,5 +1,7 @@
 import { ensurePtyDispatcher, ptyDataSidecars } from './pty-dispatcher'
 
+export { subscribeToPtyExit } from './pty-dispatcher'
+
 /** Register a side-channel data watcher for a PTY without taking ownership
  *  of the primary handler. Returns an unsubscribe fn. */
 export function subscribeToPtyData(ptyId: string, watcher: (data: string) => void): () => void {

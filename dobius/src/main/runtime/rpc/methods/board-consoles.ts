@@ -18,8 +18,8 @@ import {
 import type { RuntimeBoardSpawnConsoleEvent } from '../../../../shared/runtime-client-events'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import type { TuiAgent } from '../../../../shared/types'
-import type { RuntimeTerminalSummary } from '../../../../shared/runtime-types'
 import { BoardConsoleError } from '../../../../shared/board-console-errors'
+import { pickConsoleTerminal } from '../../../../shared/board-orchestrator-relay'
 import type { DobiusRuntimeService } from '../../dobius-runtime'
 import { defineMethod, type RpcMethod } from '../core'
 
@@ -83,6 +83,9 @@ export type SpawnBoardConsoleResult = {
 }
 
 const ListBoardConsolesParams = z.object({ worktree: WorktreeSelector })
+const ResolveTabParams = z.object({
+  tabId: z.string().trim().min(1, 'Missing tab id').max(MAX_TITLE_CHARS, 'tab id is too long')
+})
 const ResolveBoardConsoleParams = z.object({
   worktree: WorktreeSelector,
   card: z.string().trim().min(1, 'Missing card name').max(MAX_TITLE_CHARS, 'card name is too long')
@@ -177,31 +180,8 @@ export async function listBoardConsoleRows(
   })
 }
 
-type ConsoleTerminal = Pick<RuntimeTerminalSummary, 'handle' | 'leafId' | 'connected' | 'ptyId'>
-const isLiveTerminal = (t: ConsoleTerminal): boolean => t.connected && t.ptyId !== null
-
-/**
- * Chooses which pane of a console card's tab is "the console". One live pane is
- * unambiguous. With several live panes only the tab's focused pane counts; if
- * that is not known the card is reported as unclear rather than guessed at.
- */
-export function pickConsoleTerminal<T extends ConsoleTerminal>(
-  inTab: T[],
-  activeLeafId: string | null
-): { terminal: T | null; running: boolean; paneUnclear: boolean } {
-  const live = inTab.filter(isLiveTerminal)
-  if (live.length === 0) {
-    const shown = inTab.find((t) => t.leafId === activeLeafId) ?? inTab[0] ?? null
-    return { terminal: shown, running: false, paneUnclear: false }
-  }
-  if (live.length === 1) {
-    return { terminal: live[0], running: true, paneUnclear: false }
-  }
-  const focused = live.find((t) => t.leafId === activeLeafId)
-  return focused
-    ? { terminal: focused, running: true, paneUnclear: false }
-    : { terminal: null, running: true, paneUnclear: true }
-}
+// Why shared: the board:<orchestrator> relay picks each wired console's pane the same way.
+export { pickConsoleTerminal } from '../../../../shared/board-orchestrator-relay'
 
 const quoted = (values: string[]): string => values.map((v) => `"${v}"`).join(', ')
 
@@ -249,6 +229,41 @@ export function resolveBoardConsole(
     )
   }
   return { ...row, handle: row.handle }
+}
+
+/**
+ * The one running terminal in a tab, for `tab:<tabId>` addresses. Same pane
+ * rule as a console card (one live pane, or the focused one of several).
+ * Why it throws: an unknown, closed or stopped tab must never fall back to
+ * another terminal.
+ */
+export async function resolveTabTerminal(
+  runtime: DobiusRuntimeService,
+  tabId: string
+): Promise<{ handle: string; tabId: string; worktreeId: string }> {
+  const { terminals } = await runtime.listTerminals(undefined, BOARD_TERMINAL_LIST_LIMIT)
+  // Why: originTabId keeps the tab link while terminals are listed from PTY records.
+  const inTab = terminals.filter((t) => t.tabId === tabId || t.originTabId === tabId)
+  if (inTab.length === 0) {
+    throw new BoardConsoleError(
+      'terminal_tab_not_found',
+      `no terminal tab "${tabId}" is open. It may have been closed or restarted; run \`dobius terminal list\` or use card:<card id> for a Board console.`
+    )
+  }
+  const picked = pickConsoleTerminal(inTab, runtime.getTerminalTabActiveLeafId(tabId))
+  if (picked.paneUnclear) {
+    throw new BoardConsoleError(
+      'terminal_tab_pane_unclear',
+      `tab "${tabId}" has several running panes and none is the focused one. Use the pane's terminal handle instead.`
+    )
+  }
+  if (!picked.running || !picked.terminal) {
+    throw new BoardConsoleError(
+      'terminal_tab_not_running',
+      `tab "${tabId}" has no running terminal. Restart it, then send again.`
+    )
+  }
+  return { handle: picked.terminal.handle, tabId, worktreeId: picked.terminal.worktreeId }
 }
 
 function readPromptFile(path: string): string {
@@ -338,6 +353,11 @@ export const BOARD_CONSOLE_METHODS: RpcMethod[] = [
     params: ListBoardConsolesParams,
     handler: (params, { runtime }): Promise<BoardConsoleRow[]> =>
       listBoardConsoleRows(runtime, params.worktree)
+  }),
+  defineMethod({
+    name: 'terminal.resolveTab',
+    params: ResolveTabParams,
+    handler: (params, { runtime }) => resolveTabTerminal(runtime, params.tabId)
   }),
   defineMethod({
     name: 'board.resolveConsole',

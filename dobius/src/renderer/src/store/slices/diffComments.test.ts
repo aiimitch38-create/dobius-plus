@@ -142,6 +142,7 @@ import { createPullRequestGenerationSlice } from './pull-request-generation'
 import { createCommitMessageGenerationSlice } from './commit-message-generation'
 import { createPinnedTabCloseConfirmSlice } from './pinned-tab-close-confirm'
 import { createBoardSlice } from './board'
+import { createTabSnoozeSlice } from './tab-snooze'
 
 function createTestStore() {
   return create<AppState>()((...a) => ({
@@ -179,7 +180,8 @@ function createTestStore() {
     ...createPullRequestGenerationSlice(...a),
     ...createCommitMessageGenerationSlice(...a),
     ...createPinnedTabCloseConfirmSlice(...a),
-    ...createBoardSlice(...a)
+    ...createBoardSlice(...a),
+    ...createTabSnoozeSlice(...a)
   }))
 }
 
