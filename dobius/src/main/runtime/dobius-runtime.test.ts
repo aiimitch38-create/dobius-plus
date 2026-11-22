@@ -22188,6 +22188,69 @@ describe('DobiusRuntimeService', () => {
     expect(spawn).not.toHaveBeenCalled()
   })
 
+  it('re-checks Pause crew right before a gated terminal spawns', async () => {
+    const metaById: Record<string, WorktreeMeta> = {}
+    const runtimeStore = {
+      ...store,
+      getSettings: () => ({ ...store.getSettings(), agentCmdOverrides: {} }),
+      getAllWorktreeMeta: () => metaById,
+      getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
+      setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
+        metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
+        return metaById[worktreeId]
+      }
+    }
+    const runtime = new DobiusRuntimeService(runtimeStore as never)
+    const spawn = vi.fn().mockResolvedValue({ id: 'pty-gated-terminal' })
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    runtime.setNotifier({
+      worktreesChanged: vi.fn(),
+      reposChanged: vi.fn(),
+      activateWorktree: vi.fn(),
+      createTerminal: vi.fn(),
+      revealTerminalSession: vi.fn().mockResolvedValue({ tabId: 'tab-gated-terminal' }),
+      splitTerminal: vi.fn(),
+      renameTerminal: vi.fn(),
+      focusTerminal: vi.fn(),
+      closeTerminal: vi.fn(),
+      sleepWorktree: vi.fn(),
+      terminalFitOverrideChanged: vi.fn(),
+      terminalDriverChanged: vi.fn()
+    })
+    runtime.attachWindow(1)
+    computeWorktreePathMock.mockReturnValue('/tmp/workspaces/runtime-gated-terminal')
+    ensurePathWithinWorkspaceMock.mockReturnValue('/tmp/workspaces/runtime-gated-terminal')
+    vi.mocked(listWorktrees).mockResolvedValue([
+      {
+        path: '/tmp/workspaces/runtime-gated-terminal',
+        head: 'def',
+        branch: 'runtime-gated-terminal',
+        isBare: false,
+        isMainWorktree: false
+      }
+    ])
+    executionGateState.paused = false
+    const created = await runtime.createManagedWorktree({
+      repoSelector: TEST_REPO_ID,
+      name: 'runtime-gated-terminal'
+    })
+    spawn.mockClear()
+    executionGateState.paused = true
+    await expect(
+      runtime.createTerminal(`id:${created.worktree.id}`, {
+        command: 'claude',
+        executionOrigin: 'bug-report'
+      })
+    ).rejects.toThrow(/Crew is paused/)
+    expect(spawn).not.toHaveBeenCalled()
+    executionGateState.paused = false
+  })
+
   it('launches explicit startup agents with prompts for CLI-created worktrees', async () => {
     const metaById: Record<string, WorktreeMeta> = {}
     const runtimeStore = {

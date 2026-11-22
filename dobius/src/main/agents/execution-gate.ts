@@ -11,6 +11,19 @@ export type ExecutionOrigin =
 
 export type ExecutionBlockReason = 'paused' | 'control-state-unreadable'
 
+// Why: on quit, an origin's work already awaiting a worktree must not spawn
+// its agent; the runtime re-checks this gate right before every gated spawn.
+const blockedOrigins = new Set<ExecutionOrigin>()
+
+export function blockExecutionOrigin(origin: ExecutionOrigin): void {
+  blockedOrigins.add(origin)
+}
+
+/** Test seam. */
+export function unblockExecutionOriginForTest(origin: ExecutionOrigin): void {
+  blockedOrigins.delete(origin)
+}
+
 export type ExecutionAdmission =
   | { allowed: true }
   | { allowed: false; reason: ExecutionBlockReason; message: string }
@@ -35,6 +48,15 @@ export class ExecutionBlockedError extends Error {
 export function checkExecutionAdmission(origin: ExecutionOrigin): ExecutionAdmission {
   if (origin === 'agents-page') {
     return { allowed: true }
+  }
+  if (blockedOrigins.has(origin)) {
+    return {
+      allowed: false,
+      // Why 'paused': quitting is a crew-wide stop for this origin, and the
+      // reason set is shared with surfaces that only know paused/unreadable.
+      reason: 'paused',
+      message: 'Dobius+ is quitting, so no new agent is started.'
+    }
   }
   let state: ReturnType<typeof getAgentsControlState>
   try {

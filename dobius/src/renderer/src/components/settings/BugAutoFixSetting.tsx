@@ -4,7 +4,7 @@ import { SearchableSetting } from './SearchableSetting'
 
 const TITLE = 'Fix reported bugs automatically'
 const DESCRIPTION =
-  'When you report a bug on the Kanban, one fixing agent starts in its own workspace. It checks its fix with typecheck and tests and commits on its own branch for you to review. It never installs or pushes. At most 2 run at once, one per bug, and none start while the crew is paused. On by default. Each fix uses your agent plan; there is no dollar cap per fix.'
+  'When you report a bug on the Kanban, one fixing agent starts in its own workspace. It checks its fix with typecheck and tests and commits on its own branch for you to review. It always runs Claude with pushing, installing and deleting blocked, and asks you in its console before any other command. At most 2 run at once, one per bug, and none start while the crew is paused. On by default. Each fix uses your agent plan; there is no dollar cap per fix.'
 
 type Props = {
   settings: GlobalSettings

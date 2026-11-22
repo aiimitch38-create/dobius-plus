@@ -8,7 +8,7 @@
  * false rather than throwing, so a malformed renderer call degrades to "that
  * did not happen" instead of an unhandled rejection in the main process. */
 
-import { BrowserWindow, ipcMain, webContents } from 'electron'
+import { BrowserWindow, ipcMain, webContents, type IpcMainInvokeEvent } from 'electron'
 
 import { reloadVertexTasksFromDisk, vertexTaskStore } from '../vertex/vertex-task-store'
 import {
@@ -17,6 +17,7 @@ import {
 } from '../vertex/vertex-task-attachments'
 import { withClaimingWindow, withLostClaimCheck } from '../vertex/vertex-dispatch-recovery'
 import { onVertexTaskCreated } from '../vertex/bug-autofix'
+import { isRegisteredRendererWebContents } from '../window/renderer-window-registry'
 import {
   isVertexTaskStatus,
   type VertexTask,
@@ -31,6 +32,21 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
+// Why: only the top frame of a registered app window is the operator. A
+// webview guest or subframe must not be able to file a card that main then
+// treats as operator-filed (bug auto-fix starts an agent for those).
+function isOperatorSender(event: IpcMainInvokeEvent): boolean {
+  const sender = event.sender
+  if (typeof sender?.isDestroyed !== 'function' || sender.isDestroyed()) {
+    return false
+  }
+  if (!isRegisteredRendererWebContents(sender)) {
+    return false
+  }
+  const frame = event.senderFrame
+  return frame != null && frame.parent === null
+}
+
 export function registerVertexTaskHandlers(): void {
   ipcMain.removeHandler('vertexTasks:list')
   ipcMain.handle('vertexTasks:list', async (): Promise<VertexTask[]> => vertexTaskStore.list())
@@ -41,14 +57,23 @@ export function registerVertexTaskHandlers(): void {
   ipcMain.removeHandler('vertexTasks:create')
   ipcMain.handle(
     'vertexTasks:create',
-    async (_event, input: VertexTaskInput): Promise<VertexTask | null> => {
+    async (event, input: VertexTaskInput): Promise<VertexTask | null> => {
       if (!input || !isNonEmptyString(input.title)) {
         return null
       }
+      if (!isOperatorSender(event)) {
+        console.warn('[vertex-tasks] create refused: not a first-party app window')
+        return null
+      }
       try {
-        const task = vertexTaskStore.create(input)
-        // Why only here: this is the operator's create path; agent and CLI
-        // cards never start a fix agent (see bug-autofix.ts).
+        const created = vertexTaskStore.create(input)
+        // Why a second write: provenance is main's own stamp; the create input
+        // has no field for it, so no caller can supply it.
+        const task =
+          vertexTaskStore.update(created.id, {
+            provenance: { channel: 'operator-ui', at: created.createdAt },
+          }) ?? created
+        // Why only here: agent and CLI cards never start a fix agent.
         onVertexTaskCreated(task)
         return task
       } catch (error) {
@@ -72,6 +97,7 @@ export function registerVertexTaskHandlers(): void {
       delete args.patch.attachments
       // Why: autoFix is main's "already started" mark; a renderer must not clear it.
       delete args.patch.autoFix
+      delete args.patch.provenance
       return withClaimingWindow(event.sender.id, () =>
         vertexTaskStore.update(args.taskId, args.patch),
       )

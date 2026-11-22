@@ -973,6 +973,8 @@ type RuntimePtyWorktreeRecord = {
 
 type TerminalCreateOptions = {
   command?: string
+  /** Autonomous launches: Pause crew is re-checked right before the PTY spawns. */
+  executionOrigin?: ExecutionOrigin
   claudeAgentTeamsSourceCommand?: string
   cwd?: string
   env?: Record<string, string>
@@ -13052,6 +13054,7 @@ export class DobiusRuntimeService {
           }
           this.assertAgentSpawnAdmitted(args.executionOrigin, worktree.path)
           const terminal = await this.createTerminal(`id:${worktree.id}`, {
+            executionOrigin: args.executionOrigin,
             command: effectiveStartup.command,
             env: effectiveStartup.env,
             ...(effectiveStartup.launchConfig
@@ -13739,6 +13742,7 @@ export class DobiusRuntimeService {
         }
         this.assertAgentSpawnAdmitted(args.executionOrigin, worktreePath)
         const terminal = await this.createTerminal(`id:${worktree.id}`, {
+          executionOrigin: args.executionOrigin,
           command: sequencedStartup.command,
           ...(setup && effectiveStartup
             ? { claudeAgentTeamsSourceCommand: effectiveStartup.command }
@@ -15923,6 +15927,8 @@ export class DobiusRuntimeService {
         tabId,
         agentTeamsPlan?.env
       )
+      // Why here: the launch prep above awaits; a pause during it must still win.
+      this.assertAgentSpawnAdmitted(opts.executionOrigin, workspace.path)
       const result = await this.ptyController.spawn({
         cols: 120,
         rows: 40,

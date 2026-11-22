@@ -143,6 +143,7 @@ import { ClaudeRuntimeAuthService } from './claude-accounts/runtime-auth-service
 import { StarNagService } from './star-nag/service'
 import { startImessageBridge, stopImessageBridge } from './imessage-bridge/bridge-service'
 import { startDobiusCli, stopDobiusCli } from './dobius-cli/dispatch-server'
+import { shutdownBugAutoFix } from './vertex/bug-autofix-wiring'
 import { bootLeadsFromAutostart } from './runtime/rpc/methods/leads'
 import { syncVoiceConductorFromSettings } from './voice-conductor/service'
 import { registerPromptsHandlers } from './ipc/prompts'
@@ -2376,6 +2377,7 @@ app.on('will-quit', (e) => {
   starNag?.stop()
   stopImessageBridge()
   stopDobiusCli()
+  shutdownBugAutoFix()
   automations?.stop()
   setUnreadDockBadgeCount(0)
   agentHookServer.stop()

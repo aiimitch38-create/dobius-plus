@@ -21,6 +21,8 @@ function label(autoFix: VertexTaskAutoFix): string {
             branch: autoFix.branch
           })
         : translate('kanban.autoFix.dispatched', 'Fix agent dispatched')
+    case 'ended':
+      return translate('kanban.autoFix.ended', 'Fix agent stopped running; review its branch')
     case 'skipped':
       return translate('kanban.autoFix.skipped', 'Auto-fix skipped: {{reason}}', {
         reason: autoFix.reason ?? ''
@@ -44,7 +46,8 @@ export function openAutoFixConsole(worktreeId: string): void {
 
 /** Outside the card's main button: a button may not sit inside another. */
 export function BugAutoFixMarker({ autoFix }: { autoFix: VertexTaskAutoFix }): React.JSX.Element {
-  const worktreeId = autoFix.status === 'dispatched' ? autoFix.worktreeId : undefined
+  const worktreeId =
+    autoFix.status === 'dispatched' || autoFix.status === 'ended' ? autoFix.worktreeId : undefined
   return (
     <div
       data-testid="kanban-card-autofix"
