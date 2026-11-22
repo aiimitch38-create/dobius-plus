@@ -43,3 +43,4 @@ NOT tonight, needs Carson: install, live voice test call, the OpenAI key, the He
 - Bug button agent stopped at Carson's request (existing button is enough)
 - 1.8 Primer: Codex round 2 fixes in progress
 - 1.5 Chat improvements merged (32155645): fold older turns, blue user box, type an answer to a card, open pasted images, transcripts stay on. To check live: does picking a card option pick the right one?
+- 1.8 Pre-Flight Primer merged (3121d8d2): every new terminal tab's brief carries git, other tabs, lesson headings, MCP names, spend
