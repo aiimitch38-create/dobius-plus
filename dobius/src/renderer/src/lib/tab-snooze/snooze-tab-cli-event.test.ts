@@ -68,6 +68,17 @@ describe('handleTabSnoozeCliEvent', () => {
     expect(await handleTabSnoozeCliEvent(event({ force: true }), h.deps)).toMatchObject({ ok: true })
   })
 
+  it('refuses a second snooze of the same tab while the first is saving', async () => {
+    const h = harness(false)
+    const [first, second] = await Promise.all([
+      handleTabSnoozeCliEvent(event(), h.deps),
+      handleTabSnoozeCliEvent(event(), h.deps)
+    ])
+    expect(first).toMatchObject({ ok: true })
+    expect(second).toMatchObject({ ok: false, code: 'tab_snooze_refused' })
+    expect(h.requests).toHaveLength(1)
+  })
+
   it('reports an unknown tab and acts once per requestId', async () => {
     const h = harness(false)
     expect(await handleTabSnoozeCliEvent(event({ tabId: 'nope' }), h.deps)).toMatchObject({ ok: false, code: 'tab_not_found' })

@@ -26,6 +26,7 @@ const OUTCOME_TEXT: Partial<Record<SnoozeTabOutcome, [code: string, message: str
 
 const HANDLED_LIMIT = 256
 const handled = new Set<string>()
+const snoozing = new Set<string>()
 
 function firstTime(requestId: string): boolean {
   if (handled.has(requestId)) {
@@ -58,6 +59,21 @@ export async function handleTabSnoozeCliEvent(
   if (!firstTime(requestId)) {
     return { requestId, ok: false, code: 'tab_snooze_refused', message: 'This request was already handled.' }
   }
+  // Why: two requests for one tab would both save it; the second then finds
+  // the tab closed and discards the entry the first just saved.
+  if (snoozing.has(tabId)) {
+    return { requestId, ok: false, code: 'tab_snooze_refused', message: 'That tab is already being snoozed.' }
+  }
+  snoozing.add(tabId)
+  try {
+    return await snoozeOne(event, deps)
+  } finally {
+    snoozing.delete(tabId)
+  }
+}
+
+async function snoozeOne(event: TabSnoozeCliRequest, deps: SnoozeTabDeps): Promise<TabSnoozeCliReply> {
+  const { requestId, tabId } = event
   const worktreeId = worktreeOfTab(deps.getState(), tabId)
   const until = typeof event.until === 'number' && Number.isFinite(event.until) ? event.until : null
   // Why a no-op confirm: a CLI caller must never open a dialog on Carson's screen.
@@ -84,4 +100,5 @@ export async function handleTabSnoozeCliEvent(
 
 export function resetTabSnoozeCliHandlerForTest(): void {
   handled.clear()
+  snoozing.clear()
 }
