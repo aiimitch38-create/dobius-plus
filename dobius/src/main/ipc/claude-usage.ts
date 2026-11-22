@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { setUsageStoreForRuntime } from './usage-access'
 import type { ClaudeUsageStore } from '../claude-usage/store'
 import type {
   ClaudeUsageBreakdownKind,
@@ -7,6 +8,7 @@ import type {
 } from '../../shared/claude-usage-types'
 
 export function registerClaudeUsageHandlers(claudeUsage: ClaudeUsageStore): void {
+  setUsageStoreForRuntime('claude', claudeUsage)
   ipcMain.handle('claudeUsage:getScanState', () => claudeUsage.getScanState())
   ipcMain.handle('claudeUsage:setEnabled', (_event, args: { enabled: boolean }) =>
     claudeUsage.setEnabled(args.enabled)

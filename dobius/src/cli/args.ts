@@ -45,6 +45,7 @@ export const BOOLEAN_FLAGS = new Set([
   'provision',
   'ready',
   'recipe-json',
+  'refresh',
   'request-stdin',
   'relations',
   'reinstall',
@@ -149,7 +150,15 @@ export function supportsBrowserPageFlag(commandPath: string[]): boolean {
       'linear',
       'git',
       'pr',
-      'adam'
+      'adam',
+      'knowledge',
+      'imessage',
+      'update',
+      'backup',
+      'usage',
+      'limits',
+      'version',
+      'feedback'
     ].includes(commandPath[0])
   ) {
     return false
@@ -197,7 +206,11 @@ export function isCommandGroup(commandPath: string[]): boolean {
         'crew',
         'git',
         'pr',
-        'adam'
+        'adam',
+        'knowledge',
+        'imessage',
+        'update',
+        'backup'
       ].includes(commandPath[0])) ||
     (commandPath.length === 2 && commandPath[0] === 'agent' && commandPath[1] === 'hooks') ||
     (commandPath.length === 2 &&

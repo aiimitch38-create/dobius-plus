@@ -450,7 +450,9 @@ const CONFIRMATION_GATED_METHODS = new Set([
   'crew.draftApprove',
   'crew.decide',
   'agentApprovals.grant',
-  'adam.ask'
+  'adam.ask',
+  'backup.run',
+  'feedback.submit'
 ])
 
 export class DobiusRuntimeRpcServer {

@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { setUsageStoreForRuntime } from './usage-access'
 import type { CodexUsageStore } from '../codex-usage/store'
 import type {
   CodexUsageBreakdownKind,
@@ -7,6 +8,7 @@ import type {
 } from '../../shared/codex-usage-types'
 
 export function registerCodexUsageHandlers(codexUsage: CodexUsageStore): void {
+  setUsageStoreForRuntime('codex', codexUsage)
   ipcMain.handle('codexUsage:getScanState', () => codexUsage.getScanState())
   ipcMain.handle('codexUsage:setEnabled', (_event, args: { enabled: boolean }) =>
     codexUsage.setEnabled(args.enabled)

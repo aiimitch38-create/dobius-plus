@@ -1,10 +1,12 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
-import { existsSync, lstatSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { isAbsolute, join } from 'node:path'
+import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { lstatSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Store } from '../persistence'
 import { writeSecureFile } from '../../shared/secure-file'
-import { CloudBackupController } from '../cloud-backup/controller'
+import {
+  cloudBackupBase,
+  installDesktopCloudBackupController
+} from '../cloud-backup/desktop-controller'
 
 let trustedRendererId: number | null = null
 export function setTrustedCloudBackupRenderer(id: number | null): void {
@@ -12,36 +14,8 @@ export function setTrustedCloudBackupRenderer(id: number | null): void {
 }
 
 export function registerCloudBackupHandlers(store: Store): void {
-  const mac = process.platform === 'darwin'
-  const base = mac
-    ? join(homedir(), 'Library', 'Application Support', 'Dobius Cloud Backup')
-    : '/opt/dobius-cloud-backup'
-  const scripts = app.isPackaged
-    ? join(process.resourcesPath, 'cloud-backup')
-    : join(app.getAppPath(), 'config', 'scripts', 'cloud-backup')
-  const python =
-    [
-      join(homedir(), 'homebrew', 'bin', 'python3'),
-      '/opt/homebrew/bin/python3',
-      '/usr/local/bin/python3',
-      '/usr/bin/python3'
-    ].find(existsSync) ?? 'python3'
-  const controller = new CloudBackupController({
-    base,
-    scripts,
-    python,
-    supported: mac || (process.platform === 'linux' && process.getuid?.() === 0),
-    sourcePaths: () =>
-      store
-        .getRepos()
-        .filter(
-          (repo) =>
-            !repo.connectionId && (!repo.executionHostId || repo.executionHostId === 'local')
-        )
-        .map((repo) => repo.path)
-        .filter(isAbsolute),
-    applicationDataPath: app.getPath('userData')
-  })
+  const base = cloudBackupBase()
+  const controller = installDesktopCloudBackupController(store)
   function trust(event: Electron.IpcMainInvokeEvent): void {
     if (
       event.sender.id !== trustedRendererId ||

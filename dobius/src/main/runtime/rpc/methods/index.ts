@@ -51,6 +51,7 @@ import { AGENT_CONTROL_METHODS } from './agent-control'
 import { CREW_METHODS } from './crew'
 import { LEAD_METHODS } from './leads'
 import { ADAM_METHODS } from './adam'
+import { APP_SERVICE_METHODS } from './app-services'
 // Communications-specific method groups. Not part of ALL_RPC_METHODS by
 // default until this pass — each backs a family of vendor/buzz-desktop
 // dispatch cases in dobiusCommunications.ts (see COMMUNICATIONS_RUNTIME_METHODS
@@ -126,6 +127,7 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...CREW_METHODS,
   ...LEAD_METHODS,
   ...ADAM_METHODS,
+  ...APP_SERVICE_METHODS,
   ...COMMUNICATIONS_AGENT_METHODS,
   ...IDENTITY_RPC_METHODS,
   ...HUDDLE_METHODS,
