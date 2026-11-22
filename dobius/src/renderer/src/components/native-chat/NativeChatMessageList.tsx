@@ -71,7 +71,7 @@ function ImageAttachmentRefs({ blocks }: { blocks: NativeChatBlock[] }): React.J
               key={`${label}-${index}`}
               type="button"
               onClick={() => {
-                window.api.shell.openFilePath(pastedPath).catch((error: unknown) => {
+                window.api.shell.openPastedImage(pastedPath).catch((error: unknown) => {
                   console.warn('[native-chat] could not open pasted image', error)
                 })
               }}

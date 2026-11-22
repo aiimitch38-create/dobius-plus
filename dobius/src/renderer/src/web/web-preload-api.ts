@@ -2599,6 +2599,7 @@ function createShellApi(): NonNullable<Partial<PreloadApi>['shell']> {
     openInExternalEditor: () => Promise.resolve(openResult),
     openUrl: (url) => Promise.resolve(window.open(url, '_blank', 'noopener,noreferrer') as never),
     openFilePath: () => Promise.resolve(false),
+    openPastedImage: () => Promise.resolve(false),
     openFileUri: (uri) =>
       Promise.resolve(window.open(uri, '_blank', 'noopener,noreferrer') as never),
     pathExists: async (path) => {

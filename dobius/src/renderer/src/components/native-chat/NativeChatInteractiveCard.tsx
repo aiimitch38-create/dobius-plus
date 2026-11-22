@@ -25,6 +25,9 @@ export type NativeChatVisibleCard = {
    *  sends are locked (mobile presence-lock). */
   card: InteractivePromptCard
   cardKey: string | null
+  /** The card was answered but the agent still reports the same prompt: its
+   *  answer may not have landed yet, so nothing else may be typed in. */
+  awaitingMoveOn: boolean
   /** Hide this card until a genuinely different prompt arrives. */
   dismiss: () => void
 }
@@ -55,8 +58,9 @@ export function useNativeChatVisibleCard(paneKey: string, canSend: boolean): Nat
   }, [present])
 
   const dismiss = useCallback(() => setDismissedKey(cardKey), [cardKey])
-  const card = !parsed || !canSend || cardKey === dismissedKey ? null : parsed
-  return { card, cardKey, dismiss }
+  const answered = parsed != null && cardKey === dismissedKey
+  const card = !parsed || !canSend || answered ? null : parsed
+  return { card, cardKey, awaitingMoveOn: answered, dismiss }
 }
 
 export function NativeChatInteractiveCard({

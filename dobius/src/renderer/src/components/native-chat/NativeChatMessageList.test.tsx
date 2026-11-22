@@ -92,8 +92,8 @@ describe('NativeChatMessageList pasted images', () => {
   })
 
   it('opens an image Dobius saved from a paste, and only that', () => {
-    const openFilePath = vi.fn(() => Promise.resolve(true))
-    vi.stubGlobal('api', { shell: { openFilePath } })
+    const openPastedImage = vi.fn(() => Promise.resolve(true))
+    vi.stubGlobal('api', { shell: { openPastedImage } })
     renderList([
       row('u1', 'user', [
         { type: 'image-ref', path: '/var/tmp/dobius-paste-1700000000000-abc.png' },
@@ -103,7 +103,7 @@ describe('NativeChatMessageList pasted images', () => {
     ])
 
     fireEvent.click(screen.getByRole('button', { name: 'Open pasted image' }))
-    expect(openFilePath).toHaveBeenCalledWith('/var/tmp/dobius-paste-1700000000000-abc.png')
+    expect(openPastedImage).toHaveBeenCalledWith('/var/tmp/dobius-paste-1700000000000-abc.png')
     expect(screen.getAllByRole('button', { name: 'Open pasted image' })).toHaveLength(1)
     expect(screen.getByText('secret.sh').closest('button')).toBeNull()
   })

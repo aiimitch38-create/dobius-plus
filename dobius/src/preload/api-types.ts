@@ -2344,6 +2344,8 @@ export type PreloadApi = {
     openInExternalEditor: (path: string, command?: string) => Promise<ShellOpenLocalPathResult>
     openUrl: (url: string) => Promise<void>
     openFilePath: (path: string) => Promise<boolean>
+    /** Opens an image Dobius saved from a paste; refuses any other path. */
+    openPastedImage: (path: string) => Promise<boolean>
     openFileUri: (uri: string) => Promise<void>
     pathExists: (path: string) => Promise<boolean>
     pickAttachment: () => Promise<string | null>

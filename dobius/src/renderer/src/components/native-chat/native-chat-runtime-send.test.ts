@@ -227,3 +227,31 @@ describe('sendNativeChatAnswer', () => {
     ])
   })
 })
+
+describe('answer completion (onDone)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    sendRuntimePtyInput.mockClear()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('reports done only after the last Enter is written', () => {
+    const done = vi.fn(() => {
+      expect(sendRuntimePtyInput).toHaveBeenLastCalledWith(SETTINGS, PTY, NATIVE_CHAT_SUBMIT)
+    })
+    sendNativeChatAnswer(SETTINGS, PTY, ['a', 'b', 'c'], done)
+    vi.advanceTimersByTime(nativeChatQuestionOffsets(2).enterAt - 1)
+    expect(done).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(done).toHaveBeenCalledTimes(1)
+  })
+
+  it('never reports done for a cancelled answer', () => {
+    const done = vi.fn()
+    sendNativeChatMessage(SETTINGS, PTY, 'one line', done).cancel()
+    vi.advanceTimersByTime(NATIVE_CHAT_SUBMIT_DELAY_MS * 2)
+    expect(done).not.toHaveBeenCalled()
+  })
+})

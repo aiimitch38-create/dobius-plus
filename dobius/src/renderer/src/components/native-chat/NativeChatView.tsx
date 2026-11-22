@@ -179,7 +179,7 @@ function NativeChatResolvedView({
   // stop (Stop sends ESC, the agent-TUI interrupt key).
   const interactiveSend = useNativeChatInteractiveSend(terminalTabId, targetPtyId, agent)
   const visibleCard = useNativeChatVisibleCard(paneKey, canSend)
-  const { card: liveCard, dismiss: dismissLiveCard } = visibleCard
+  const { card: liveCard, awaitingMoveOn, dismiss: dismissLiveCard } = visibleCard
   // While a card is up the composer never pastes into the prompt: a
   // one-question card takes the words as its answer through the card's own
   // answer path; anything else keeps the draft (port of Line A #26).
@@ -191,7 +191,10 @@ function NativeChatResolvedView({
     }): NativeChatComposerIntercept | null => {
       const gate = gateNativeChatComposerSend({
         card: liveCard,
-        answering: interactiveSend.isAnswering(),
+        // Held until the agent moves past an answered card, not just until
+        // its bytes are written: an approval digit or answer may still be
+        // in flight to the TUI (over SSH too).
+        answering: awaitingMoveOn || interactiveSend.isAnswering(),
         ...draft
       })
       if (gate.kind === 'pass') {
@@ -205,7 +208,7 @@ function NativeChatResolvedView({
       interactiveSend.sendAnswer(draft.text.replace(/\s*\n\s*/g, ' ').trim())
       return { kind: 'answered' }
     },
-    [liveCard, dismissLiveCard, interactiveSend]
+    [liveCard, awaitingMoveOn, dismissLiveCard, interactiveSend]
   )
   const [workingInterrupted, setWorkingInterrupted] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)

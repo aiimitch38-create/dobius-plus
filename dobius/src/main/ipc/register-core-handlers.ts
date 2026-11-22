@@ -1,3 +1,4 @@
+import { registerPastedImageOpenHandler } from './pasted-image-open'
 import { SystemMonitorService } from '../system-monitor/service'
 import { defaultSystemMonitorStateDirectory } from '../system-monitor/state-directory'
 import type { ApplicationDataCatalog } from '../storage/data-catalog/application-catalog'
@@ -233,6 +234,7 @@ export function registerCoreHandlers(
   registerTelemetryHandlers(store)
   registerBrowserHandlers()
   registerShellHandlers()
+  registerPastedImageOpenHandler()
   registerPetHandlers()
   registerSessionHandlers(store)
   registerUIHandlers(store)

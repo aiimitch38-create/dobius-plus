@@ -2337,6 +2337,8 @@ const api = {
 
     openFilePath: (path: string): Promise<boolean> =>
       ipcRenderer.invoke('shell:openFilePath', path),
+    openPastedImage: (path: string): Promise<boolean> =>
+      ipcRenderer.invoke('shell:openPastedImage', path),
 
     openFileUri: (uri: string): Promise<void> => ipcRenderer.invoke('shell:openFileUri', uri),
 

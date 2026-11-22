@@ -4,11 +4,6 @@ import {
   gateNativeChatComposerSend,
   nativeChatCardComposerPlaceholder
 } from './native-chat-card-composer-gate'
-import { nativeChatAnswerDurationMs } from './use-native-chat-interactive-send'
-import {
-  NATIVE_CHAT_QUESTION_STEP_MS,
-  NATIVE_CHAT_SUBMIT_DELAY_MS
-} from './native-chat-runtime-send'
 
 // Adapted from Line A #26 (chat-service "own-words answers" and the ChatPane
 // send guard): while a card is up a composer send never pastes into the prompt.
@@ -89,10 +84,3 @@ describe('nativeChatCardComposerPlaceholder', () => {
   })
 })
 
-describe('nativeChatAnswerDurationMs', () => {
-  it('covers every scheduled write of the answer', () => {
-    expect(nativeChatAnswerDurationMs(1, true)).toBe(NATIVE_CHAT_SUBMIT_DELAY_MS)
-    expect(nativeChatAnswerDurationMs(3, true)).toBe(3 * NATIVE_CHAT_QUESTION_STEP_MS)
-    expect(nativeChatAnswerDurationMs(3, false)).toBe(NATIVE_CHAT_SUBMIT_DELAY_MS)
-  })
-})

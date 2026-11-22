@@ -73,6 +73,11 @@ describe('foldOlderNativeChatTurns', () => {
     expect(shape(segments).slice(-3)).toEqual(['u5', 'a6', 'pending:1'])
   })
 
+  it('does not treat the seeded launch prompt echo as a boundary', () => {
+    const segments = foldOlderNativeChatTurns([...rows, you('launch task', 'launch-pending:tab-1')])
+    expect(shape(segments).slice(-3)).toEqual(['u5', 'a6', 'launch-pending:tab-1'])
+  })
+
   it('does not treat a user-role tool result as a sent message', () => {
     const segments = foldOlderNativeChatTurns([
       ...rows,

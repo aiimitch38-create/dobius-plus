@@ -62,11 +62,14 @@ export type NativeChatSendHandle = { cancel: () => void }
 export function sendNativeChatMessage(
   settings: ReturnType<typeof getSettingsForAgentTabRuntimeOwner>,
   ptyId: string,
-  text: string
+  text: string,
+  /** Called right after the final Enter is written (never on cancel). */
+  onDone?: () => void
 ): NativeChatSendHandle {
   sendRuntimePtyInput(settings, ptyId, buildNativeChatPasteBytes(text))
   const timer = setTimeout(() => {
     sendRuntimePtyInput(settings, ptyId, NATIVE_CHAT_SUBMIT)
+    onDone?.()
   }, NATIVE_CHAT_SUBMIT_DELAY_MS)
   return { cancel: () => clearTimeout(timer) }
 }
@@ -133,10 +136,12 @@ export function submitNativeChatPrompt(
 export function sendNativeChatAnswer(
   settings: ReturnType<typeof getSettingsForAgentTabRuntimeOwner>,
   ptyId: string,
-  lines: string[]
+  lines: string[],
+  /** Called right after the last Enter is written (never on cancel). */
+  onDone?: () => void
 ): NativeChatSendHandle {
   if (lines.length <= 1) {
-    return sendNativeChatMessage(settings, ptyId, lines[0] ?? '')
+    return sendNativeChatMessage(settings, ptyId, lines[0] ?? '', onDone)
   }
   const timers: ReturnType<typeof setTimeout>[] = []
   lines.forEach((line, index) => {
@@ -149,6 +154,9 @@ export function sendNativeChatAnswer(
     timers.push(
       setTimeout(() => {
         sendRuntimePtyInput(settings, ptyId, NATIVE_CHAT_SUBMIT)
+        if (index === lines.length - 1) {
+          onDone?.()
+        }
       }, enterAt)
     )
   })

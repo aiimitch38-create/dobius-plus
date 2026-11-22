@@ -10,7 +10,7 @@ import {
   isToolResultBlock,
   type NativeChatMessage
 } from '../../../../shared/native-chat-types'
-import { isPendingMessageId } from './native-chat-pending'
+import { isLaunchPromptMessageId, isPendingMessageId } from './native-chat-pending'
 
 export type NativeChatFoldSegment =
   | { kind: 'message'; message: NativeChatMessage }
@@ -29,13 +29,15 @@ export type NativeChatFoldSegment =
 // Why: only a message the person actually sent is a turn boundary. An
 // optimistic "queued" echo has not reached the agent yet, so the exchange
 // before it may still be running; folding there would hide the live tool run
-// (Line A Codex P1). A user-role row carrying tool results is the harness
+// (Line A Codex P1). The seeded launch prompt's echo is the same kind of
+// not-yet-confirmed row. A user-role row carrying tool results is the harness
 // answering a tool, not the person. Erring this way only leaves a finished turn
 // open longer.
 function isSentUserMessage(message: NativeChatMessage): boolean {
   return (
     message.role === 'user' &&
     !isPendingMessageId(message.id) &&
+    !isLaunchPromptMessageId(message.id) &&
     !message.blocks.some(isToolResultBlock) &&
     message.blocks.some((block) => isTextBlock(block) || block.type === 'image-ref')
   )
