@@ -65,12 +65,18 @@ function getWorktreeTerminalTabIds(state: TerminalTabActionState, worktreeId: st
   return [...ids]
 }
 
-function closeLocalTerminalTabState(terminalTabId: string): void {
+function closeLocalTerminalTabState(terminalTabId: string, keepWorktreeActive?: boolean): void {
   const state = useAppStore.getState()
+  // Why: the store's own close deactivates a workspace left with no tabs at
+  // all, so the caller's wish to stay put has to reach it too.
+  // An ordinary close keeps its one-argument call, as before.
+  const args: [] | [{ keepWorktreeActive: true }] = keepWorktreeActive
+    ? [{ keepWorktreeActive: true }]
+    : []
   if (
     Object.values(state.tabsByWorktree).some((tabs) => tabs.some((tab) => tab.id === terminalTabId))
   ) {
-    state.closeTab(terminalTabId)
+    state.closeTab(terminalTabId, ...args)
     return
   }
 
@@ -81,7 +87,7 @@ function closeLocalTerminalTabState(terminalTabId: string): void {
         (tab.entityId === terminalTabId || tab.id === terminalTabId)
     )
     if (unified) {
-      state.closeUnifiedTab(unified.id)
+      state.closeUnifiedTab(unified.id, ...args)
       return
     }
   }
@@ -199,7 +205,7 @@ export function closeTerminalTab(tabId: string, options?: CloseTerminalTabOption
       }) ?? toHostSessionTabId(terminalTabId)
     // Why: prune local mirrors immediately so close feels responsive while the
     // host session snapshot catches up.
-    closeLocalTerminalTabState(terminalTabId)
+    closeLocalTerminalTabState(terminalTabId, options?.keepWorktreeActive)
     void closeWebRuntimeSessionTab({
       worktreeId: owningWorktreeId,
       tabId: hostBackedTabId,
@@ -210,7 +216,7 @@ export function closeTerminalTab(tabId: string, options?: CloseTerminalTabOption
 
   const currentTerminalTabIds = getWorktreeTerminalTabIds(state, owningWorktreeId)
   if (currentTerminalTabIds.length <= 1) {
-    closeLocalTerminalTabState(terminalTabId)
+    closeLocalTerminalTabState(terminalTabId, options?.keepWorktreeActive)
     // Why: the Board's Reset empties the board the user is looking at. The
     // fallback below would re-point the editor/browser underneath it or drop
     // the user on Home, so that caller opts out of it.
@@ -244,7 +250,7 @@ export function closeTerminalTab(tabId: string, options?: CloseTerminalTabOption
     }
   }
 
-  closeLocalTerminalTabState(terminalTabId)
+  closeLocalTerminalTabState(terminalTabId, options?.keepWorktreeActive)
 }
 
 export function closeOtherTerminalTabs(tabId: string, activeWorktreeId: string | null): void {

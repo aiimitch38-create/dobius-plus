@@ -496,7 +496,7 @@ describe('closeTerminalTab last-terminal fallback', () => {
       browserTabsByWorktree: { 'wt-1': [{ id: 'b-1' }] }
     })
     closeTerminalTab('tab-1', { keepWorktreeActive: true })
-    expect(actions.closeTab).toHaveBeenCalledWith('tab-1')
+    expect(actions.closeTab).toHaveBeenCalledWith('tab-1', { keepWorktreeActive: true })
     expect(actions.setActiveFile).not.toHaveBeenCalled()
     expect(actions.setActiveBrowserTab).not.toHaveBeenCalled()
     expect(actions.setActiveTabType).not.toHaveBeenCalled()
@@ -516,7 +516,7 @@ describe('closeTerminalTab last-terminal fallback', () => {
     expect(requestPinnedTabCloseConfirm).toHaveBeenCalledTimes(1)
 
     requestPinnedTabCloseConfirm.mock.calls[0][0].onConfirm()
-    expect(actions.closeTab).toHaveBeenCalledWith('tab-1')
+    expect(actions.closeTab).toHaveBeenCalledWith('tab-1', { keepWorktreeActive: true })
     expect(actions.setActiveWorktree).not.toHaveBeenCalled()
   })
 })
