@@ -55,6 +55,68 @@ describe('agent-runs-store permission denials', () => {
   })
 })
 
+describe('agent-runs-store run loop fields', () => {
+  it('keeps the loop fields across a restart and drops malformed ones', async () => {
+    const postcheck = {
+      command: 'npm test',
+      exitCode: 1,
+      timedOut: false,
+      durationMs: 5,
+      stdout: 'FAIL',
+      stderr: '',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      error: null,
+      startedAt: 3,
+      completedAt: 8
+    }
+    writeFileSync(
+      path.join(mocks.root, 'agents-runs.json'),
+      JSON.stringify([
+        {
+          id: 'r1',
+          agentId: 'a1',
+          prompt: 'go',
+          startedAt: 1,
+          endedAt: 2,
+          status: 'success',
+          attempt: 2,
+          rootRunId: 'r0',
+          postcheck,
+          outcome: 'blocked',
+          loopCostUsd: 1.25
+        },
+        {
+          id: 'r2',
+          agentId: 'a1',
+          prompt: 'go',
+          startedAt: 1,
+          endedAt: 2,
+          status: 'success',
+          attempt: 'two',
+          rootRunId: 7,
+          postcheck: { command: 5 },
+          outcome: 'great',
+          loopCostUsd: 'lots'
+        }
+      ])
+    )
+    const { getStoredAgentRun } = await import('./agent-runs-store')
+    expect(getStoredAgentRun('r1')).toMatchObject({
+      attempt: 2,
+      rootRunId: 'r0',
+      postcheck,
+      outcome: 'blocked',
+      loopCostUsd: 1.25
+    })
+    const plain = getStoredAgentRun('r2')
+    expect(plain?.status).toBe('success')
+    for (const key of ['attempt', 'rootRunId', 'postcheck', 'outcome', 'loopCostUsd']) {
+      expect(plain).not.toHaveProperty(key)
+    }
+  })
+})
+
 function run(id: string, status: 'running' | 'success', startedAt: number) {
   return { id, agentId: 'a1', prompt: 'go', startedAt, status } as const
 }

@@ -6,6 +6,7 @@ import type {
   AgentRunPermissionDenial
 } from '../../shared/agents'
 import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
+import { sanitizeRunLoopFields } from './agent-run-loop-fields'
 import { getUserDataRoot } from '../storage/user-data-root'
 
 const RUNS_FILE_NAME = 'agents-runs.json'
@@ -110,7 +111,7 @@ function sanitizeRun(entry: unknown): AgentRun | null {
   if (denials.length > 0) {
     run.permissionDenials = denials
   }
-  return run
+  return Object.assign(run, sanitizeRunLoopFields(record))
 }
 
 // A just-finished run stays readable long enough for the renderer's run poll

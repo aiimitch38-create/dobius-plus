@@ -29,11 +29,8 @@ import {
 import { assertExecutionAdmitted, type ExecutionOrigin } from './execution-gate'
 import { claimRunSession, currentRunSessionKey, releaseRunSession } from './agent-session-lease'
 import { appendAgentRunNotification } from './agent-notification-store'
-import {
-  appendRunNotificationSafely,
-  guardRunEndCallbacks,
-  type GuardedRunEndCallbacks
-} from './agent-run-end-callbacks'
+import { appendRunNotificationSafely, type GuardedRunEndCallbacks } from './agent-run-end-callbacks'
+import { attachRunLoop, type RunLoopOptions } from './agent-run-loop'
 import { appendRunProgress } from './agent-run-progress-log'
 import { buildRunEnv, currentGitBranch, resolveAgentRunCwd } from './agent-runner-environment'
 import { scheduleSessionWorkspaceBriefRefresh } from './session-workspace-brief'
@@ -133,6 +130,11 @@ type AgentRunOptions = {
   onSettled?: () => void
   // Omitted = autonomous, so a new caller cannot bypass Pause crew by forgetting it.
   origin?: ExecutionOrigin
+  /** Check the app runs after the run settles, with one retry; see agent-run-loop.ts. */
+  postcheck?: RunLoopOptions['postcheck']
+  grade?: RunLoopOptions['grade']
+  /** Internal: set only by the run loop when it starts a retry. */
+  loop?: RunLoopOptions['loop']
 }
 
 type LiveRun = {
@@ -369,7 +371,7 @@ export async function startAgentRun(args: {
         codexHome,
         model: args.options?.model,
         maxSteps: args.options?.maxTurns ?? DEFAULT_CODEX_MAX_STEPS,
-        callbacks: guardRunEndCallbacks(args.options)
+        callbacks: attachRunLoop({ runId, agent, cwd: resolvedCwd, startArgs: args, restart: startAgentRun })
       })
       return runId
     }
@@ -497,7 +499,14 @@ export async function startAgentRun(args: {
       options,
       prompt,
       resolvedCwd,
-      guardRunEndCallbacks(args.options)
+      attachRunLoop({
+        runId,
+        agent,
+        cwd: resolvedCwd,
+        startArgs: args,
+        restart: startAgentRun,
+        runBudgetUsd: options.maxBudgetUsd
+      })
     )
     return runId
   } catch (error) {
