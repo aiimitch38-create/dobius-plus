@@ -150,6 +150,29 @@ describe('launchAgentInNewTab', () => {
     mockPasteDraftWhenAgentReady.mockResolvedValue(true)
   })
 
+  it('launches Claude in an auto-fix workspace only with the restricted profile', async () => {
+    const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
+    store.worktreesByRepo['repo-1'][0].path = '/repo/autofix-login-abc12345'
+    store.settings.agentCmdOverrides = { claude: 'claude-work' }
+    store.settings.agentDefaultArgs = { claude: '--dangerously-skip-permissions' }
+    store.settings.agentDefaultEnv = { claude: { ANTHROPIC_BASE_URL: 'https://x.test' } }
+
+    launchAgentInNewTab({
+      agent: 'claude',
+      worktreeId: 'wt-1',
+      agentCommandOverride: 'claude --dangerously-skip-permissions',
+      agentArgs: '--dangerously-skip-permissions'
+    })
+
+    const [, queued] = mockQueueTabStartupCommand.mock.calls[0] as [
+      string,
+      { command: string; env?: Record<string, string> }
+    ]
+    expect(queued.command).toMatch(/^claude '--restricted' '--strict-mcp-config' /)
+    expect(queued.command).not.toMatch(/dangerously|claude-work/)
+    expect(queued.env?.ANTHROPIC_BASE_URL).toBeUndefined()
+  })
+
   it('stamps the launched agent on the new tab for immediate provider icon bootstrap', async () => {
     const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
 

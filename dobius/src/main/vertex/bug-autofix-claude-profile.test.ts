@@ -40,7 +40,9 @@ describe('bug fix agent launch profile', () => {
       'Bash(rm -rf*)',
       'Bash(pnpm run build:cli*)',
       'Bash(*--no-verify*)',
-      'Bash(*build-and-install*)'
+      'Bash(*build-and-install*)',
+      // git diff/log/show --output writes a file.
+      'Bash(*--output*)'
     ]) {
       expect(BUG_FIX_DENIED_TOOLS).toContain(rule)
       expect(startup.command).toContain(rule)

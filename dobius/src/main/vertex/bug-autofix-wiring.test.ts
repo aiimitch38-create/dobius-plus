@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -16,7 +24,7 @@ vi.mock('../agents/execution-gate', () => ({
   checkExecutionAdmission: vi.fn()
 }))
 
-import { wireBugAutoFix } from './bug-autofix-wiring'
+import { copyBugEvidence, wireBugAutoFix } from './bug-autofix-wiring'
 import { setVertexAttachmentsRoot } from './vertex-attachment-paths'
 
 function wire(runtime: Record<string, unknown>): BugAutoFixDeps {
@@ -105,6 +113,38 @@ describe('bug auto-fix wiring: launch', () => {
       expect(readFileSync(join(evidence, 'a1.png'), 'utf8')).toBe('png')
       expect(readFileSync(join(evidence, '.gitignore'), 'utf8')).toBe('*\n')
       expect(existsSync(join(evidence, 'secret.txt'))).toBe(false)
+    } finally {
+      setVertexAttachmentsRoot(null)
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('bug auto-fix wiring: evidence copy never follows links', () => {
+  it('skips a linked screenshot and refuses a linked .dobius folder', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autofix-links-'))
+    try {
+      const shots = join(root, 'ud', 'vertex-attachments', 'task-1')
+      mkdirSync(shots, { recursive: true })
+      const secret = join(root, 'secret.txt')
+      writeFileSync(secret, 'nope')
+      symlinkSync(secret, join(shots, 'evil.png'))
+      writeFileSync(join(shots, 'ok.png'), 'png')
+      setVertexAttachmentsRoot(join(root, 'ud', 'vertex-attachments'))
+
+      const plain = join(root, 'w', 'autofix-a-1')
+      mkdirSync(plain, { recursive: true })
+      copyBugEvidence([join(shots, 'evil.png'), join(shots, 'ok.png')], plain)
+      expect(existsSync(join(plain, '.dobius', 'bug-report', 'evil.png'))).toBe(false)
+      expect(existsSync(join(plain, '.dobius', 'bug-report', 'ok.png'))).toBe(true)
+
+      const outside = join(root, 'outside')
+      mkdirSync(outside)
+      const linked = join(root, 'w', 'autofix-b-2')
+      mkdirSync(linked, { recursive: true })
+      symlinkSync(outside, join(linked, '.dobius'))
+      expect(() => copyBugEvidence([join(shots, 'ok.png')], linked)).toThrow(/link or a file/)
+      expect(existsSync(join(outside, 'bug-report'))).toBe(false)
     } finally {
       setVertexAttachmentsRoot(null)
       rmSync(root, { recursive: true, force: true })

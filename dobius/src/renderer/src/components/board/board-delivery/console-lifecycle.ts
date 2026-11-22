@@ -7,7 +7,6 @@ import { useAppStore } from '@/store'
 import { getBoard, type BoardCardOf } from '@/store/slices/board'
 import {
   bugFixClaudeArgs,
-  isBugFixProfileLaunch,
   isBugFixWorktreePath
 } from '../../../../../shared/bug-fix-agent-profile'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
@@ -105,14 +104,10 @@ type RestrictedLaunch = { command: string; args: string }
 /** How to relaunch a bug-fix console, or null for any other console. Why two
  *  signals: the captured launch (keeps --add-dir) is dropped when the agent
  *  exits, but the workspace folder name never changes. */
-function restrictedLaunchFor(worktreeId: string, tabId: string): RestrictedLaunch | null {
+function restrictedLaunchFor(worktreeId: string): RestrictedLaunch | null {
+  // Why the folder, not the captured command: a captured profile can be an
+  // older, wider one; the current shared profile always wins.
   const state = useAppStore.getState()
-  for (const [paneKey, entry] of Object.entries(state.agentLaunchConfigByPaneKey ?? {})) {
-    const command = entry.launchConfig.agentCommand
-    if (paneKey.startsWith(`${tabId}:`) && command && isBugFixProfileLaunch(command)) {
-      return { command, args: '' }
-    }
-  }
   const worktree = state.allWorktrees?.().find((entry) => entry.id === worktreeId)
   return isBugFixWorktreePath(worktree?.path) ? { command: 'claude', args: bugFixClaudeArgs() } : null
 }
@@ -126,7 +121,7 @@ export function restartConsole(
   // Why: a bug-fix console must come back with its captured restricted
   // command, never the Settings default args (which skip permissions) or
   // another agent.
-  const restricted = restrictedLaunchFor(worktreeId, card.tabId)
+  const restricted = restrictedLaunchFor(worktreeId)
   if (restricted) {
     return relaunchInNewTab(worktreeId, card, 'claude', restricted.command, restricted.args, undefined)
   }

@@ -125,17 +125,19 @@ describe('restartConsole keeps a bug-fix console restricted', () => {
   const restricted =
     "claude '--restricted' '--strict-mcp-config' '--tools' 'Bash,Read' '--permission-mode' 'acceptEdits'"
 
-  it('relaunches the captured restricted command as Claude, never the Settings defaults', () => {
+  it('relaunches with the current profile, never an older captured one', async () => {
+    const { bugFixClaudeArgs } = await import('../../../../../shared/bug-fix-agent-profile')
+    worktrees = [{ id: 'wt', path: '/ws/dobius-plus/autofix-login-abcd1234' }]
     launchConfigs['old-tab:11111111-1111-4111-8111-111111111111'] = {
-      launchConfig: { agentCommand: restricted, agentArgs: '' }
+      launchConfig: { agentCommand: `${restricted} '--allowedTools' 'Bash(npx vitest run *)'`, agentArgs: '' }
     }
     expect(restartConsole('wt', card(), 'codex')).toBe(true)
     expect(launchAgentInNewTab).toHaveBeenCalledWith({
       agent: 'claude',
       worktreeId: 'wt',
       launchSource: 'unknown',
-      agentCommandOverride: restricted,
-      agentArgs: ''
+      agentCommandOverride: 'claude',
+      agentArgs: bugFixClaudeArgs()
     })
     expect(resolvePinnedAgentCommand).not.toHaveBeenCalled()
   })

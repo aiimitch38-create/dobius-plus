@@ -39,6 +39,9 @@ export const BUG_FIX_TOOLS: readonly string[] = ['Bash', 'Read', 'Edit', 'Write'
 export const BUG_FIX_DENIED_TOOLS: readonly string[] = [
   'Bash(git push*)',
   'Bash(git remote*)',
+  // Why: git diff/log/show write a file with --output, so the read-only git
+  // allow rules below must never carry it.
+  'Bash(*--output*)',
   'Bash(git commit --no-verify*)',
   'Bash(git commit -n*)',
   'Bash(*--no-verify*)',

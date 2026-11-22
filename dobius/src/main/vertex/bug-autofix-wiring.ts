@@ -1,8 +1,8 @@
 /* Connects bug-autofix.ts to the real store, settings, Pause crew gate and
  * runtime. Split out so the decision logic stays testable without Electron. */
 
-import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { constants, copyFileSync, existsSync, lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
+import { basename, join, sep } from 'node:path'
 
 import { blockExecutionOrigin, checkExecutionAdmission } from '../agents/execution-gate'
 import { readLeadConfig } from '../leads/lead-config'
@@ -11,7 +11,7 @@ import type { Store } from '../persistence'
 import { buildBugFixStartup, BUG_FIX_AGENT } from './bug-autofix-claude-profile'
 import { configureBugAutoFix, disposeBugAutoFix, type BugAutoFixWorktree } from './bug-autofix'
 import { BUG_FIX_EVIDENCE_DIR } from '../../shared/bug-fix-agent-profile'
-import { isInsideAttachmentsRoot } from './vertex-attachment-paths'
+import { isInsideAttachmentsRoot, vertexAttachmentsRoot } from './vertex-attachment-paths'
 import { vertexTaskStore } from './vertex-task-store'
 
 function projectIdOf(repoPath: string): string | null {
@@ -36,15 +36,42 @@ function toFound(worktree: WorktreeLike): BugAutoFixWorktree {
  *  on copies and the original evidence stays out of its reach. The folder
  *  ignores itself, so the copies are never committed. */
 export function copyBugEvidence(screenshots: readonly string[], worktreePath: string): void {
-  const sources = screenshots.filter(isInsideAttachmentsRoot)
+  // Why realpath + lstat: a symlink under the attachments root must not
+  // expose another file, and only regular files are evidence.
+  const root = realpathSync(vertexAttachmentsRoot())
+  const sources = screenshots.filter((source) => {
+    try {
+      return (
+        isInsideAttachmentsRoot(source) &&
+        lstatSync(source).isFile() &&
+        realpathSync(source).startsWith(root + sep)
+      )
+    } catch {
+      return false
+    }
+  })
   if (sources.length === 0) {
     return
   }
-  const dir = join(worktreePath, BUG_FIX_EVIDENCE_DIR)
-  mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, '.gitignore'), '*\n')
+  // Why: the checkout is repo content; a committed symlink at .dobius or
+  // bug-report must not redirect these writes outside the workspace.
+  const workspace = realpathSync(worktreePath)
+  let dir = workspace
+  for (const part of BUG_FIX_EVIDENCE_DIR.split('/')) {
+    dir = join(dir, part)
+    if (!existsSync(dir)) {
+      mkdirSync(dir)
+    } else if (!lstatSync(dir).isDirectory()) {
+      throw new Error(`Bug evidence folder ${dir} is a link or a file.`)
+    }
+  }
+  if (realpathSync(dir) !== dir) {
+    throw new Error('Bug evidence folder is not a plain folder inside the workspace.')
+  }
+  // Why the exclusive flags: an existing file (or symlink) is never overwritten.
+  writeFileSync(join(dir, '.gitignore'), '*\n', { flag: 'wx' })
   for (const source of sources) {
-    copyFileSync(source, join(dir, basename(source)))
+    copyFileSync(source, join(dir, basename(source)), constants.COPYFILE_EXCL)
   }
 }
 
