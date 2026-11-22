@@ -19,8 +19,9 @@ import {
   formatPullRequestComments,
   formatPullRequestCreated
 } from '../pr-format'
+import { safeText } from '../git-format'
 import { RuntimeClientError, type RuntimeRpcSuccess } from '../runtime-client'
-import { getGitWorktreeSelector } from './git'
+import { getGitWorktreeSelector, getSwitchFlag } from '../git-cli-args'
 
 // Why: PR lookups and creation go through gh/the GitHub API and can be slow on
 // cold caches; give them more room than the 60s client default.
@@ -33,7 +34,10 @@ type PrTarget = {
   worktree: RuntimeWorktreeRecord
 }
 
-async function resolvePrTarget(ctx: HandlerContext): Promise<PrTarget> {
+async function resolvePrTarget(
+  ctx: HandlerContext,
+  options: { allowDetachedWithPrNumber: boolean }
+): Promise<PrTarget> {
   const worktreeSelector = await getGitWorktreeSelector(ctx)
   const shown = await ctx.client.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', {
     worktree: worktreeSelector
@@ -41,9 +45,17 @@ async function resolvePrTarget(ctx: HandlerContext): Promise<PrTarget> {
   const worktree = shown.result.worktree
   const branch = normalizeHostedReviewHeadRef(worktree.git.branch ?? '')
   if (!branch || branch === 'HEAD') {
+    // Why: an exact --pr lookup does not need the branch, but the RPC schema
+    // requires a non-empty one; 'HEAD' never matches a real PR head branch.
+    if (
+      options.allowDetachedWithPrNumber &&
+      getOptionalPositiveIntegerFlag(ctx.flags, 'pr') !== undefined
+    ) {
+      return { worktreeSelector, repo: `id:${worktree.repoId}`, branch: 'HEAD', worktree }
+    }
     throw new RuntimeClientError(
       'invalid_argument',
-      'This workspace is not on a branch (detached HEAD), so it has no pull request.'
+      'This workspace is not on a branch (detached HEAD). Pass --pr <number> to read a specific PR.'
     )
   }
   return { worktreeSelector, repo: `id:${worktree.repoId}`, branch, worktree }
@@ -86,13 +98,13 @@ function prRepoParam(pr: PRInfo): { prRepo?: PRInfo['prRepo'] } {
 
 export const PR_HANDLERS: Record<string, CommandHandler> = {
   'pr show': async (ctx) => {
-    const target = await resolvePrTarget(ctx)
+    const target = await resolvePrTarget(ctx, { allowDetachedWithPrNumber: true })
     const response = await lookupPullRequest(ctx, target)
     // Why: "no PR yet" is a normal answer for show, not an error.
     printResult(response, ctx.json, (pr) => formatPullRequest(pr, target.branch))
   },
   'pr checks': async (ctx) => {
-    const target = await resolvePrTarget(ctx)
+    const target = await resolvePrTarget(ctx, { allowDetachedWithPrNumber: true })
     const pr = await findPullRequest(ctx, target)
     const checks = await ctx.client.call<PRCheckDetail[]>(
       'github.prChecks',
@@ -120,7 +132,7 @@ export const PR_HANDLERS: Record<string, CommandHandler> = {
       const names = checks.result.map((candidate) => candidate.name).join(', ') || 'none'
       throw new RuntimeClientError(
         'invalid_argument',
-        `No check named "${checkName}" on PR #${pr.number}. Checks: ${names}`
+        safeText(`No check named "${checkName}" on PR #${pr.number}. Checks: ${names}`)
       )
     }
     const details = await ctx.client.call<PRCheckRunDetails | null>(
@@ -138,14 +150,14 @@ export const PR_HANDLERS: Record<string, CommandHandler> = {
     printResult(details, ctx.json, formatPullRequestCheckDetails)
   },
   'pr comments': async (ctx) => {
-    const target = await resolvePrTarget(ctx)
+    const target = await resolvePrTarget(ctx, { allowDetachedWithPrNumber: true })
     const pr = await findPullRequest(ctx, target)
     const comments = await ctx.client.call<PRComment[]>(
       'github.prComments',
       { repo: target.repo, prNumber: pr.number, ...prRepoParam(pr) },
       { timeoutMs: GITHUB_TIMEOUT_MS }
     )
-    const unresolvedOnly = ctx.flags.get('unresolved') === true
+    const unresolvedOnly = getSwitchFlag(ctx.flags, 'unresolved')
     const list = unresolvedOnly
       ? comments.result.filter((comment) => comment.threadId !== undefined && !comment.isResolved)
       : comments.result
@@ -169,12 +181,8 @@ export const PR_HANDLERS: Record<string, CommandHandler> = {
     if (ctx.flags.has('base') && baseFlag === undefined) {
       throw new RuntimeClientError('invalid_argument', 'Missing value for --base.')
     }
-    const draftFlag = ctx.flags.get('draft')
-    if (ctx.flags.has('draft') && draftFlag !== true) {
-      throw new RuntimeClientError('invalid_argument', '--draft takes no value.')
-    }
-    const draft = draftFlag === true
-    const target = await resolvePrTarget(ctx)
+    const draft = getSwitchFlag(ctx.flags, 'draft')
+    const target = await resolvePrTarget(ctx, { allowDetachedWithPrNumber: false })
     const status = await ctx.client.call<GitStatusResult>('git.status', {
       worktree: target.worktreeSelector
     })
@@ -197,7 +205,7 @@ export const PR_HANDLERS: Record<string, CommandHandler> = {
     const verdict = eligibility.result
     const base = verdict.defaultBaseRef ? normalizeHostedReviewBaseRef(verdict.defaultBaseRef) : ''
     if (!verdict.canCreate || !base) {
-      throw new RuntimeClientError('pr_create_blocked', explainBlocked(verdict, base))
+      throw new RuntimeClientError('pr_create_blocked', safeText(explainBlocked(verdict, base)))
     }
     const created = await ctx.client.call<CreateHostedReviewResult>(
       'hostedReview.create',
@@ -218,7 +226,7 @@ export const PR_HANDLERS: Record<string, CommandHandler> = {
       const existing = result.existingReview ? ` Existing: ${result.existingReview.url}` : ''
       throw new RuntimeClientError(
         'pr_create_failed',
-        `Could not open the PR: ${result.error}${existing}`
+        safeText(`Could not open the PR: ${result.error}${existing}`)
       )
     }
     printResult({ ...created, result }, ctx.json, formatPullRequestCreated)

@@ -364,3 +364,67 @@ function captureHelp(path: string[]): string {
   }
   return lines.join('\n')
 }
+
+describe('fixes from the Codex review', () => {
+  it('treats --dry-run=true as dry run, never committing', async () => {
+    callMock.mockResolvedValueOnce(ok({ success: true, message: 'Msg' }))
+    await GIT_HANDLERS['git commit'](ctx({ worktree: 'id:wt1', generate: true, 'dry-run': 'true' }))
+    expect(callMock).toHaveBeenCalledTimes(1)
+    await expect(
+      GIT_HANDLERS['git commit'](ctx({ worktree: 'id:wt1', generate: true, 'dry-run': 'yes' }))
+    ).rejects.toThrow(/takes no value/)
+  })
+
+  it('unstage --all includes both sides of a staged rename', async () => {
+    callMock
+      .mockResolvedValueOnce(
+        ok({
+          entries: [{ path: 'new.ts', oldPath: 'old.ts', status: 'renamed', area: 'staged' }],
+          conflictOperation: 'unknown'
+        })
+      )
+      .mockResolvedValueOnce(ok({ ok: true }))
+    await GIT_HANDLERS['git unstage'](ctx({ worktree: 'id:wt1', all: true }))
+    expect(callMock.mock.calls[1][1]).toEqual({
+      worktree: 'id:wt1',
+      filePaths: ['old.ts', 'new.ts']
+    })
+  })
+
+  it('shows a change that only touches the final newline', async () => {
+    callMock.mockResolvedValueOnce(
+      ok({
+        kind: 'text',
+        originalContent: 'hello\n',
+        modifiedContent: 'hello',
+        originalIsBinary: false,
+        modifiedIsBinary: false
+      })
+    )
+    await GIT_HANDLERS['git diff'](ctx({ worktree: 'id:wt1', path: 'a.txt' }))
+    expect(printed()).toContain('newline at the end of the file was removed')
+  })
+
+  it('caps diff output by size, not just line count', async () => {
+    const huge = 'x'.repeat(2_000_000)
+    callMock.mockResolvedValueOnce(
+      ok({
+        kind: 'text',
+        originalContent: 'a\n',
+        modifiedContent: `${huge}\n`,
+        originalIsBinary: false,
+        modifiedIsBinary: false
+      })
+    )
+    await GIT_HANDLERS['git diff'](ctx({ worktree: 'id:wt1', path: 'min.js' }))
+    expect(printed().length).toBeLessThan(5000)
+    expect(printed()).toContain('line cut off')
+  })
+
+  it('strips escape codes from commit error text', async () => {
+    callMock.mockResolvedValueOnce(ok({ success: false, error: 'hook \u001b[31mfailed' }))
+    await expect(
+      GIT_HANDLERS['git commit'](ctx({ worktree: 'id:wt1', message: 'x' }))
+    ).rejects.toThrow('Commit failed: hook failed')
+  })
+})

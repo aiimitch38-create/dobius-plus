@@ -14,13 +14,14 @@ import {
   formatGitPathChange,
   formatGitStatus,
   formatRemoteOk,
+  safeText,
   type GenerateCommitMessageWireResult,
   type GitCommitCliResult,
   type GitCommitWireResult,
   type GitPathChangeCliResult
 } from '../git-format'
 import { RuntimeClientError, type RuntimeRpcSuccess } from '../runtime-client'
-import { getOptionalWorktreeSelector, resolveCurrentWorktreeSelector } from '../selectors'
+import { getGitWorktreeSelector, getSwitchFlag } from '../git-cli-args'
 
 const DEFAULT_LOG_LIMIT = 20
 const MAX_LOG_LIMIT = 200
@@ -29,30 +30,8 @@ const MAX_LOG_LIMIT = 200
 const GENERATE_TIMEOUT_MS = 180_000
 const REMOTE_TIMEOUT_MS = 120_000
 
-export async function getGitWorktreeSelector({
-  flags,
-  cwd,
-  client
-}: HandlerContext): Promise<string> {
-  const worktree = flags.get('worktree')
-  if (flags.has('worktree') && (typeof worktree !== 'string' || worktree.length === 0)) {
-    throw new RuntimeClientError('invalid_argument', 'Missing value for --worktree.')
-  }
-  const explicit = await getOptionalWorktreeSelector(flags, 'worktree', cwd, client)
-  if (explicit) {
-    return explicit
-  }
-  if (client.isRemote) {
-    throw new RuntimeClientError(
-      'invalid_argument',
-      'Remote git and PR commands require --worktree because the client folder cannot identify a server worktree.'
-    )
-  }
-  return await resolveCurrentWorktreeSelector(cwd, client)
-}
-
 function getPathFlag(flags: Map<string, string | boolean>, verb: string): string | null {
-  const all = flags.get('all') === true
+  const all = getSwitchFlag(flags, 'all')
   const path = getOptionalStringFlag(flags, 'path')
   if (flags.has('path') && path === undefined) {
     throw new RuntimeClientError('invalid_argument', 'Missing value for --path.')
@@ -111,7 +90,7 @@ export const GIT_HANDLERS: Record<string, CommandHandler> = {
         'Say which file to diff: dobius git diff <path>. Run dobius git status to see changed files.'
       )
     }
-    const staged = ctx.flags.get('staged') === true
+    const staged = getSwitchFlag(ctx.flags, 'staged')
     const result = await ctx.client.call<GitDiffResult>('git.diff', {
       worktree,
       filePath,
@@ -204,7 +183,8 @@ export const GIT_HANDLERS: Record<string, CommandHandler> = {
       ...new Set(
         status.result.entries
           .filter((entry) => entry.area === 'staged' && !entry.submoduleRoot)
-          .map((entry) => entry.path)
+          // Why: a staged rename also stages the old path's deletion; unstage both.
+          .flatMap((entry) => (entry.oldPath ? [entry.oldPath, entry.path] : [entry.path]))
       )
     ]
     const result: GitPathChangeCliResult = { ok: true, action: 'unstaged', paths, skipped: [] }
@@ -219,8 +199,8 @@ export const GIT_HANDLERS: Record<string, CommandHandler> = {
     printResult({ ...response, result }, ctx.json, formatGitPathChange)
   },
   'git commit': async (ctx) => {
-    const generate = ctx.flags.get('generate') === true
-    const dryRun = ctx.flags.get('dry-run') === true
+    const generate = getSwitchFlag(ctx.flags, 'generate')
+    const dryRun = getSwitchFlag(ctx.flags, 'dry-run')
     const rawMessage = ctx.flags.get('message')
     if (generate && ctx.flags.has('message')) {
       throw new RuntimeClientError(
@@ -251,7 +231,7 @@ export const GIT_HANDLERS: Record<string, CommandHandler> = {
       if (!generated.result.success) {
         throw new RuntimeClientError(
           'commit_message_failed',
-          `Could not write a commit message: ${generated.result.error}`
+          safeText(`Could not write a commit message: ${generated.result.error}`)
         )
       }
       message = generated.result.message
@@ -273,7 +253,7 @@ export const GIT_HANDLERS: Record<string, CommandHandler> = {
     if (!committed.result.success) {
       throw new RuntimeClientError(
         'git_commit_failed',
-        `Commit failed: ${committed.result.error ?? 'git did not say why'}`
+        safeText(`Commit failed: ${committed.result.error ?? 'git did not say why'}`)
       )
     }
     const result: GitCommitCliResult = { ...committed.result, message, generated: generate }

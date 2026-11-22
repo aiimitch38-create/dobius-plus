@@ -22,6 +22,9 @@ export type GitPathChangeCliResult = {
 }
 
 const MAX_DIFF_OUTPUT_LINES = 2000
+// Why: one minified line can be megabytes; ADAM reads this output into its context.
+const MAX_DIFF_OUTPUT_CHARS = 100_000
+const MAX_DIFF_LINE_CHARS = 1000
 
 // Why: PR comments, check logs, commit subjects and file contents can come from
 // other people; raw terminal escape codes in them could hide or rewrite what the
@@ -141,17 +144,33 @@ export function formatGitDiff(path: string, staged: boolean, result: GitDiffResu
   if (result.originalContent === result.modifiedContent) {
     return safeText(`No ${area} changes in ${path}.`)
   }
-  const body = renderHunks(buildLineDiff(result.originalContent, result.modifiedContent))
-  const lines = [`Diff of ${path} (${area}):`, ...body]
-  if (lines.length > MAX_DIFF_OUTPUT_LINES) {
-    return safeText(
-      [
-        ...lines.slice(0, MAX_DIFF_OUTPUT_LINES),
-        `... diff cut off after ${MAX_DIFF_OUTPUT_LINES} lines. Pass --json for the full before and after text.`
-      ].join('\n')
+  const body = renderHunks(buildLineDiff(result.originalContent, result.modifiedContent)).map(
+    (line) =>
+      line.length > MAX_DIFF_LINE_CHARS
+        ? `${line.slice(0, MAX_DIFF_LINE_CHARS)}... (line cut off)`
+        : line
+  )
+  const beforeEnds = result.originalContent.endsWith('\n')
+  const afterEnds = result.modifiedContent.endsWith('\n')
+  if (beforeEnds !== afterEnds && result.originalContent.length > 0) {
+    body.push(
+      afterEnds
+        ? '(A newline was added at the end of the file.)'
+        : '(The newline at the end of the file was removed.)'
     )
   }
-  return safeText(lines.join('\n'))
+  const lines = [`Diff of ${path} (${area}):`, ...body]
+  const kept: string[] = []
+  let chars = 0
+  for (const line of lines) {
+    if (kept.length >= MAX_DIFF_OUTPUT_LINES || chars + line.length > MAX_DIFF_OUTPUT_CHARS) {
+      kept.push('... diff cut off here. Pass --json for the full before and after text.')
+      break
+    }
+    kept.push(line)
+    chars += line.length + 1
+  }
+  return safeText(kept.join('\n'))
 }
 
 export function formatGitPathChange(result: GitPathChangeCliResult): string {

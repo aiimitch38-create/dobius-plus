@@ -351,3 +351,15 @@ describe('untrusted text in human output', () => {
     expect(out).toContain('hi there')
   })
 })
+
+describe('detached HEAD with an explicit --pr', () => {
+  it('looks the PR up by number', async () => {
+    callMock
+      .mockResolvedValueOnce(
+        ok({ worktree: { repoId: 'repo1', linkedPR: null, git: { head: 'abc', branch: '' } } })
+      )
+      .mockResolvedValueOnce(ok(pr))
+    await PR_HANDLERS['pr show'](ctx({ pr: '7' }))
+    expect(callMock.mock.calls[1][1]).toMatchObject({ branch: 'HEAD', linkedPRNumber: 7 })
+  })
+})
