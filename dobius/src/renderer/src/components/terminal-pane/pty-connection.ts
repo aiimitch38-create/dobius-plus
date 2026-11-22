@@ -154,6 +154,7 @@ import {
 import { CLIENT_PLATFORM } from '@/lib/new-workspace'
 import { buildAgentResumeStartupPlan, buildAgentStartupPlan } from '@/lib/tui-agent-startup'
 import { shouldDeferBoardConsoleResume } from '@/components/board/board-resume/board-resume-gate'
+import { boardConsoleIdentityEnv } from '@/components/board/console-card/board-console-identity-env'
 import {
   boardConsolePtyExitOutcome,
   markBoardConsoleEnded
@@ -2563,6 +2564,7 @@ export function connectPanePty(
     DOBIUS_PANE_KEY: cacheKey,
     DOBIUS_TAB_ID: deps.tabId,
     DOBIUS_WORKTREE_ID: deps.worktreeId,
+    ...boardConsoleIdentityEnv(state, deps.worktreeId, deps.tabId),
     ...(launchToken ? { DOBIUS_AGENT_LAUNCH_TOKEN: launchToken } : {})
   }
   const paneEnv = {

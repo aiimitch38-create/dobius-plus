@@ -62,6 +62,9 @@ const PANE_IDENTITY_ENV_KEYS = [
   'DOBIUS_PANE_KEY',
   'DOBIUS_TAB_ID',
   'DOBIUS_WORKTREE_ID',
+  'DOBIUS_BOARD_ID',
+  'DOBIUS_BOARD_CARD_ID',
+  'DOBIUS_BOARD_CARD_TITLE',
   'DOBIUS_AGENT_LAUNCH_TOKEN',
   // Why: a child shell's `pnpm dev` must not inherit this app's self-edit root.
   'DOBIUS_DEV_REPO_ROOT',
