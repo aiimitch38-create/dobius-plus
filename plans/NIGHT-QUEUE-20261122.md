@@ -44,3 +44,5 @@ NOT tonight, needs Carson: install, live voice test call, the OpenAI key, the He
 - 1.8 Primer: Codex round 2 fixes in progress
 - 1.5 Chat improvements merged (32155645): fold older turns, blue user box, type an answer to a card, open pasted images, transcripts stay on. To check live: does picking a card option pick the right one?
 - 1.8 Pre-Flight Primer merged (3121d8d2): every new terminal tab's brief carries git, other tabs, lesson headings, MCP names, spend
+- INSTALLED 2.3.6 (build 79, commit 18e6f3c1, clean) with Carson's OK + take-over; rollback copy of 2.1.9 kept. Carson testing live.
+- Next update: wb/ui-trio (7.5 cloud job buttons, 7.6 hook status; 7.7 already covered by Settings > Stats)
