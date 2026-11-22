@@ -71,6 +71,8 @@ import type {
   WorkspaceSessionState
 } from '../shared/types'
 import { normalizeWhatsNewState, raiseWhatsNewSeen, readWhatsNewSeen } from '../shared/whats-new'
+import type { SnoozedTabEntry } from '../shared/tab-snooze-types'
+import { cleanSnoozedTabEntries } from '../shared/tab-snooze-types'
 import {
   deriveGlobalWindowsRuntimeDefaultFromLegacySettings,
   normalizeProjectRuntimePreference
@@ -3297,6 +3299,7 @@ export class Store {
           ),
           // Why: disk input is untrusted; a malformed record is dropped.
           whatsNew: normalizeWhatsNewState(parsed.whatsNew),
+          snoozedTabs: cleanSnoozedTabEntries(parsed.snoozedTabs),
           projectGroups: normalizedProjectGroups,
           folderWorkspaces: normalizeFolderWorkspaces(
             parsed.folderWorkspaces,
@@ -5722,6 +5725,16 @@ export class Store {
       return
     }
     this.state.whatsNew = { seen: next }
+    this.scheduleSave()
+  }
+
+  /** Main-owned list of snoozed tabs (main/tab-snooze.ts cleans every read). */
+  getSnoozedTabs(): SnoozedTabEntry[] {
+    return this.state.snoozedTabs ?? []
+  }
+
+  setSnoozedTabs(entries: SnoozedTabEntry[]): void {
+    this.state.snoozedTabs = entries
     this.scheduleSave()
   }
 

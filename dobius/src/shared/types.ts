@@ -1,5 +1,6 @@
 /* eslint-disable max-lines */
 import type { WhatsNewState } from './whats-new'
+import type { SnoozedTabEntry } from './tab-snooze-types'
 import type { ExecutionHostId } from './execution-host'
 import type { SshRemotePtyLease, SshTarget } from './ssh-types'
 import type { Automation, AutomationExecutionTargetType, AutomationRun } from './automations-types'
@@ -3577,6 +3578,8 @@ export type PersistedState = {
   featureInteractionTelemetryBuckets?: FeatureInteractionTelemetryBucketState
   /** Main-owned: the last version whose What's new notes were shown. */
   whatsNew?: WhatsNewState
+  /** Main-owned: tabs closed to come back later (main/tab-snooze.ts). */
+  snoozedTabs?: SnoozedTabEntry[]
 }
 
 // ─── Filesystem ─────────────────────────────────────────────
