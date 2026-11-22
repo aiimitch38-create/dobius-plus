@@ -73,7 +73,7 @@ import type {
 import { normalizeWhatsNewState, raiseWhatsNewSeen, readWhatsNewSeen } from '../shared/whats-new'
 import type { SnoozedTabEntry } from '../shared/tab-snooze-types'
 import { cleanSnoozedTabEntries } from '../shared/tab-snooze-types'
-import { discardSnoozedTabsForWorktree } from './tab-snooze'
+import { discardSnoozedTabsForWorktree } from './tab-snooze-active'
 import {
   deriveGlobalWindowsRuntimeDefaultFromLegacySettings,
   normalizeProjectRuntimePreference

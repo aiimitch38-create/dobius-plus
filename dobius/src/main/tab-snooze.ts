@@ -43,6 +43,11 @@ export type TabSnoozeDeps = {
   onChange: () => void
   /** True when main itself can see this pane running this conversation. */
   verifyResumeOwner?: (owner: AgentResumeOwner) => boolean
+  /**
+   * A window left mid-return: give its unspawned session claim back. True
+   * when main is starting that terminal right now and will decide the outcome.
+   */
+  abandonReturnClaim?: (owner: AgentResumeOwner) => boolean
   now?: () => number
 }
 
@@ -64,8 +69,12 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
   const holds = (entry: SnoozedTabEntry | undefined, rendererId?: number): boolean =>
     Boolean(entry?.returning) &&
     (rendererId === undefined || reservedBy.get(snoozedTabKey(entry!)) === rendererId)
+  // Why not SSH: there the spawn only makes a remote shell and the renderer
+  // types the resume command afterwards, so main can never confirm that the
+  // conversation started. Same reason hibernation leaves SSH agents alone.
   const ownsConversation = (entry: SnoozedTabEntry, owner: AgentResumeOwner): boolean =>
     Boolean(entry.agentSession?.resumeOwner) &&
+    owner.authority.kind !== 'ssh' &&
     getAgentResumeOwnerFingerprint(entry.agentSession!.resumeOwner!) ===
       getAgentResumeOwnerFingerprint(owner)
 
@@ -195,7 +204,7 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
         // Why refuse instead of dropping the session: without an owner main
         // can vouch for, the tab could only come back as a plain shell.
         const owner = entry.agentSession?.resumeOwner
-        if (!owner || deps.verifyResumeOwner?.(owner) === false) {
+        if (!owner || owner.authority.kind === 'ssh' || deps.verifyResumeOwner?.(owner) === false) {
           return { ok: false, reason: 'conversation-not-resumable' }
         }
       }
@@ -269,11 +278,31 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
     /** A window closed, crashed or reloaded: the returns it held go back on the shelf. */
     releaseRenderer(rendererId: number): boolean {
       const entries = read()
+      const held = entries.filter(
+        (entry) => entry.returning && reservedBy.get(snoozedTabKey(entry)) === rendererId
+      )
       return shelve(
         entries,
-        entries.filter(
-          (entry) => entry.returning && reservedBy.get(snoozedTabKey(entry)) === rendererId
-        )
+        held.filter((entry) => {
+          const owner = entry.agentSession?.resumeOwner
+          if (owner && deps.abandonReturnClaim?.(owner)) {
+            // Why not shelved yet: main is starting this conversation's
+            // terminal. It stays off the shelf, held by no window, until that
+            // spawn settles it (settleReturn) or fails (releaseReturn).
+            reservedBy.delete(snoozedTabKey(entry))
+            return false
+          }
+          return true
+        })
+      )
+    },
+
+    /** Main could not start (or keep) this conversation's terminal: back on the shelf. */
+    releaseReturn(owner: AgentResumeOwner): boolean {
+      const entries = read()
+      return shelve(
+        entries,
+        entries.filter((entry) => entry.returning && ownsConversation(entry, owner))
       )
     },
 
@@ -340,34 +369,4 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
       return read().some((entry) => holds(entry, rendererId) && ownsConversation(entry, owner))
     }
   }
-}
-
-let activeService: TabSnoozeService | null = null
-
-export function setActiveTabSnoozeService(service: TabSnoozeService | null): void {
-  activeService = service
-}
-
-/** The claim gate's question (main/ipc/pty.ts): is this window returning the tab that owns this resume? */
-export function isSnoozedTabReturnOwner(owner: AgentResumeOwner, rendererId: number): boolean {
-  return activeService?.ownsReturn(owner, rendererId) ?? false
-}
-
-/** Main started the conversation's terminal (main/ipc/pty.ts): the return is done. */
-export function settleSnoozedTabReturn(owner: AgentResumeOwner): boolean {
-  try {
-    return activeService?.settleReturn(owner) ?? false
-  } catch (err) {
-    // Why: the caller has just started a terminal; bookkeeping here must not
-    // make that spawn look failed. The entry stays and is released later.
-    console.warn(
-      '[tab-snooze] could not settle a return:',
-      err instanceof Error ? err.message : err
-    )
-    return false
-  }
-}
-
-export function discardSnoozedTabsForWorktree(worktreeId: string): void {
-  activeService?.discardWorktree(worktreeId)
 }

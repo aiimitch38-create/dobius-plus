@@ -189,7 +189,7 @@ describe('tab snooze IPC', () => {
 
   it('the claim gate vouches only for the window returning the tab, until main settles it', async () => {
     const { call, callFrom, makeSender } = await setup()
-    const { isSnoozedTabReturnOwner, settleSnoozedTabReturn } = await import('../tab-snooze')
+    const { isSnoozedTabReturnOwner, settleSnoozedTabReturn } = await import('../tab-snooze-active')
     mocks.status.push(liveStatus)
     const ref = { worktreeId: 'wt-1', tabId: 'tab-1' }
     call('tabSnooze:add', { ...ref, title: 'Fix', until: null, agentSession })
@@ -229,7 +229,7 @@ describe('tab snooze IPC', () => {
 
   it('removing a worktree discards its snoozed tabs', async () => {
     const { call } = await setup()
-    const { discardSnoozedTabsForWorktree } = await import('../tab-snooze')
+    const { discardSnoozedTabsForWorktree } = await import('../tab-snooze-active')
     call('tabSnooze:add', { worktreeId: 'wt-1', tabId: 'tab-1', title: 'A', until: null })
     call('tabSnooze:add', { worktreeId: 'wt-2', tabId: 'tab-2', title: 'B', until: null })
     discardSnoozedTabsForWorktree('wt-1')

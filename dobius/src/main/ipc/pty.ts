@@ -28,7 +28,11 @@ import {
   type AgentResumeOwner
 } from '../../shared/agent-resume-owner'
 import { mainProcessAgentResumeClaims } from '../pty/agent-resume-claims'
-import { isSnoozedTabReturnOwner, settleSnoozedTabReturn } from '../tab-snooze'
+import {
+  isSnoozedTabReturnOwner,
+  releaseSnoozedTabReturn,
+  settleSnoozedTabReturn
+} from '../tab-snooze-active'
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
 import {
   isWslShellName,
@@ -3176,14 +3180,14 @@ export function registerPtyHandlers(
           result = await provider.spawn(spawnOptions)
           if (resumeClaim) {
             mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, true, result.id)
-            // Why: main itself just started the conversation, which is the
-            // only proof that a snoozed tab's return is complete.
-            settleSnoozedTabReturn(resumeClaim.owner)
           }
           spawnTiming.mark('provider_spawn')
         } catch (err) {
           if (resumeClaim) {
             mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, false)
+            // Why: a snoozed tab whose conversation did not start goes back on
+            // the shelf from here, whether or not its window is still around.
+            releaseSnoozedTabReturn(resumeClaim.owner)
           }
           const rawMessage = err instanceof Error ? err.message : String(err)
           const spawnError = normalizeNodePtySpawnError(err)
@@ -3317,8 +3321,19 @@ export function registerPtyHandlers(
             if (!result.isReattach && args.connectionId && store) {
               store.removeSshRemotePtyLease(args.connectionId, relayResultId)
             }
+            if (resumeClaim && releaseSnoozedTabReturn(resumeClaim.owner) && !result.isReattach) {
+              // Why: the terminal was just killed, so the snoozed tab's claim
+              // must not stay "started" or its retry would be refused.
+              mainProcessAgentResumeClaims.failStarted(resumeClaim.owner, result.id)
+            }
             throw new Error(createTerminalSessionStateSaveFailureMessage())
           }
+        }
+        if (resumeClaim) {
+          // Why only here: main started the conversation's terminal and its
+          // tab binding is saved, which is the proof that a snoozed tab's
+          // return is complete. Earlier, a failed save would lose the entry.
+          settleSnoozedTabReturn(resumeClaim.owner)
         }
         // Why: pre-signal cooperation gate — when the renderer has declared it
         // will own the serializer for this paneKey, suppress the daemon-snapshot

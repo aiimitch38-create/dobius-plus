@@ -8518,7 +8518,7 @@ describe('Store', () => {
   it('removeWorktreeMeta discards the tabs snoozed in that worktree', async () => {
     const store = await createStore()
     // Why after createStore: it resets modules, and the store must see this service.
-    const { setActiveTabSnoozeService } = await import('./tab-snooze')
+    const { setActiveTabSnoozeService } = await import('./tab-snooze-active')
     const discardWorktree = vi.fn()
     setActiveTabSnoozeService({ discardWorktree } as never)
     try {

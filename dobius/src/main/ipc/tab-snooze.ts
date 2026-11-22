@@ -11,7 +11,9 @@ import {
   writeTerminalScrollbackSnapshotSync
 } from '../terminal-scrollback-snapshots'
 import type { TabSnoozeScrollbackStore, TabSnoozeService } from '../tab-snooze'
-import { createTabSnoozeService, setActiveTabSnoozeService } from '../tab-snooze'
+import { mainProcessAgentResumeClaims } from '../pty/agent-resume-claims'
+import { createTabSnoozeService } from '../tab-snooze'
+import { setActiveTabSnoozeService } from '../tab-snooze-active'
 import { isRegisteredRendererWebContents } from '../window/renderer-window-registry'
 
 export const TAB_SNOOZE_CHANGED_CHANNEL = 'tabSnooze:changed'
@@ -122,7 +124,8 @@ export function registerTabSnoozeHandlers(store: Store): void {
       save: (entries) => store.setSnoozedTabs(entries),
       scrollback: snoozedTabScrollbackStore,
       onChange: broadcastChanged,
-      verifyResumeOwner: hookServerSeesResumeOwner
+      verifyResumeOwner: hookServerSeesResumeOwner,
+      abandonReturnClaim: (owner) => mainProcessAgentResumeClaims.abandon(owner)
     })
     setActiveTabSnoozeService(service)
     service.recoverInterruptedReturns()

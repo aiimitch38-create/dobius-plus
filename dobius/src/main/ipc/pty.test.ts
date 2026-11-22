@@ -736,7 +736,8 @@ describe('registerPtyHandlers', () => {
   }
 
   it('lets a snoozed tab claim its conversation only for the window returning it, once the old terminal is gone', async () => {
-    const { createTabSnoozeService, setActiveTabSnoozeService } = await import('../tab-snooze')
+    const { createTabSnoozeService } = await import('../tab-snooze')
+    const { setActiveTabSnoozeService } = await import('../tab-snooze-active')
     const leafId = '11111111-1111-4111-8111-111111111111'
     const owner: AgentResumeOwner = {
       authority: { kind: 'local' },
@@ -799,6 +800,118 @@ describe('registerPtyHandlers', () => {
       deletePtyOwnership(owner.ptyId)
       expect(claimFrom(7)).toMatchObject({ ok: true })
     } finally {
+      snooze.stop()
+      setActiveTabSnoozeService(null)
+    }
+  })
+
+  it('keeps a snoozed tab until its terminal binding is saved, and retries cleanly when the save fails', async () => {
+    const { createTabSnoozeService } = await import('../tab-snooze')
+    const { setActiveTabSnoozeService } = await import('../tab-snooze-active')
+    const leafId = '11111111-1111-4111-8111-111111111111'
+    const owner: AgentResumeOwner = {
+      authority: { kind: 'local' },
+      worktreeId: 'wt-snooze',
+      tabId: 'tab-snooze',
+      leafId,
+      paneKey: `tab-snooze:${leafId}`,
+      ptyId: 'snoozed-source-pty-2',
+      launchToken: 'snoozed-launch-token',
+      // Why codex: a Claude launch would stay marked live for later tests.
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: 'snoozed-session-save' }
+    }
+    let saved: unknown = []
+    const snooze = createTabSnoozeService({
+      load: () => saved,
+      save: (entries) => {
+        saved = entries
+      },
+      scrollback: { write: () => null, read: () => null, remove: () => {} },
+      onChange: () => {}
+    })
+    setActiveTabSnoozeService(snooze)
+    const sender = mainWindow.webContents as { id?: number }
+    sender.id = 7
+    try {
+      const ref = { worktreeId: owner.worktreeId, tabId: owner.tabId }
+      snooze.add({
+        ...ref,
+        title: 'Fix',
+        until: null,
+        agentSession: {
+          paneKey: owner.paneKey,
+          tabId: owner.tabId,
+          worktreeId: owner.worktreeId,
+          agent: owner.agent,
+          providerSession: owner.providerSession,
+          prompt: 'fix it',
+          state: 'done',
+          capturedAt: 2,
+          updatedAt: 1,
+          connectionId: null,
+          origin: 'worktree-sleep',
+          resumeOwner: owner
+        }
+      })
+      getAgentStatusSnapshotMock.mockReturnValue([])
+      let spawned = 0
+      setLocalPtyProvider({
+        spawn: vi.fn(async () => ({ id: `returned-pty-${++spawned}` })),
+        write: vi.fn(),
+        resize: vi.fn(),
+        kill: vi.fn(),
+        shutdown: vi.fn(),
+        onData: vi.fn(() => vi.fn()),
+        onExit: vi.fn(() => vi.fn()),
+        listProcesses: vi.fn(async () => []),
+        getForegroundProcess: vi.fn(async () => null)
+      } as never)
+      const persistPtyBinding = vi.fn(() => {
+        throw new Error('disk full')
+      })
+      handlers.clear()
+      registerPtyHandlers(mainWindow as never, undefined, undefined, undefined, undefined, {
+        getWorkspaceSession: () => ({}),
+        persistPtyBinding
+      } as never)
+      const spawnReturn = async (): Promise<unknown> => {
+        snooze.take(ref, { rendererId: 7, returnTabId: 'tab-returned' })
+        const claim = (await handlers.get('pty:claimAgentResume')!(mainWindowIpcEvent, owner)) as {
+          token: string
+          target: AgentResumeSpawnTarget
+        }
+        expect(claim).toMatchObject({ ok: true })
+        return handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+          cols: 80,
+          rows: 24,
+          worktreeId: owner.worktreeId,
+          tabId: 'tab-returned',
+          leafId,
+          launchAgent: owner.agent,
+          command: 'codex resume snoozed-session-save',
+          env: {
+            [AGENT_RESUME_CLAIM_ENV]: encodeAgentResumeSpawnClaim({
+              token: claim.token,
+              owner,
+              target: claim.target
+            })
+          }
+        })
+      }
+
+      // The save fails: the terminal is killed, so the entry must survive on
+      // the shelf and the same return must be able to claim again.
+      await expect(spawnReturn()).rejects.toThrow()
+      expect(persistPtyBinding).toHaveBeenCalledTimes(1)
+      expect(snooze.list()).toHaveLength(1)
+      expect(snooze.list()[0].returning).toBeUndefined()
+
+      persistPtyBinding.mockImplementation(() => undefined as never)
+      await expect(spawnReturn()).resolves.toMatchObject({ id: 'returned-pty-2' })
+      expect(snooze.list()).toEqual([])
+    } finally {
+      delete sender.id
       snooze.stop()
       setActiveTabSnoozeService(null)
     }

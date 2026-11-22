@@ -146,6 +146,56 @@ export function createAgentResumeClaims(createToken: () => string = randomUUID) 
       return claimsBySession.delete(key)
     },
 
+    /**
+     * The operation holding this owner's claim is gone (its window closed).
+     * A claim that never reached a spawn is given back for the same owner to
+     * retry. Returns true when a spawn is in flight instead: that one is left
+     * alone and its own completion decides the outcome.
+     */
+    abandon(owner: AgentResumeOwner): boolean {
+      const validatedOwner = parseAgentResumeOwner(owner)
+      if (!validatedOwner) {
+        return false
+      }
+      const claim = claimsBySession.get(getAgentResumeClaimKey(validatedOwner))
+      if (!claim || claim.fingerprint !== getAgentResumeOwnerFingerprint(validatedOwner)) {
+        return false
+      }
+      if (claim.state === 'spawning') {
+        return true
+      }
+      if (claim.state === 'reserved') {
+        if (claim.token) {
+          sessionByToken.delete(claim.token)
+        }
+        delete claim.token
+        claim.state = 'retryable'
+      }
+      return false
+    },
+
+    /**
+     * The terminal a finished claim started was killed again before it could
+     * be used (its tab binding could not be saved): the same owner may retry.
+     */
+    failStarted(owner: AgentResumeOwner, ptyId: string): boolean {
+      const validatedOwner = parseAgentResumeOwner(owner)
+      if (!validatedOwner) {
+        return false
+      }
+      const claim = claimsBySession.get(getAgentResumeClaimKey(validatedOwner))
+      if (
+        claim?.state !== 'started' ||
+        claim.ptyId !== ptyId ||
+        claim.fingerprint !== getAgentResumeOwnerFingerprint(validatedOwner)
+      ) {
+        return false
+      }
+      delete claim.ptyId
+      claim.state = 'retryable'
+      return true
+    },
+
     size(): number {
       return claimsBySession.size
     }

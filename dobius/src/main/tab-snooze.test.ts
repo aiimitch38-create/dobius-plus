@@ -46,7 +46,12 @@ function request(tabId: string, extra: Partial<SnoozeTabRequest> = {}): SnoozeTa
   return { worktreeId: 'wt-1', tabId, title: 'Fix', until: null, ...extra }
 }
 
-function harness(options: { verifyResumeOwner?: (owner: AgentResumeOwner) => boolean } = {}) {
+function harness(
+  options: {
+    verifyResumeOwner?: (owner: AgentResumeOwner) => boolean
+    abandonReturnClaim?: (owner: AgentResumeOwner) => boolean
+  } = {}
+) {
   const state = { saved: [] as unknown, clock: 1000, changes: 0 }
   const files = new Map<string, string>()
   const service = createTabSnoozeService({
@@ -311,6 +316,75 @@ describe('tab snooze service', () => {
     expect(first.returning).toBeUndefined()
     expect(second.returning).toBe(true)
     expect(h.service.take({ worktreeId: 'wt-1', tabId: 'tab-1' })?.scrollback).toBe('out')
+    h.service.stop()
+  })
+
+  it('a window gone before the spawn releases the claim; one gone mid-spawn waits for main', () => {
+    const abandoned: string[] = []
+    let inFlight = false
+    const h = harness({
+      verifyResumeOwner: () => true,
+      abandonReturnClaim: (owner) => {
+        abandoned.push(owner.tabId)
+        return inFlight
+      }
+    })
+    const session = agentSession('tab-1')
+    const owner = session.resumeOwner as AgentResumeOwner
+    const ref = { worktreeId: 'wt-1', tabId: 'tab-1' }
+    h.service.add(request('tab-1', { agentSession: session }))
+    h.service.take(ref, { rendererId: 7 })
+    h.service.releaseRenderer(7)
+    expect(abandoned).toEqual(['tab-1'])
+    expect(h.service.list()[0].returning).toBeUndefined()
+
+    // Torn down while main is starting the terminal: not on the shelf yet.
+    inFlight = true
+    h.service.take(ref, { rendererId: 7 })
+    h.service.releaseRenderer(7)
+    expect(h.service.list()[0].returning).toBe(true)
+    expect(h.service.ownsReturn(owner, 7)).toBe(false)
+    expect(h.service.take(ref)).toBeNull()
+    // The spawn failed: main puts it back itself.
+    expect(h.service.releaseReturn(owner)).toBe(true)
+    expect(h.service.list()[0]).toMatchObject({ ready: false, until: null })
+    expect(h.service.list()[0].returning).toBeUndefined()
+
+    // The spawn succeeded: main settles it though the window is gone.
+    h.service.take(ref, { rendererId: 7 })
+    h.service.releaseRenderer(7)
+    expect(h.service.settleReturn(owner)).toBe(true)
+    expect(h.service.list()).toEqual([])
+    h.service.stop()
+  })
+
+  it('refuses a conversation on an SSH host: its resume command is delivered after the spawn', () => {
+    const h = harness({ verifyResumeOwner: () => true })
+    const session = agentSession('tab-1')
+    const sshOwner = {
+      ...(session.resumeOwner as AgentResumeOwner),
+      authority: { kind: 'ssh' as const, connectionId: 'conn-1' }
+    }
+    const sshSession = { ...session, connectionId: 'conn-1', resumeOwner: sshOwner }
+    expect(h.service.add(request('tab-1', { agentSession: sshSession }))).toEqual({
+      ok: false,
+      reason: 'conversation-not-resumable'
+    })
+    // An entry saved by an earlier build is never vouched for either.
+    h.state.saved = [
+      {
+        worktreeId: 'wt-1',
+        tabId: 'tab-1',
+        title: 'x',
+        snoozedAt: 1,
+        until: null,
+        ready: false,
+        agentSession: sshSession
+      }
+    ]
+    expect(h.service.list()).toHaveLength(1)
+    h.service.take({ worktreeId: 'wt-1', tabId: 'tab-1' }, { rendererId: 7 })
+    expect(h.service.ownsReturn(sshOwner, 7)).toBe(false)
     h.service.stop()
   })
 
