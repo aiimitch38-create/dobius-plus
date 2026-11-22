@@ -18,6 +18,8 @@ import { getAgentHibernationOutputSignature } from './agent-hibernation-output-a
 import { getRuntimeEnvironmentIdForWorktree } from './worktree-runtime-owner'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
+import { buildHostIdByWorktreeId } from './workspace-session-host-persistence'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type {
   RuntimeTerminalListResult,
   RuntimeTerminalSummary
@@ -142,13 +144,20 @@ async function collectRuntimePtyLiveness(state: AppState): Promise<RuntimePtyLiv
 async function currentCandidates(now: number) {
   const runtimeLiveness = await collectRuntimePtyLiveness(useAppStore.getState())
   const freshState = useAppStore.getState()
+  const hostIdByWorktreeId = buildHostIdByWorktreeId(freshState)
   return planAgentHibernationCandidates(snapshotFromState(freshState, now, runtimeLiveness))
     .filter((candidate) => {
       const runtimeEnvironmentId = getRuntimeEnvironmentIdForWorktree(
         freshState,
         candidate.worktreeId
       )
-      return !runtimeEnvironmentId || candidate.expectedRuntimePtyIds.length === 1
+      return (
+        (!runtimeEnvironmentId || candidate.expectedRuntimePtyIds.length === 1) &&
+        // Why: shutdownCompletedAgentPaneForHibernation refuses worktrees whose
+        // session lives in a runtime host's partition; skip them here so they
+        // are not retried and warned about every tick.
+        hostIdByWorktreeId(candidate.worktreeId) === LOCAL_EXECUTION_HOST_ID
+      )
     })
     .map((candidate) => ({
       ...candidate,

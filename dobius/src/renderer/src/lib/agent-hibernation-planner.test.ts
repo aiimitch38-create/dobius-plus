@@ -128,6 +128,7 @@ describe('agent sleep planner', () => {
     for (const unresumable of [
       entry({ launchToken: undefined }),
       entry({ connectionId: undefined }),
+      entry({ connectionId: 'ssh-1' }),
       entry({ ptyId: 'pty-stale' })
     ]) {
       expect(
