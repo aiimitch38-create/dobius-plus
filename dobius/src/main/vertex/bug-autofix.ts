@@ -25,6 +25,7 @@
  * here are the 2-slot cap and one agent per card. */
 
 import type { ExecutionAdmission } from '../agents/execution-gate'
+import { BUG_FIX_WORKTREE_PREFIX } from '../../shared/bug-fix-agent-profile'
 import type {
   VertexTask,
   VertexTaskAutoFix,
@@ -60,11 +61,17 @@ export type BugAutoFixDeps = {
     name: string
     prompt: string
     comment: string
+    /** The card, so its screenshot folder can be made readable to the agent. */
+    taskId: string
+    hasAttachments: boolean
   }) => Promise<BugAutoFixWorktree>
   /** Does this workspace have a terminal with a running agent? Throwing means unknown. */
   isWorktreeLive: (worktreeId: string) => Promise<boolean>
-  /** The workspace an interrupted start created, if it exists. */
-  findWorktree: (repoId: string, name: string) => Promise<BugAutoFixWorktree | null>
+  /** The workspace an interrupted start created: null only when the lookup is
+   *  authoritative that it does not exist; 'unknown' when it could not tell. */
+  findWorktree: (repoId: string, name: string) => Promise<BugAutoFixWorktree | null | 'unknown'>
+  /** A reason auto-fix cannot run on this machine at all (e.g. Windows), or null. */
+  unsupportedReason?: () => string | null
   /** The TUI agent createWorktree launches, for the card. */
   agentName: () => string
   graceMs?: number
@@ -93,7 +100,7 @@ export function bugFixWorktreeName(task: Pick<VertexTask, 'id' | 'title'>): stri
     .slice(0, 30)
     .replace(/-+$/g, '')
   const id = task.id.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) || 'card'
-  return `fix-${slug || 'bug'}-${id}`
+  return `${BUG_FIX_WORKTREE_PREFIX}${slug || 'bug'}-${id}`
 }
 
 // Why: as a JSON string with < and > escaped, report text can never contain a
@@ -138,6 +145,16 @@ export function buildBugFixPrompt(task: VertexTask, repo: BugAutoFixRepo): strin
   ].join('\n')
 }
 
+/** Starts awaiting their workspace, by card id. Module-wide so an instance
+ *  swapped in by configureBugAutoFix never mistakes a sibling's start for an
+ *  interrupted one. */
+const pending = new Set<string>()
+
+/** Test seam. */
+export function resetBugAutoFixPendingForTest(): void {
+  pending.clear()
+}
+
 export function createBugAutoFix(deps: BugAutoFixDeps) {
   const now = deps.now ?? Date.now
   const graceMs = deps.graceMs ?? BUG_AUTOFIX_GRACE_MS
@@ -145,8 +162,7 @@ export function createBugAutoFix(deps: BugAutoFixDeps) {
   const bootAt = now()
   let pumping = false
   let disposed = false
-  /** Starts awaiting their workspace, by card id. */
-  const pending = new Set<string>()
+  const unsupported = (): string | null => deps.unsupportedReason?.() ?? null
   /** Fixes started this session, so a deleted card still counts its agent. */
   const startedHere = new Map<string, { worktreeId: string; startedAt: number }>()
 
@@ -226,6 +242,11 @@ export function createBugAutoFix(deps: BugAutoFixDeps) {
     if (disposed || !deps.isEnabled() || !isBugAutoFixCandidate(task)) {
       return false
     }
+    const reason = unsupported()
+    if (reason) {
+      mark(task, { status: 'skipped', reason })
+      return false
+    }
     return mark(task, { status: 'queued' }) !== null
   }
 
@@ -249,6 +270,8 @@ export function createBugAutoFix(deps: BugAutoFixDeps) {
         name: worktreeName,
         prompt: buildBugFixPrompt(claimed, repo),
         comment: `Auto-fix for Kanban bug: ${task.title}`.slice(0, 200),
+        taskId: task.id,
+        hasAttachments: (claimed.attachments?.length ?? 0) > 0,
       })
       const startedAt = now()
       startedHere.set(task.id, { worktreeId: created.worktreeId, startedAt })
@@ -276,14 +299,27 @@ export function createBugAutoFix(deps: BugAutoFixDeps) {
   }
 
   const pump = async (): Promise<void> => {
-    if (disposed || pumping || !deps.isEnabled() || !deps.admission().allowed) {
+    if (disposed || pumping) {
       return
     }
     pumping = true
     const started: Promise<void>[] = []
     try {
+      await reconcileInterrupted()
+      if (disposed || !deps.isEnabled() || !deps.admission().allowed) {
+        return
+      }
       const tasks = listTasks()
       if (!tasks) {
+        return
+      }
+      const reason = unsupported()
+      if (reason) {
+        for (const task of tasks) {
+          if (task.autoFix?.status === 'queued') {
+            mark(task, { status: 'skipped', reason })
+          }
+        }
         return
       }
       const queued = tasks
@@ -326,22 +362,29 @@ export function createBugAutoFix(deps: BugAutoFixDeps) {
     await Promise.all(started)
   }
 
-  /** Boot only: a 'starting' left by the last session has no promise to settle
-   *  it. If its workspace exists, it becomes 'dispatched' (liveness decides its
-   *  slot); if not, nothing ran and it is marked failed. Never restarted. */
-  const recoverInterrupted = async (): Promise<void> => {
+  /** A 'starting' with no live start behind it (the last session died
+   *  mid-start) is settled from the workspace list: found becomes 'dispatched'
+   *  (liveness decides its slot), authoritatively absent becomes 'failed', and
+   *  an unavailable lookup leaves it 'starting' (holding its slot) for the
+   *  next pump. Never restarted. Runs at the start of every pump. */
+  const reconcileInterrupted = async (): Promise<void> => {
     const tasks = listTasks() ?? []
     for (const task of tasks) {
       const fix = task.autoFix
-      if (fix?.status !== 'starting') {
+      if (fix?.status !== 'starting' || pending.has(task.id)) {
         continue
       }
-      let found: BugAutoFixWorktree | null = null
+      let found: BugAutoFixWorktree | null | 'unknown' = null
       try {
         found =
           fix.repoId && fix.worktreeName ? await deps.findWorktree(fix.repoId, fix.worktreeName) : null
       } catch (error) {
         log(`[bug-autofix] could not look for ${fix.worktreeName}`, error)
+        found = 'unknown'
+      }
+      // Why re-check: a start in this session may have begun during the await.
+      if (found === 'unknown' || pending.has(task.id)) {
+        continue
       }
       if (found) {
         mark(task, {
@@ -367,7 +410,7 @@ export function createBugAutoFix(deps: BugAutoFixDeps) {
     disposed = true
   }
 
-  return { queue, pump, recoverInterrupted, dispose }
+  return { queue, pump, reconcileInterrupted, dispose }
 }
 
 export type BugAutoFix = ReturnType<typeof createBugAutoFix>
@@ -392,12 +435,9 @@ export function configureBugAutoFix(deps: BugAutoFixDeps): void {
   if (!timer) {
     timer = setInterval(() => void active?.pump(), BUG_AUTOFIX_PUMP_MS)
     timer.unref?.()
-    // Why on boot: settle the last session's interrupted starts first (this
-    // timer fires before any create's pump), then start what it left 'queued'.
-    later(async () => {
-      await active?.recoverInterrupted()
-      await active?.pump()
-    })
+    // Why on boot: settle the last session's interrupted starts and start
+    // what it left 'queued' without waiting a full PUMP_MS.
+    later(() => active?.pump())
   }
 }
 

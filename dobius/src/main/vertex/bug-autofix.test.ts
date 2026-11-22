@@ -1,12 +1,15 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { VertexTask, VertexTaskPatch } from '../../shared/vertex-task-types'
 import {
   bugFixWorktreeName,
   buildBugFixPrompt,
   createBugAutoFix,
+  resetBugAutoFixPendingForTest,
   type BugAutoFixDeps
 } from './bug-autofix'
+
+beforeEach(() => resetBugAutoFixPendingForTest())
 
 function card(id: string, overrides: Partial<VertexTask> = {}): VertexTask {
   return {
@@ -41,7 +44,7 @@ type Harness = {
   settle: Array<() => void>
   flags: { enabled: boolean; paused: boolean }
   live: Map<string, boolean>
-  worktrees: Map<string, { worktreeId: string }>
+  worktrees: Map<string, { worktreeId: string } | 'unknown'>
 }
 
 function harness(): Harness {
@@ -49,7 +52,7 @@ function harness(): Harness {
   const settle: Array<() => void> = []
   const flags = { enabled: true, paused: false }
   const live = new Map<string, boolean>()
-  const worktrees = new Map<string, { worktreeId: string }>()
+  const worktrees = new Map<string, { worktreeId: string } | 'unknown'>()
   let clock = 1000
   const createWorktree = vi.fn(
     () =>
@@ -108,7 +111,7 @@ describe('bug auto-fix', () => {
     expect(h.createWorktree).toHaveBeenCalledTimes(1)
     const [request] = h.createWorktree.mock.calls[0]
     expect(request.repoId).toBe('repo')
-    expect(request.name).toBe('fix-bug-a-a')
+    expect(request.name).toBe('autofix-bug-a-a')
     expect(request.prompt).toContain('The button does nothing')
     const stored = h.tasks[0]
     expect(stored.status).toBe('in-progress')
@@ -132,7 +135,7 @@ describe('bug auto-fix', () => {
     expect(autoFix.queue({ ...h.tasks[0] })).toBe(false)
     // Fresh instance = app restart; the mark lives on the card.
     const restarted = createBugAutoFix(h.deps)
-    await restarted.recoverInterrupted()
+    await restarted.reconcileInterrupted()
     expect(restarted.queue({ ...h.tasks[0] })).toBe(false)
     // Even after the card leaves In Progress and returns to To Do.
     h.tasks[0].status = 'todo'
@@ -317,11 +320,11 @@ describe('bug auto-fix', () => {
     h.tasks.push(
       card('a', {
         status: 'in-progress',
-        autoFix: { status: 'starting', queuedAt: 1, updatedAt: 1, repoId: 'repo', worktreeName: 'fix-bug-a-a' }
+        autoFix: { status: 'starting', queuedAt: 1, updatedAt: 1, repoId: 'repo', worktreeName: 'autofix-bug-a-a' }
       })
     )
     const autoFix = createBugAutoFix(h.deps)
-    await autoFix.recoverInterrupted()
+    await autoFix.reconcileInterrupted()
     expect(h.tasks[0].autoFix?.status).toBe('failed')
     await autoFix.pump()
     expect(h.createWorktree).not.toHaveBeenCalled()
@@ -329,11 +332,11 @@ describe('bug auto-fix', () => {
 
   it('a start interrupted by a restart whose workspace exists is reconciled as dispatched and holds its slot', async () => {
     const h = harness()
-    h.worktrees.set('fix-bug-a-a', { worktreeId: 'repo::/wt/a' })
+    h.worktrees.set('autofix-bug-a-a', { worktreeId: 'repo::/wt/a' })
     h.tasks.push(
       card('a', {
         status: 'in-progress',
-        autoFix: { status: 'starting', queuedAt: 1, updatedAt: 1, repoId: 'repo', worktreeName: 'fix-bug-a-a' }
+        autoFix: { status: 'starting', queuedAt: 1, updatedAt: 1, repoId: 'repo', worktreeName: 'autofix-bug-a-a' }
       }),
       card('b', {
         status: 'in-progress',
@@ -341,9 +344,55 @@ describe('bug auto-fix', () => {
       })
     )
     const autoFix = createBugAutoFix(h.deps)
-    await autoFix.recoverInterrupted()
+    await autoFix.reconcileInterrupted()
     expect(h.tasks[0].autoFix).toMatchObject({ status: 'dispatched', worktreeId: 'repo::/wt/a' })
     report(h, autoFix, card('c'))
+    await autoFix.pump()
+    expect(h.createWorktree).not.toHaveBeenCalled()
+  })
+
+  it('a lookup that cannot tell keeps the start pending and retries on the next pump', async () => {
+    const h = harness()
+    h.worktrees.set('autofix-bug-a-a', 'unknown')
+    h.tasks.push(
+      card('a', {
+        status: 'in-progress',
+        autoFix: { status: 'starting', queuedAt: 1, updatedAt: 1, repoId: 'repo', worktreeName: 'autofix-bug-a-a' }
+      })
+    )
+    const autoFix = createBugAutoFix(h.deps)
+    await autoFix.pump()
+    expect(h.tasks[0].autoFix?.status).toBe('starting')
+    h.worktrees.set('autofix-bug-a-a', { worktreeId: 'repo::/wt/a' })
+    await autoFix.pump()
+    expect(h.tasks[0].autoFix).toMatchObject({ status: 'dispatched', worktreeId: 'repo::/wt/a' })
+    expect(h.createWorktree).not.toHaveBeenCalled()
+  })
+
+  it("a sibling instance's in-flight start is never reconciled as interrupted", async () => {
+    const h = harness()
+    const first = createBugAutoFix(h.deps)
+    report(h, first, card('a'))
+    const running = first.pump()
+    await flush()
+    expect(h.tasks[0].autoFix?.status).toBe('starting')
+    const second = createBugAutoFix(h.deps)
+    await second.reconcileInterrupted()
+    expect(h.tasks[0].autoFix?.status).toBe('starting')
+    h.settle[0]()
+    await running
+    expect(h.tasks[0].autoFix?.status).toBe('dispatched')
+  })
+
+  it('an unsupported platform skips the card with a reason and starts nothing', async () => {
+    const h = harness()
+    h.deps.unsupportedReason = () => 'Auto-fix is not available on Windows yet.'
+    const autoFix = createBugAutoFix(h.deps)
+    expect(report(h, autoFix, card('a'))).toBe(false)
+    expect(h.tasks[0].autoFix).toMatchObject({
+      status: 'skipped',
+      reason: 'Auto-fix is not available on Windows yet.'
+    })
     await autoFix.pump()
     expect(h.createWorktree).not.toHaveBeenCalled()
   })

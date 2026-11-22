@@ -18,6 +18,11 @@ describe('bug fix agent launch profile', () => {
     expect(startup.launchConfig?.agentArgs).not.toMatch(/dangerously/)
   })
 
+  it('ignores inherited settings files and MCP servers and names its only tools', () => {
+    expect(startup.command).toMatch(/^claude '--restricted' '--strict-mcp-config' '--tools' 'Bash,Read,Edit,Write,Glob,Grep' /)
+    expect(startup.command).not.toContain('--mcp-config')
+  })
+
   it('ends the variadic tool lists with --permission-mode before the prompt', () => {
     expect(startup.command).toMatch(/'--permission-mode' 'acceptEdits' 'Fix the login button'$/)
     expect(startup.command.indexOf('--disallowedTools')).toBeLessThan(
@@ -53,5 +58,13 @@ describe('bug fix agent launch profile', () => {
       ])
     )
     expect(BUG_FIX_ALLOWED_TOOLS.some((tool) => /push|install|rm /.test(tool))).toBe(false)
+  })
+})
+
+describe('bug fix agent extra read folders', () => {
+  it('adds --add-dir inside the variadic block, before --permission-mode', () => {
+    const { command } = buildBugFixStartup('Go', ['/ud/vertex-attachments/t1'])
+    expect(command).toContain("'--add-dir' '/ud/vertex-attachments/t1' '--disallowedTools'")
+    expect(command).toMatch(/'--permission-mode' 'acceptEdits' 'Go'$/)
   })
 })

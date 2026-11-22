@@ -322,6 +322,34 @@ describe('launchAgentInNewTab', () => {
     expect(mockQueueTabStartupCommand).not.toHaveBeenCalled()
   })
 
+  it('forwards an explicit command and args to paired hosts even without a prompt', async () => {
+    mockIsWebRuntimeSessionActive.mockReturnValue(true)
+    store.settings = {
+      agentCmdOverrides: {},
+      agentDefaultArgs: { claude: '--dangerously-skip-permissions' },
+      agentDefaultEnv: {},
+      activeRuntimeEnvironmentId: 'web-runtime'
+    }
+    const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
+
+    launchAgentInNewTab({
+      agent: 'claude',
+      worktreeId: 'wt-1',
+      agentCommandOverride: 'claude',
+      agentArgs: '--restricted --permission-mode acceptEdits'
+    })
+
+    const call = mockCreateWebRuntimeSessionTerminal.mock.calls.at(-1)?.[0] as {
+      command?: string
+      agent?: string
+      launchAgent?: string
+    }
+    expect(call.command).toContain('--restricted')
+    expect(call.command).not.toContain('dangerously')
+    expect(call.launchAgent).toBe('claude')
+    expect(call.agent).toBeUndefined()
+  })
+
   it('surfaces a toast when host agent launch fails in paired web clients', async () => {
     mockIsWebRuntimeSessionActive.mockReturnValue(true)
     mockCreateWebRuntimeSessionTerminal.mockResolvedValue(false)

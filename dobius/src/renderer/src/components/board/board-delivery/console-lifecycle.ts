@@ -5,6 +5,11 @@ import { getAgentLabel } from '@/lib/agent-catalog'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { useAppStore } from '@/store'
 import { getBoard, type BoardCardOf } from '@/store/slices/board'
+import {
+  bugFixClaudeArgs,
+  isBugFixProfileLaunch,
+  isBugFixWorktreePath
+} from '../../../../../shared/bug-fix-agent-profile'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import type { TuiAgent } from '../../../../../shared/types'
 import { boardSpawnRects } from '../board-canvas/board-spawn-placement'
@@ -95,12 +100,36 @@ export type ConsoleRelaunchOptions = {
   accountId?: string | null
 }
 
+type RestrictedLaunch = { command: string; args: string }
+
+/** How to relaunch a bug-fix console, or null for any other console. Why two
+ *  signals: the captured launch (keeps --add-dir) is dropped when the agent
+ *  exits, but the workspace folder name never changes. */
+function restrictedLaunchFor(worktreeId: string, tabId: string): RestrictedLaunch | null {
+  const state = useAppStore.getState()
+  for (const [paneKey, entry] of Object.entries(state.agentLaunchConfigByPaneKey ?? {})) {
+    const command = entry.launchConfig.agentCommand
+    if (paneKey.startsWith(`${tabId}:`) && command && isBugFixProfileLaunch(command)) {
+      return { command, args: '' }
+    }
+  }
+  const worktree = state.allWorktrees?.().find((entry) => entry.id === worktreeId)
+  return isBugFixWorktreePath(worktree?.path) ? { command: 'claude', args: bugFixClaudeArgs() } : null
+}
+
 export function restartConsole(
   worktreeId: string,
   card: Console,
   agent?: TuiAgent,
   launch?: ConsoleRelaunchOptions
 ): boolean {
+  // Why: a bug-fix console must come back with its captured restricted
+  // command, never the Settings default args (which skip permissions) or
+  // another agent.
+  const restricted = restrictedLaunchFor(worktreeId, card.tabId)
+  if (restricted) {
+    return relaunchInNewTab(worktreeId, card, 'claude', restricted.command, restricted.args, undefined)
+  }
   const next = agent ?? agentOrDefault(card.agentKind)
   // Why: a plain restart of a pinned console must stay on its account; falling
   // back to the Settings default would silently switch who the agent runs as.
@@ -122,18 +151,32 @@ export function restartConsole(
     )
     return true
   }
+  const accountId = launch?.agentCommandOverride ? (launch.accountId ?? undefined) : undefined
+  return relaunchInNewTab(worktreeId, card, next, launch?.agentCommandOverride, undefined, accountId)
+}
+
+function relaunchInNewTab(
+  worktreeId: string,
+  card: Console,
+  next: TuiAgent,
+  agentCommandOverride: string | undefined,
+  agentArgs: string | undefined,
+  accountId: string | undefined
+): boolean {
   const launched = launchAgentInNewTab({
     agent: next,
     worktreeId,
     launchSource: 'unknown',
-    ...(launch?.agentCommandOverride ? { agentCommandOverride: launch.agentCommandOverride } : {})
+    ...(agentCommandOverride ? { agentCommandOverride } : {}),
+    // Why explicit args: they replace the Settings default args entirely
+    // ('' when a captured command already carries its own).
+    ...(agentArgs !== undefined ? { agentArgs } : {})
   })
   if (!launched?.tabId) {
     return false
   }
   const oldTab = card.tabId
   markConsolePaused(oldTab, false)
-  const accountId = launch?.agentCommandOverride ? (launch.accountId ?? undefined) : undefined
   useAppStore
     .getState()
     .updateCard(worktreeId, card.id, { tabId: launched.tabId, agentKind: next, accountId })

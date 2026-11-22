@@ -14049,6 +14049,7 @@ export class DobiusRuntimeService {
         }
         this.assertAgentSpawnAdmitted(args.executionOrigin, result.worktree.path)
         const terminal = await this.createTerminal(`path:${result.worktree.path}`, {
+          executionOrigin: args.executionOrigin,
           command: sequencedStartup.command,
           ...(result.setup && args.startup
             ? { claudeAgentTeamsSourceCommand: args.startup.command }
@@ -16111,6 +16112,7 @@ export class DobiusRuntimeService {
     // Why: Pause crew can turn on during the awaits above; re-check before the spawn.
     this.assertAgentSpawnAdmitted(opts.executionOrigin)
     return await this.createTerminal(`id:${worktree.id}`, {
+      executionOrigin: opts.executionOrigin,
       command: startup.startup.command,
       env: startup.startup.env,
       ...(startup.startup.launchConfig ? { launchConfig: startup.startup.launchConfig } : {}),

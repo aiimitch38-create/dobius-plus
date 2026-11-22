@@ -5,10 +5,18 @@ const updateCard = vi.fn()
 const closeTerminalTab = vi.fn()
 const resolvePinnedAgentCommand = vi.fn()
 const toastError = vi.fn()
+let worktrees: { id: string; path: string }[] = []
+const launchConfigs: Record<string, { launchConfig: { agentCommand?: string; agentArgs: string } }> = {}
 
 vi.mock('@/lib/launch-agent-in-new-tab', () => ({ launchAgentInNewTab }))
 vi.mock('@/components/terminal/terminal-tab-actions', () => ({ closeTerminalTab }))
-vi.mock('@/store', () => ({ useAppStore: { getState: () => ({ updateCard }) } }))
+vi.mock('@/store', () => ({
+  useAppStore: { getState: () => ({
+      updateCard,
+      agentLaunchConfigByPaneKey: launchConfigs,
+      allWorktrees: () => worktrees
+    }) }
+}))
 vi.mock('@/store/slices/board', () => ({ getBoard: vi.fn() }))
 vi.mock('./board-pause', () => ({ markConsolePaused: vi.fn() }))
 vi.mock('../console-card/console-card-status', () => ({ isShellProcessName: vi.fn() }))
@@ -40,6 +48,10 @@ const card = (extra: Partial<Card> = {}): Card =>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  worktrees = []
+  for (const key of Object.keys(launchConfigs)) {
+    delete launchConfigs[key]
+  }
   launchAgentInNewTab.mockReturnValue({ tabId: 'new-tab' })
 })
 
@@ -108,3 +120,49 @@ describe('restartConsole account handling', () => {
     })
   })
 })
+
+describe('restartConsole keeps a bug-fix console restricted', () => {
+  const restricted =
+    "claude '--restricted' '--strict-mcp-config' '--tools' 'Bash,Read' '--permission-mode' 'acceptEdits'"
+
+  it('relaunches the captured restricted command as Claude, never the Settings defaults', () => {
+    launchConfigs['old-tab:11111111-1111-4111-8111-111111111111'] = {
+      launchConfig: { agentCommand: restricted, agentArgs: '' }
+    }
+    expect(restartConsole('wt', card(), 'codex')).toBe(true)
+    expect(launchAgentInNewTab).toHaveBeenCalledWith({
+      agent: 'claude',
+      worktreeId: 'wt',
+      launchSource: 'unknown',
+      agentCommandOverride: restricted,
+      agentArgs: ''
+    })
+    expect(resolvePinnedAgentCommand).not.toHaveBeenCalled()
+  })
+
+  it('stays restricted after the agent exited and its captured launch is gone', async () => {
+    const { bugFixClaudeArgs } = await import('../../../../../shared/bug-fix-agent-profile')
+    worktrees = [{ id: 'wt', path: '/ws/dobius-plus/autofix-login-abcd1234' }]
+    expect(restartConsole('wt', card(), 'codex')).toBe(true)
+    expect(launchAgentInNewTab).toHaveBeenCalledWith({
+      agent: 'claude',
+      worktreeId: 'wt',
+      launchSource: 'unknown',
+      agentCommandOverride: 'claude',
+      agentArgs: bugFixClaudeArgs()
+    })
+  })
+
+  it("leaves other consoles' restarts unchanged", () => {
+    launchConfigs['old-tab:11111111-1111-4111-8111-111111111111'] = {
+      launchConfig: { agentCommand: "claude '--dangerously-skip-permissions'", agentArgs: '' }
+    }
+    restartConsole('wt', card())
+    expect(launchAgentInNewTab).toHaveBeenCalledWith({
+      agent: 'claude',
+      worktreeId: 'wt',
+      launchSource: 'unknown'
+    })
+  })
+})
+
