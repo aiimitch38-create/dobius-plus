@@ -52,9 +52,9 @@ export type BoardCardList = {
   truncated: boolean
 }
 
-type SavedCard = { id: string; kind: string; title: string; raw: Raw }
+export type SavedCard = { id: string; kind: string; title: string; raw: Raw }
 
-function savedCards(runtime: DobiusRuntimeService, worktreeId: string): SavedCard[] {
+export function savedCards(runtime: DobiusRuntimeService, worktreeId: string): SavedCard[] {
   const boards = runtime.getUIState().boardsByWorktree as unknown
   const board = isObj(boards) ? boards[worktreeId] : undefined
   if (!isObj(board) || !Array.isArray(board.cards)) {

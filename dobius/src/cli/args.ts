@@ -36,6 +36,7 @@ export const BOOLEAN_FLAGS = new Set([
   'inject',
   'interrupt',
   'json',
+  'loop',
   'messages',
   'me',
   'mobile',

@@ -2617,6 +2617,10 @@ export class DobiusRuntimeService {
     if (hasRuntimeAutomationUpdateValue(updates, 'missedRunGraceMinutes')) {
       patch.missedRunGraceMinutes = updates.missedRunGraceMinutes
     }
+    // Why: only the loop RPC (automation-loop-params.ts) builds this; it is validated there.
+    if (hasRuntimeAutomationUpdateValue(updates, 'loop')) {
+      patch.loop = updates.loop
+    }
     const targetChanged =
       hasRuntimeAutomationUpdateValue(updates, 'repo') ||
       hasRuntimeAutomationUpdateValue(updates, 'workspace') ||
