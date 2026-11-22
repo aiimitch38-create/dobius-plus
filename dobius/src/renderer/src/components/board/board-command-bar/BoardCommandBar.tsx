@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { ArrowUp, ChevronDown, Mic } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -6,7 +6,9 @@ import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
 import { VoiceOrb } from '@/components/dictation/VoiceOrb'
 import {
   endAdamVoiceFromOrb,
-  startAdamVoiceTurnFromOrb
+  getVoiceOrbPresentation,
+  startAdamVoiceTurnFromOrb,
+  subscribeVoiceOrbPresentation
 } from '@/components/dictation/voice-orb-live-level'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
@@ -45,6 +47,23 @@ export type BoardCommandBarProps = {
   busy?: boolean
 }
 
+/** What ADAM is doing, shown beside the input so it reads with the thread closed. */
+export function boardCommandBarStatus(
+  voiceState: ReturnType<typeof getVoiceOrbPresentation>['state'],
+  busy: boolean
+): string | null {
+  if (voiceState === 'speaking') {
+    return translate('board.commandBar.statusSpeaking', 'Speaking…')
+  }
+  if (voiceState === 'thinking') {
+    return translate('board.commandBar.statusThinking', 'Thinking…')
+  }
+  if (busy) {
+    return translate('board.commandBar.statusWorking', 'Working…')
+  }
+  return null
+}
+
 export function BoardCommandBar({
   messages,
   projectName,
@@ -59,17 +78,14 @@ export function BoardCommandBar({
   onMicToggle,
   busy = false
 }: BoardCommandBarProps): React.JSX.Element {
+  // Why no auto-open: ADAM replies and voice transcript rows arrive while Carson
+  // works elsewhere; only the toggle or his own typed send opens the thread.
   const [collapsed, setCollapsed] = useState(true)
-  const messageCount = messages.length
-  const previousMessageCount = useRef(messageCount)
-  // Why: restored history is already read; only messages arriving after mount
-  // should open the thread when returning to the Board.
-  useEffect(() => {
-    if (messageCount > previousMessageCount.current) {
-      setCollapsed(false)
-    }
-    previousMessageCount.current = messageCount
-  }, [messageCount])
+  const voiceState = useSyncExternalStore(
+    subscribeVoiceOrbPresentation,
+    () => getVoiceOrbPresentation().state
+  )
+  const status = boardCommandBarStatus(voiceState, busy)
   // Why: Esc folds the thread like the other board panels, but not while a menu
   // or dialog is stacked on top (that one takes the Esc).
   useEffect(() => {
@@ -176,6 +192,7 @@ export function BoardCommandBar({
       return
     }
     onCommand(text)
+    setCollapsed(false)
     historyCursor.current = { index: null, draft: '' }
     onDraftChange('')
   }
@@ -286,6 +303,13 @@ export function BoardCommandBar({
             )}
             className="min-w-0 flex-1 bg-transparent text-[14px] text-[var(--board-text)] outline-none placeholder:text-[var(--board-text-muted)]"
           />
+          <span
+            role="status"
+            aria-live="polite"
+            className="shrink-0 text-[12px] text-[var(--board-text-muted)] empty:hidden"
+          >
+            {status}
+          </span>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

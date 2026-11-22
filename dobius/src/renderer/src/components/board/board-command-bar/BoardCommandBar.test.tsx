@@ -10,6 +10,10 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import {
+  publishVoiceOrbPresentation,
+  setAdamVoiceHangUp
+} from '@/components/dictation/voice-orb-live-level'
 import { BoardCommandBar, type BoardCommandBarProps } from './BoardCommandBar'
 import type { BoardThreadMessage } from './BoardThread'
 
@@ -22,7 +26,13 @@ vi.mock('@/components/dictation/VoiceOrb', () => ({
 }))
 vi.mock('./BoardVoiceCaption', () => ({ BoardVoiceCaption: () => null }))
 vi.mock('./BoardThread', () => ({
-  BoardThread: () => <section aria-label="Thread" />
+  BoardThread: ({ messages }: { messages: readonly BoardThreadMessage[] }) => (
+    <section aria-label="Thread">
+      {messages.map((message) => (
+        <p key={message.id}>{message.text}</p>
+      ))}
+    </section>
+  )
 }))
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -53,6 +63,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  act(() => publishVoiceOrbPresentation({ state: 'idle', activitySource: 'preview' }))
   act(() => root.unmount())
   container.remove()
 })
@@ -106,20 +117,61 @@ describe('BoardCommandBar thread visibility', () => {
     expect(thread()).toBeNull()
   })
 
-  it('opens when a fresh message arrives after history was restored', () => {
+  it('stays closed and leaves focus alone when ADAM replies or a voice row arrives', () => {
+    const outside = document.createElement('input')
+    document.body.appendChild(outside)
+    outside.focus()
     render(saved)
     render([...saved, fresh])
+    render([
+      ...saved,
+      fresh,
+      { id: 'spoken', role: 'user', voice: true, text: 'what is running?' },
+      { id: 'spoken-reply', role: 'assistant', voice: true, text: 'Two consoles.' }
+    ])
+    expect(thread()).toBeNull()
+    expect(document.activeElement).toBe(outside)
+    outside.remove()
+  })
+
+  it('the toggle opens the full thread with its history', () => {
+    render([...saved, fresh])
+    toggle('Show thread')
+    expect(thread()?.textContent).toContain('No running console to change.')
+    expect(thread()?.textContent).toContain('Ready.')
+  })
+
+  it('opens when Carson sends a typed command himself', () => {
+    const onCommand = vi.fn()
+    act(() =>
+      root.render(
+        <TooltipProvider>
+          <BoardCommandBar {...props} messages={saved} draft="run the tests" onCommand={onCommand} />
+        </TooltipProvider>
+      )
+    )
+    expect(thread()).toBeNull()
+    act(() => {
+      container
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+    expect(onCommand).toHaveBeenCalledWith('run the tests')
     expect(thread()).not.toBeNull()
   })
 
-  it('keeps a dismissed thread collapsed on rerenders and reopens for a new reply', () => {
+  it('a closed or folded thread never hangs up the live voice call', () => {
+    const hangUp = vi.fn()
+    const unregister = setAdamVoiceHangUp(hangUp)
+    act(() => publishVoiceOrbPresentation({ state: 'listening', activitySource: 'input' }))
     render(saved)
     render([...saved, fresh])
+    toggle('Show thread')
     toggle('Hide thread')
-    render([...saved, fresh])
-    expect(thread()).toBeNull()
-    render([...saved, fresh, { ...fresh, id: 'next-reply' }])
-    expect(thread()).not.toBeNull()
+    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
+    act(() => root.render(null))
+    expect(hangUp).not.toHaveBeenCalled()
+    unregister()
   })
 
   it('Escape folds the open thread, but not while a menu is stacked on it', () => {
@@ -238,12 +290,12 @@ describe('BoardCommandBar thread visibility', () => {
     remove.mockRestore()
   })
 
-  it('stays collapsed when history is cleared and opens for the next message', () => {
+  it('stays collapsed when history is cleared and for the next message', () => {
     render(saved)
     render([])
     expect(thread()).toBeNull()
     render([fresh])
-    expect(thread()).not.toBeNull()
+    expect(thread()).toBeNull()
   })
   it('while ADAM is busy, holds a chat message but still sends an "@Name" order', () => {
     const onCommand = vi.fn()
@@ -270,5 +322,41 @@ describe('BoardCommandBar thread visibility', () => {
     expect(send().disabled).toBe(false)
     submit()
     expect(onCommand).toHaveBeenCalledWith('@Codex 1 run the tests')
+  })
+})
+
+describe('BoardCommandBar status', () => {
+  const status = (): string => container.querySelector('[role="status"]')?.textContent ?? ''
+  const draw = (busy: boolean): void =>
+    act(() =>
+      root.render(
+        <TooltipProvider>
+          <BoardCommandBar {...props} messages={[]} busy={busy} />
+        </TooltipProvider>
+      )
+    )
+
+  it('shows nothing while ADAM is idle or only listening', () => {
+    draw(false)
+    expect(status()).toBe('')
+    act(() => publishVoiceOrbPresentation({ state: 'listening', activitySource: 'input' }))
+    expect(status()).toBe('')
+  })
+
+  it('shows Working while a typed command is being handled', () => {
+    draw(true)
+    expect(status()).toBe('Working…')
+  })
+
+  it('shows Thinking and then Speaking for the voice turn, with the thread closed', () => {
+    draw(true)
+    act(() => publishVoiceOrbPresentation({ state: 'thinking', activitySource: 'preview' }))
+    expect(status()).toBe('Thinking…')
+    act(() => publishVoiceOrbPresentation({ state: 'speaking', activitySource: 'output' }))
+    expect(status()).toBe('Speaking…')
+    expect(thread()).toBeNull()
+    act(() => publishVoiceOrbPresentation({ state: 'idle', activitySource: 'preview' }))
+    draw(false)
+    expect(status()).toBe('')
   })
 })
