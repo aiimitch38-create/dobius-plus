@@ -32,10 +32,16 @@ export const BOARD_COMMAND_SPECS: CommandSpec[] = [
   },
   {
     path: ['board', 'consoles'],
-    summary: 'List the console cards on a worktree Board (tab id, title, role)',
+    summary:
+      'List the console cards on a worktree Board (tab id, live terminal handle, agent, role, title)',
     usage: 'dobius board consoles [--worktree <selector>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'worktree'],
-    notes: ['--worktree defaults to active (the worktree enclosing the current directory).'],
+    notes: [
+      '--worktree defaults to active (the worktree enclosing the current directory).',
+      'Text columns: tabId, terminal handle (or "not running"), agent, role, title.',
+      '--json rows: id, tabId, title, role, agent, handle, running, worktreeId, worktreePath.',
+      'The handle is looked up on every call: it changes when a console restarts, so do not store it. tabId and the card title are the stable names.'
+    ],
     examples: ['dobius board consoles --json', 'dobius board consoles --worktree branch:main']
   },
   {

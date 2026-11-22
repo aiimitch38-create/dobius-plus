@@ -87,7 +87,22 @@ export type BoardConsoleSummary = {
   tabId: string
   title: string
   role: string | null
+  /** Agent kind saved on the card (claude, codex, a blank terminal id…). */
+  agent: string | null
 }
+
+/** A console card joined with its terminal as it is right now. */
+export type BoardConsoleRow = BoardConsoleSummary & {
+  /** Current terminal handle for the card's tab; null when the tab has no terminal. */
+  handle: string | null
+  /** True only when the card's terminal has a connected PTY. */
+  running: boolean
+  worktreeId: string
+  worktreePath: string
+}
+
+// Why: a busy board holds far more terminals than the default list page.
+const BOARD_TERMINAL_LIST_LIMIT = 1000
 
 /** Console cards on one worktree's Board, read from the persisted UI payload. */
 export function listBoardConsoleCards(
@@ -108,11 +123,45 @@ export function listBoardConsoleCards(
             id: card.id,
             tabId: card.tabId,
             title: typeof card.title === 'string' ? card.title : '',
-            role: typeof card.role === 'string' ? card.role : null
+            role: typeof card.role === 'string' ? card.role : null,
+            agent: typeof card.agentKind === 'string' ? card.agentKind : null
           }
         ]
       : []
   )
+}
+
+/**
+ * Console cards with their live terminal. Why resolved per call: a terminal
+ * handle changes whenever the console restarts, so a stored handle goes stale;
+ * the card's tabId is the stable link (same join as the Board orchestrator card).
+ */
+export async function listBoardConsoleRows(
+  runtime: DobiusRuntimeService,
+  worktreeSelector: string
+): Promise<BoardConsoleRow[]> {
+  const worktree = await runtime.showManagedWorktree(worktreeSelector)
+  const cards = listBoardConsoleCards(runtime.getUIState().boardsByWorktree, worktree.id)
+  if (cards.length === 0) {
+    return []
+  }
+  const { terminals } = await runtime.listTerminals(
+    `id:${worktree.id}`,
+    BOARD_TERMINAL_LIST_LIMIT
+  )
+  return cards.map((card) => {
+    const inTab = terminals.filter((t) => t.tabId === card.tabId)
+    const isLive = (t: (typeof terminals)[number]): boolean => t.connected && t.ptyId !== null
+    // Why: a split tab has several panes; a live one is the one worth addressing.
+    const terminal = inTab.find(isLive) ?? inTab[0]
+    return {
+      ...card,
+      handle: terminal?.handle ?? null,
+      running: terminal ? isLive(terminal) : false,
+      worktreeId: worktree.id,
+      worktreePath: worktree.path
+    }
+  })
 }
 
 function readPromptFile(path: string): string {
@@ -200,9 +249,7 @@ export const BOARD_CONSOLE_METHODS: RpcMethod[] = [
   defineMethod({
     name: 'board.listConsoles',
     params: ListBoardConsolesParams,
-    handler: async (params, { runtime }): Promise<BoardConsoleSummary[]> => {
-      const worktree = await runtime.showManagedWorktree(params.worktree)
-      return listBoardConsoleCards(runtime.getUIState().boardsByWorktree, worktree.id)
-    }
+    handler: (params, { runtime }): Promise<BoardConsoleRow[]> =>
+      listBoardConsoleRows(runtime, params.worktree)
   })
 ]

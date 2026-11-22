@@ -10,7 +10,16 @@ import {
 } from '../selectors'
 
 type SpawnConsoleResult = { requestId: string; worktreeId: string; role: string }
-type BoardConsole = { tabId: string; title: string; role: string | null }
+type BoardConsole = {
+  tabId: string
+  title: string
+  role: string | null
+  // Why optional: an older paired runtime returns only tabId, title and role.
+  agent?: string | null
+  handle?: string | null
+  running?: boolean
+  worktreePath?: string
+}
 type OpenTileResult = { requestId: string; worktreeId: string; cardId: string; browserPageId: string }
 type AgentControlResult = {
   ok: boolean
@@ -20,12 +29,16 @@ type AgentControlResult = {
   gateResolved?: boolean
 }
 
-function formatConsoles(consoles: BoardConsole[]): string {
+export function formatConsoles(consoles: BoardConsole[]): string {
   if (consoles.length === 0) {
     return 'No console cards on this board.'
   }
   return consoles
-    .map((c) => `${c.tabId}  ${c.role ?? '-'}  ${c.title}`)
+    .map((c) => {
+      const terminal =
+        c.running === undefined ? 'unknown' : c.running && c.handle ? c.handle : 'not running'
+      return `${c.tabId}  ${terminal}  ${c.agent ?? '-'}  ${c.role ?? '-'}  ${c.title}`
+    })
     .join('\n')
 }
 

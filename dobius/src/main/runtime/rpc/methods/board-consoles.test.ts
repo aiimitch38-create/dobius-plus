@@ -19,7 +19,14 @@ function consoleCard(i: number, role: string | null) {
   return { id: `c${i}`, kind: 'console', tabId: `tab-${i}`, title: `Console ${i}`, role, x: 0, y: 0 }
 }
 
-function makeRuntime(cards: unknown[], delivered = true) {
+type TestTerminal = {
+  handle: string
+  tabId: string
+  ptyId: string | null
+  connected: boolean
+}
+
+function makeRuntime(cards: unknown[], delivered = true, terminals: TestTerminal[] = []) {
   const emitClientEvent = vi.fn((_event: RuntimeBoardSpawnConsoleEvent) => ({ delivered }))
   const runtime = {
     getRuntimeId: () => 'test-runtime',
@@ -27,8 +34,13 @@ function makeRuntime(cards: unknown[], delivered = true) {
       if (selector === 'id:missing') {
         throw new Error('selector_not_found')
       }
-      return { id: WT }
+      return { id: WT, path: '/repo/wt-1' }
     }),
+    listTerminals: vi.fn(async (_selector: string, _limit?: number) => ({
+      terminals,
+      totalCount: terminals.length,
+      truncated: false
+    })),
     getUIState: () => ({ boardsByWorktree: { [WT]: { cards, groups: [] } } }),
     // Why: spawnBoardConsole must go through the runtime's notify path (window
     // IPC + client event), never emitClientEvent alone.
@@ -289,5 +301,75 @@ describe('board.listConsoles', () => {
         { id: 'c2', tabId: 'tab-2', title: 'Console 2', role: null }
       ]
     })
+  })
+
+  async function list(cards: unknown[], terminals: TestTerminal[]) {
+    const { runtime } = makeRuntime(cards, true, terminals)
+    const dispatcher = new RpcDispatcher({ runtime, methods: BOARD_CONSOLE_METHODS })
+    const response = await dispatcher.dispatch(
+      makeRequest('board.listConsoles', { worktree: `id:${WT}` })
+    )
+    return { response, runtime }
+  }
+
+  it('adds the live handle, running flag, agent and worktree to each row', async () => {
+    const { response, runtime } = await list(
+      [{ ...consoleCard(1, null), agentKind: 'codex' }, consoleCard(2, null)],
+      [{ handle: 'term_a', tabId: 'tab-1', ptyId: 'pty-1', connected: true }]
+    )
+    expect(response).toMatchObject({
+      ok: true,
+      result: [
+        {
+          id: 'c1',
+          tabId: 'tab-1',
+          agent: 'codex',
+          handle: 'term_a',
+          running: true,
+          worktreeId: WT,
+          worktreePath: '/repo/wt-1'
+        },
+        { id: 'c2', tabId: 'tab-2', agent: null, handle: null, running: false }
+      ]
+    })
+    expect(runtime.listTerminals).toHaveBeenCalledWith(`id:${WT}`, expect.any(Number))
+  })
+
+  it('reports a card whose terminal has exited as not running', async () => {
+    const { response } = await list(
+      [consoleCard(1, null)],
+      [{ handle: 'term_dead', tabId: 'tab-1', ptyId: null, connected: false }]
+    )
+    expect(response).toMatchObject({
+      ok: true,
+      result: [{ id: 'c1', handle: 'term_dead', running: false }]
+    })
+  })
+
+  it('prefers the live pane when a console tab is split', async () => {
+    const { response } = await list(
+      [consoleCard(1, null)],
+      [
+        { handle: 'term_dead', tabId: 'tab-1', ptyId: null, connected: false },
+        { handle: 'term_live', tabId: 'tab-1', ptyId: 'pty-2', connected: true }
+      ]
+    )
+    expect(response).toMatchObject({
+      ok: true,
+      result: [{ id: 'c1', handle: 'term_live', running: true }]
+    })
+  })
+
+  it('reads the handle again on every call (a restarted console gets a new one)', async () => {
+    const terminals: TestTerminal[] = [
+      { handle: 'term_old', tabId: 'tab-1', ptyId: 'pty-1', connected: true }
+    ]
+    const { runtime } = makeRuntime([consoleCard(1, null)], true, terminals)
+    const dispatcher = new RpcDispatcher({ runtime, methods: BOARD_CONSOLE_METHODS })
+    const call = () =>
+      dispatcher.dispatch(makeRequest('board.listConsoles', { worktree: `id:${WT}` }))
+    expect(await call()).toMatchObject({ result: [{ handle: 'term_old' }] })
+    terminals[0] = { handle: 'term_new', tabId: 'tab-1', ptyId: 'pty-9', connected: true }
+    expect(await call()).toMatchObject({ result: [{ handle: 'term_new' }] })
   })
 })
