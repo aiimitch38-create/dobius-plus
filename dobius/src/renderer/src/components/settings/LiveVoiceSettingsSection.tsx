@@ -192,7 +192,7 @@ export function LiveVoiceSettingsSection({
             Test connection
           </Button>
           <span className="text-xs text-muted-foreground" data-testid="live-test-note">
-            Available when live calls are turned on
+            A test would start a billed call. Press the orb to make a real one.
           </span>
         </div>
       </div>

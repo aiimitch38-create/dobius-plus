@@ -170,7 +170,7 @@ describe('LiveVoiceSettingsSection', () => {
       const button = buttonNamed(container, 'Test connection')
       expect(button.disabled).toBe(true)
       expect(container.querySelector('[data-testid="live-test-note"]')?.textContent).toBe(
-        'Available when live calls are turned on'
+        'A test would start a billed call. Press the orb to make a real one.'
       )
       await click(button)
       act(() => root?.unmount())
