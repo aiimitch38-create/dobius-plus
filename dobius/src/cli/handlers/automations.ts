@@ -35,6 +35,7 @@ import {
   getRequiredStringFlag
 } from '../flags'
 import { RuntimeClientError } from '../runtime-client'
+import { safeText } from '../safe-text'
 import { getLoopCreateFlags, getLoopUpdateFlags, isLoopCreate } from './automation-loop-flags'
 import type { LoopUpdateFlags } from './automation-loop-flags'
 import { LOOP_PLACEHOLDER_RRULE } from '../../shared/automation-loops'
@@ -456,7 +457,7 @@ export const AUTOMATION_HANDLERS: Record<string, CommandHandler> = {
         dtstart: Date.now(),
         loop
       })
-      printResult(result, json, formatAutomationShow)
+      printResult(result, json, (value) => safeText(formatAutomationShow(value)))
       return
     }
     const schedule = getScheduleFlag(flags, true)

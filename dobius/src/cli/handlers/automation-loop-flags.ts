@@ -35,8 +35,16 @@ function maxIterations(flags: Flags): number | undefined {
 }
 
 function card(flags: Flags): string | undefined {
-  const raw = getOptionalStringFlag(flags, 'card')
-  return raw?.startsWith(BOARD_CARD_ADDRESS_PREFIX) ? raw.slice(BOARD_CARD_ADDRESS_PREFIX.length) : raw
+  if (!flags.has('card')) {
+    return undefined
+  }
+  const raw = getOptionalStringFlag(flags, 'card')?.trim() ?? ''
+  const name = (raw.startsWith(BOARD_CARD_ADDRESS_PREFIX) ? raw.slice(BOARD_CARD_ADDRESS_PREFIX.length) : raw).trim()
+  // Why refuse: an empty --card would otherwise mean "the whole Board".
+  if (!name) {
+    throw new RuntimeClientError('invalid_argument', '--card needs a card id or title (leave it out to loop over the whole Board)')
+  }
+  return name
 }
 
 export function isLoopCreate(flags: Flags): boolean {

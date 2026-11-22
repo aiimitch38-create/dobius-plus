@@ -65,6 +65,13 @@ describe('automations create --loop', () => {
     expect(callMock).not.toHaveBeenCalled()
   })
 
+  it('refuses an empty --card instead of looping over the whole Board', async () => {
+    await expect(
+      run('automations create', { loop: true, goal: 'g', 'max-iterations': '3', card: 'card:' })
+    ).rejects.toThrow(/--card needs/)
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
   it('refuses loop flags without --loop', async () => {
     await expect(
       run('automations create', { name: 'x', trigger: 'daily', prompt: 'p', provider: 'codex', goal: 'g' })
