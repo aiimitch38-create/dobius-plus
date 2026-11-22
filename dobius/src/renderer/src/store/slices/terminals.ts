@@ -58,6 +58,9 @@ import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { parseRemoteRuntimePtyId } from '@/runtime/runtime-terminal-stream'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 import { createBrowserUuid } from '@/lib/browser-uuid'
+import { shouldPersistWorkspaceSession } from '@/lib/workspace-session'
+import { buildWorkspaceSessionPatch } from '@/lib/workspace-session-patch'
+import { patchWorkspaceSessionByHost } from '@/lib/workspace-session-host-persistence'
 import { getFolderWorkspaceConnectionId } from '@/lib/folder-workspace-connection'
 import { hasWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
 import { sanitizeTerminalLayoutPaneTitles } from '@/lib/terminal-pane-title-sanitization'
@@ -1992,6 +1995,32 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         ...sleepingAgentSessionRecords
       }
     }))
+
+    // Why: a wake's pty:claimAgentResume is validated against MAIN's copy of
+    // the sleeping record, which otherwise only arrives with the debounced
+    // session writer (~150ms later). A reveal inside that window was rejected
+    // with no retry and the agent conversation was lost, so the kill waits for
+    // main to acknowledge the record. session:patch updates main's session
+    // synchronously, so its reply is that acknowledgement.
+    try {
+      const recorded = get()
+      if (!shouldPersistWorkspaceSession(recorded)) {
+        throw new Error('agent_hibernation_session_not_persistable')
+      }
+      await patchWorkspaceSessionByHost(
+        window.api.session,
+        buildWorkspaceSessionPatch(recorded, ['sleepingAgentSessionsByPaneKey']),
+        recorded
+      )
+      // Why: the acknowledgement is an await the kill did not have before; the
+      // pane may have been rebound to another PTY while it was in flight.
+      if (get().terminalLayoutsByTabId[opts.tabId]?.ptyIdsByLeafId?.[opts.leafId] !== opts.ptyId) {
+        throw new Error('agent_hibernation_pane_binding_mismatch')
+      }
+    } catch (err) {
+      rollbackTargetShutdownState()
+      throw err
+    }
 
     if (expectedRuntimePtyIds.length > 0) {
       const runtimeEnvironmentId = resolveTerminalStopRuntimeEnvironmentId(get(), worktreeId)
