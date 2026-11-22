@@ -129,6 +129,11 @@ vi.mock('node-pty', () => ({
   spawn: spawnMock
 }))
 
+// Why: the workspace brief runs real git; these tests time spawns in microtasks.
+vi.mock('../agents/session-workspace-brief', () => ({
+  primeTerminalWorkspaceBrief: vi.fn(async () => ({ status: 'skipped', reason: 'error' }))
+}))
+
 vi.mock('../opencode/hook-service', () => ({
   openCodeHookService: {
     buildPtyEnv: openCodeBuildPtyEnvMock,
@@ -208,6 +213,7 @@ import {
 } from '../powershell-osc133-bootstrap'
 import { SSH_SESSION_EXPIRED_ERROR } from '../providers/ssh-pty-provider'
 import { _resetWslCachesForTests, _setWslCachesForTests } from '../wsl'
+import { primeTerminalWorkspaceBrief } from '../agents/session-workspace-brief'
 
 const POWERSHELL_OSC133_ARGS = [
   '-NoLogo',
@@ -1225,6 +1231,25 @@ describe('registerPtyHandlers', () => {
       await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: spawnResult.id })
 
       expect(hasLiveClaudePtys()).toBe(false)
+    })
+
+    it('refreshes the workspace brief for a local tab before its shell starts', async () => {
+      const prime = vi.mocked(primeTerminalWorkspaceBrief)
+      prime.mockClear()
+      registerPtyHandlers(mainWindow as never)
+
+      await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+        cols: 80,
+        rows: 24,
+        cwd: '/tmp',
+        worktreeId: 'repo-1::/tmp'
+      })
+
+      expect(prime).toHaveBeenCalledTimes(1)
+      expect(prime).toHaveBeenCalledWith(expect.any(String), 'repo-1::/tmp')
+      expect(prime.mock.invocationCallOrder[0]).toBeLessThan(
+        spawnMock.mock.invocationCallOrder.at(-1)!
+      )
     })
 
     it('clears Claude live-PTY tracking from shared provider teardown', () => {
