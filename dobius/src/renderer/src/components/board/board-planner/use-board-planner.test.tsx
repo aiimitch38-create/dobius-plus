@@ -56,15 +56,14 @@ let run: (text: string) => Promise<void>
 let busy: boolean
 const conductorCommand = vi.fn()
 const conductorReply = vi.fn()
-const askAdamText = vi.fn<(utterance: string) => Promise<JarvisAskResult>>()
+const askAdamText =
+  vi.fn<(utterance: string, source?: string, threadId?: string | null) => Promise<JarvisAskResult>>()
 
 function Harness({ earlier }: { earlier: BoardThreadMessage[] }): null {
   const conductor = {
     messages: earlier,
-    busy: false,
     append: (message: Row) => rows.push(message),
     appendReport: vi.fn(),
-    ask: vi.fn(),
     clearThread: vi.fn(),
     appendTo: (target: string | null, message: Row) => {
       rows.push(message)
@@ -101,8 +100,6 @@ beforeEach(() => {
   conductorReply.mockReset()
   askAdamText.mockReset()
   mocks.executePlan.mockClear()
-  // Carson's case: the planner (the Voice Conductor) refuses every request.
-  conductorCommand.mockResolvedValue({ ok: false, error: 'Voice Conductor is disabled' })
   ;(window as unknown as { api: unknown }).api = {
     agents: { conductorCommand, conductorReply },
     jarvis: { askAdamText }
@@ -123,6 +120,9 @@ describe('useBoardPlanner: talk goes to Hermes ADAM', () => {
     mount([{ id: 'a', role: 'user', text: 'i cant heear him speak' }])
     await act(() => run('your TypeScript app'))
     expect(askAdamText).toHaveBeenCalledTimes(1)
+    // The Voice Conductor is no longer part of the Board.
+    expect(conductorCommand).not.toHaveBeenCalled()
+    expect(askAdamText.mock.calls[0].slice(1)).toEqual(['thread', 'repo-1'])
     const sent = askAdamText.mock.calls[0][0]
     const block = (tag: string) => JSON.parse(sent.split(`<${tag}>\n`)[1].split(`\n</${tag}>`)[0])
     const context = block('untrusted_context')
@@ -136,6 +136,7 @@ describe('useBoardPlanner: talk goes to Hermes ADAM', () => {
       'dobius-plus',
       'pocket-cologne'
     ])
+    expect(context.open_boards[1].folder).toBe('/Users/c/code/pc')
     expect(context.open_boards[1].consoles).toEqual([
       { name: 'Codex 7', agent: 'codex', state: 'idle' }
     ])
@@ -178,13 +179,19 @@ describe('useBoardPlanner: talk goes to Hermes ADAM', () => {
     expect(rows.some((row) => OLD_ERROR.test(row.text))).toBe(false)
   })
 
-  it('hands a planner reply with no steps to ADAM instead of answering for him', async () => {
-    conductorCommand.mockResolvedValue({ ok: true })
-    conductorReply.mockResolvedValue({ message: '{"steps":[],"say":"Planner talking."}', ts: 1 })
-    askAdamText.mockResolvedValue({ kind: 'answer', text: 'ADAM talking.' })
+  it('gives a work order to ADAM, with how to act on a board, instead of a planner', async () => {
+    askAdamText.mockResolvedValue({ kind: 'answer', text: 'Started two reviewers.' })
     mount()
-    await act(() => run('how are you'))
-    expect(rows.map((row) => row.text)).toEqual(['how are you', 'ADAM talking.'])
+    await act(() => run('spawn two reviewers for the auth code'))
+    expect(conductorCommand).not.toHaveBeenCalled()
+    expect(mocks.executePlan).not.toHaveBeenCalled()
+    const sent = askAdamText.mock.calls[0][0]
+    expect(sent).toContain('dobius board send --card')
+    expect(sent).toContain('dobius board consoles --worktree path:')
+    expect(rows.map((row) => row.text)).toEqual([
+      'spawn two reviewers for the auth code',
+      'Started two reviewers.'
+    ])
   })
 })
 
@@ -233,35 +240,18 @@ describe('useBoardPlanner: one message at a time, in the thread it came from', (
       await first
     })
     expect(busy).toBe(false)
-    expect(conductorCommand).toHaveBeenCalledTimes(1)
     expect(askAdamText).toHaveBeenCalledTimes(1)
     expect(rows.at(-1)).toEqual({ role: 'assistant', text: 'Done.' })
   })
 })
 
 describe('useBoardPlanner: board orders stay with the app', () => {
-  it('runs a built-in command with the planner down, without asking ADAM', async () => {
+  it('runs a built-in command at once, without asking ADAM or any planner', async () => {
     mount()
     await act(() => run('pause all'))
     expect(askAdamText).not.toHaveBeenCalled()
+    expect(conductorCommand).not.toHaveBeenCalled()
     expect(mocks.executePlan).toHaveBeenCalledTimes(1)
     expect(rows.at(-1)).toEqual({ role: 'system', text: 'Paused 3 consoles.' })
-  })
-
-  it('runs a planner plan that has steps, without asking ADAM', async () => {
-    conductorCommand.mockResolvedValue({ ok: true })
-    conductorReply.mockResolvedValue({
-      message: '{"steps":[{"kind":"zoom_in"}],"say":"Zoomed in."}',
-      ts: 1
-    })
-    mount()
-    await act(() => run('zoom in a bit'))
-    expect(askAdamText).not.toHaveBeenCalled()
-    expect(mocks.executePlan).toHaveBeenCalledTimes(1)
-    expect(rows.map((row) => row.text)).toEqual([
-      'zoom in a bit',
-      'Zoomed in.',
-      'Paused 3 consoles.'
-    ])
   })
 })

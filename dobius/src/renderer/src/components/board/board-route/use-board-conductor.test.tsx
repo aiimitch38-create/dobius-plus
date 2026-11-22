@@ -12,7 +12,7 @@ let container: HTMLDivElement
 let conductor: BoardConductor
 
 function Harness({ repoId }: { repoId: string }): null {
-  conductor = useBoardConductor(() => {}, repoId)
+  conductor = useBoardConductor(repoId)
   return null
 }
 const open = (repoId: string): void => act(() => root.render(<Harness repoId={repoId} />))

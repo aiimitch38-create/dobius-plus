@@ -34,7 +34,7 @@ export type JarvisServiceDeps = {
   store: JarvisSettingsStore
   broadcast: JarvisBroadcastPort
   shortcut: JarvisShortcutPort
-  askAgent?: (utterance: string) => Promise<JarvisAskResult>
+  askAgent?: (utterance: string, threadId: string | null) => Promise<JarvisAskResult>
   cancelAgent?: () => void
   fetchFn?: typeof fetch
   speakQueue?: (text: string) => Promise<SpeakOutcome>
@@ -103,7 +103,7 @@ export class JarvisService {
   }
 
   /** Asks ADAM; speaks the reply. Never throws — failures come back as results. */
-  async ask(utteranceRaw: string): Promise<JarvisAskResult> {
+  async ask(utteranceRaw: string, threadId: string | null = null): Promise<JarvisAskResult> {
     const utterance = typeof utteranceRaw === 'string' ? utteranceRaw.trim() : ''
     if (!utterance) {
       return { kind: 'error', text: 'No speech detected' }
@@ -116,7 +116,7 @@ export class JarvisService {
     let result: JarvisAskResult
     try {
       result = this.deps.askAgent
-        ? await this.deps.askAgent(utterance)
+        ? await this.deps.askAgent(utterance, threadId)
         : await askAdam({
             settingsEndpoint: this.deps.store.getSettings().voice?.adamEndpoint,
             utterance,

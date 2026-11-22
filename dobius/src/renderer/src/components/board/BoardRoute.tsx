@@ -93,8 +93,7 @@ export default function BoardRoute(): React.JSX.Element {
     (s) => s.dictationState === 'listening' || s.dictationState === 'starting'
   )
 
-  const openSettings = useCallback(() => setStudio('settings'), [])
-  const conductor = useBoardConductor(openSettings, data.repoId)
+  const conductor = useBoardConductor(data.repoId)
   const selection = useBoardSelection(worktreeId, board.tool)
   const pen = useBoardPen(worktreeId, board.viewport)
   // Why: `board` above ignores card geometry (board-shape.ts) so a drag never
@@ -130,7 +129,7 @@ export default function BoardRoute(): React.JSX.Element {
     projectName: topBar.projectName
   })
   const onCommand = useBoardCommand(data, conductor, planner.run)
-  const threadBusy = conductor.busy || planner.busy
+  const threadBusy = planner.busy
   const threadBusyRef = useRef(threadBusy)
   threadBusyRef.current = threadBusy
   // Why: leaving the Board must never leave a paused agent frozen in the background.

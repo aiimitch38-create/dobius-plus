@@ -15,12 +15,14 @@ const context: AdamThreadContext = {
     {
       project: 'dobius-plus',
       workspace: 'main',
+      folder: '/Users/c/code/dobius-plus',
       current: true,
       consoles: [{ name: 'Claude 1', agent: 'claude', state: 'idle' }]
     },
     {
       project: 'pocket-cologne',
       workspace: 'checkout-fix',
+      folder: '/Users/c/code/pc',
       current: false,
       consoles: [{ name: 'Codex 1', agent: 'codex', state: 'working' }]
     }
@@ -67,19 +69,25 @@ describe('collectAdamBoards', () => {
       worktreeOf: (id) =>
         id.startsWith('gone')
           ? null
-          : { project: id.startsWith('pc') ? 'pocket-cologne' : 'dobius-plus', workspace: id },
+          : {
+              project: id.startsWith('pc') ? 'pocket-cologne' : 'dobius-plus',
+              workspace: id,
+              folder: `/code/${id}`
+            },
       stateOf: (tabId) => (tabId === 't1' ? 'working' : 'idle')
     })
     expect(boards).toEqual([
       {
         project: 'dobius-plus',
         workspace: 'dp::main',
+        folder: '/code/dp::main',
         current: true,
         consoles: [{ name: 'Claude 1', agent: 'claude', state: 'idle' }]
       },
       {
         project: 'pocket-cologne',
         workspace: 'pc::a',
+        folder: '/code/pc::a',
         current: false,
         consoles: [{ name: 'Codex 1', agent: 'claude', state: 'working' }]
       }
@@ -100,12 +108,22 @@ describe('buildAdamThreadMessage', () => {
     })
   })
 
+  it('tells ADAM how to act on a board himself, with the dobius command line', () => {
+    const prompt = buildAdamThreadMessage({ context, turns: [], utterance: 'spawn two reviewers' })
+    const header = prompt.split('<untrusted_context>')[0]
+    expect(header).toContain('dobius board consoles --worktree path:')
+    expect(header).toContain('dobius board send --card')
+    expect(header).toContain('dobius board spawn-console --help')
+    expect(header).toContain('approval box')
+  })
+
   it('includes every open project board, with consoles and state', () => {
     const { context: sent } = parts(buildAdamThreadMessage({ context, turns: [], utterance: 'hi' }))
     expect(sent.open_boards).toEqual([
       {
         project: 'dobius-plus',
         workspace: 'main',
+        folder: '/Users/c/code/dobius-plus',
         on_screen: true,
         console_count: 1,
         consoles: [{ name: 'Claude 1', agent: 'claude', state: 'idle' }]
@@ -113,6 +131,7 @@ describe('buildAdamThreadMessage', () => {
       {
         project: 'pocket-cologne',
         workspace: 'checkout-fix',
+        folder: '/Users/c/code/pc',
         on_screen: false,
         console_count: 1,
         consoles: [{ name: 'Codex 1', agent: 'codex', state: 'working' }]
@@ -163,6 +182,7 @@ describe('buildAdamThreadMessage', () => {
       boards: Array.from({ length: 40 }, (_, b) => ({
         project: `project-${b}`,
         workspace: `workspace-${b}-${'w'.repeat(200)}`,
+        folder: `/code/${'f'.repeat(250)}/${b}`,
         current: b === 0,
         consoles: Array.from({ length: 30 }, (_, c) => ({
           name: `Console ${c} ${'n'.repeat(200)}`,

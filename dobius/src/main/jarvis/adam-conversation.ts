@@ -5,6 +5,14 @@ export const ADAM_TURN_CHANNEL = 'jarvis:adam-turn'
 export const ADAM_BUSY_TEXT =
   'ADAM is busy with another message. Wait for his reply, then try again.'
 
+export type AdamAskOptions = {
+  source: AdamTurnSource
+  /** What the thread should show as Carson's words when `text` carries extra context. */
+  said?: string
+  /** The Board thread the turn started from, so the reply lands there and nowhere else. */
+  threadId?: string | null
+}
+
 type AdamBrain = { ask: (text: string) => Promise<JarvisAskResult> }
 
 /**
@@ -21,13 +29,9 @@ export class AdamConversation {
     private readonly announce: (event: AdamTurnEvent) => void
   ) {}
 
-  /**
-   * `said` is what the thread should show as Carson's words when `text`
-   * carries extra context for ADAM.
-   */
   async ask(
     text: string,
-    options: { source: AdamTurnSource; said?: string }
+    options: AdamAskOptions
   ): Promise<JarvisAskResult> {
     // Why refuse and not queue: Hermes runs one turn per session, and a queued
     // voice turn would answer minutes late. The caller shows this and Carson resends.
@@ -35,7 +39,11 @@ export class AdamConversation {
       return { kind: 'error', text: ADAM_BUSY_TEXT }
     }
     this.inFlight = true
-    const turn = { turnId: randomUUID(), source: options.source }
+    const turn = {
+      turnId: randomUUID(),
+      source: options.source,
+      threadId: options.threadId ?? null
+    }
     try {
       this.announce({ ...turn, phase: 'asked', text: options.said ?? text, at: Date.now() })
       let result: JarvisAskResult

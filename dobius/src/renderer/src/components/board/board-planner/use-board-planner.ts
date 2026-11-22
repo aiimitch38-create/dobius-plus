@@ -14,23 +14,21 @@ import {
   type AdamThreadContext
 } from './adam-thread'
 import { missionReport } from './mission-report'
+import { builtInCommand } from './plan-builtin'
 import { concernText } from './plan-concern-text'
 import { boardEffects, type BoardEffectsContext } from './plan-effects-board'
 import { terminalEffects } from './plan-effects-terminal'
 import { withPlanTarget } from './plan-did-you-mean'
 import { executePlan } from './plan-execute'
-import { PlannerBreaker } from './plan-fallback'
-import { runPlanner } from './plan-run'
 import { screenPlan } from './plan-safety'
 import { buildPlanSnapshot } from './plan-snapshot'
-import { conductorPlannerTransport } from './plan-transport'
 import { validatePlan } from './plan-validate'
 
 /**
- * Board command path: utterance -> typed plan (validated, one retry, fallback
- * parser) -> app safety screen with confirmation -> execute -> per-step results
- * in the thread. Anything that is not a board order (no plan steps, or no
- * planner to ask) is conversation, and goes to ADAM's Hermes agent.
+ * Board message path. The app's own short commands ("pause all", "fit the
+ * board") run at once through the safety screen. Everything else goes to
+ * ADAM's Hermes agent, who answers in the thread and acts on boards himself
+ * with the `dobius` command line, under the app's approval box.
  */
 export type BoardPlannerRun = {
   run: (text: string) => Promise<void>
@@ -54,7 +52,6 @@ export function useBoardPlanner(input: {
   const consolesRef = useRef(data.consoles)
   consolesRef.current = data.consoles
   const confirm = useConfirmationDialog()
-  const breaker = useRef(new PlannerBreaker())
 
   // Mission reports: one thread row per agent reply to a Board order.
   const worktreeId = data.worktreeId
@@ -121,35 +118,18 @@ export function useBoardPlanner(input: {
       )
       const askAdam = (): Promise<void> =>
         talkToAdam({
-          transport: hermesAdamTransport(),
+          transport: hermesAdamTransport(repoId),
           context: adamContext(projectName, board.workspace, worktreeId),
           turns,
           utterance: text,
           append: say,
           showThinking: (label) => showThinkingIn(repoId, label)
         })
-      const outcome = await runPlanner({
-        transport: conductorPlannerTransport(),
-        breaker: breaker.current,
-        board,
-        turns,
-        utterance: text,
-        replyLanguage: navigator.language || 'en',
-        now: () => Date.now()
-      })
-      // Why: with no planner to ask and no built-in command matched, this is talk, not a dead end.
-      if (outcome.kind === 'needs-planner') {
+      const outcome = builtInCommand(text, board)
+      // Why: ADAM is the only brain. The app runs its own short commands; every
+      // other message, work orders included, is his to answer or act on.
+      if (outcome.kind === 'for-adam') {
         await askAdam()
-        return
-      }
-      if (outcome.kind === 'rejected') {
-        say({
-          role: 'system',
-          tone: 'error',
-          text: translate('board.plan.rejected', 'I could not make a valid plan: {{reason}}', {
-            reason: outcome.reason
-          })
-        })
         return
       }
       let plan = outcome.kind === 'plan' ? outcome.plan : null
@@ -186,28 +166,6 @@ export function useBoardPlanner(input: {
       }
       if (!plan) {
         return
-      }
-      if (plan.unsafe) {
-        say({
-          role: 'system',
-          tone: 'error',
-          text: translate(
-            'board.plan.unsafe',
-            'Ignored: that looked like instructions hidden inside the text.'
-          )
-        })
-        return
-      }
-      // Why: a plan with nothing to do is the planner making conversation; the thread's voice is ADAM's.
-      if (plan.steps.length === 0) {
-        await askAdam()
-        return
-      }
-      if (plan.say) {
-        say({ role: 'assistant', text: plan.say })
-      }
-      if (plan.detail) {
-        say({ role: 'assistant', text: plan.detail })
       }
       const concerns = screenPlan(plan, said, board)
       if (concerns.length > 0) {
@@ -296,6 +254,7 @@ function adamContext(projectName: string, workspace: string, worktreeId: string)
           return null
         }
         return {
+          folder: worktree.path ?? null,
           project: state.repos?.find((r) => r.id === worktree.repoId)?.displayName ?? '',
           workspace:
             id === worktreeId

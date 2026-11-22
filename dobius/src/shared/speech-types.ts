@@ -172,7 +172,13 @@ export type JarvisAskResult =
 export type AdamTurnSource = 'voice' | 'thread'
 
 /** Sent to the window for each accepted ADAM turn: first the words asked, then the reply. */
-export type AdamTurnEvent = { turnId: string; source: AdamTurnSource; at: number } & (
+export type AdamTurnEvent = {
+  turnId: string
+  source: AdamTurnSource
+  /** The Board thread (repo id) the turn was started from; null when the caller did not know. */
+  threadId: string | null
+  at: number
+} & (
   | { phase: 'asked'; text: string }
   | { phase: 'answered'; result: JarvisAskResult }
 )

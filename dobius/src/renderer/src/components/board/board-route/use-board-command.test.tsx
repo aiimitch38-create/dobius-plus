@@ -12,9 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/components/confirmation-dialog', () => ({
   useConfirmationDialog: () => vi.fn(async () => true)
 }))
-vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
 vi.mock('../board-delivery/board-delivery', () => ({ deliverOrder: mocks.deliverOrder }))
-vi.mock('./board-console-activity', () => ({ boardConsoleState: () => 'idle' }))
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const data = {
@@ -34,10 +32,8 @@ const askAdamText = vi.fn()
 function Harness(): null {
   const conductor = {
     messages: [],
-    busy: false,
     append: (message) => rows.push(message),
     appendReport: vi.fn(),
-    ask: vi.fn(),
     clearThread: vi.fn(),
     appendTo: vi.fn(),
     showThinkingIn: () => () => {}

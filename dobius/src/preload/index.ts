@@ -4599,8 +4599,8 @@ const api = {
 
   jarvis: {
     setMode: (on: boolean): Promise<{ ok: boolean }> => ipcRenderer.invoke('jarvis:setMode', on),
-    ask: (utterance: string): Promise<JarvisAskResult> =>
-      ipcRenderer.invoke('jarvis:ask', utterance),
+    ask: (utterance: string, threadId?: string | null): Promise<JarvisAskResult> =>
+      ipcRenderer.invoke('jarvis:ask', utterance, threadId),
     speak: (text: string): Promise<JarvisSpeakOutcome> => ipcRenderer.invoke('jarvis:speak', text),
     openOrb: (): Promise<{ ok: boolean; windowId?: number }> =>
       ipcRenderer.invoke('jarvis:openOrb'),
@@ -4646,8 +4646,12 @@ const api = {
     liveSessionConnect: (offerSdp: string): Promise<OpenAiLiveSessionResult> =>
       ipcRenderer.invoke('jarvis:liveSessionConnect', { offerSdp }),
     cancelAsk: (): Promise<{ ok: true }> => ipcRenderer.invoke('jarvis:cancelAsk'),
-    askAdamText: (utterance: string, source?: AdamTurnSource): Promise<JarvisAskResult> =>
-      ipcRenderer.invoke('jarvis:askAdamText', utterance, source),
+    askAdamText: (
+      utterance: string,
+      source?: AdamTurnSource,
+      threadId?: string | null
+    ): Promise<JarvisAskResult> =>
+      ipcRenderer.invoke('jarvis:askAdamText', utterance, source, threadId),
     onAdamTurn: (callback: (event: AdamTurnEvent) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: AdamTurnEvent): void =>
         callback(data)

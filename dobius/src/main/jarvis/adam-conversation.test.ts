@@ -47,7 +47,7 @@ afterEach(async () => {
 
 describe('AdamConversation: voice and the thread are one conversation', () => {
   it('sends a voice turn and a thread turn to the same Hermes session, announced in order', async () => {
-    const spoken = adam.ask('what is running', { source: 'voice' })
+    const spoken = adam.ask('what is running', { source: 'voice', threadId: 'repo-a' })
     await reply('Two consoles.', 1)
     await expect(spoken).resolves.toEqual({ kind: 'answer', text: 'Two consoles.' })
     const typed = adam.ask('and in the other project?', { source: 'thread' })
@@ -65,6 +65,8 @@ describe('AdamConversation: voice and the thread are one conversation', () => {
       ['thread', 'asked', 'and in the other project?'],
       ['thread', 'answered', 'One more there.']
     ])
+    // The thread is fixed at submit and carried in both events.
+    expect(events.map((e) => e.threadId)).toEqual(['repo-a', 'repo-a', null, null])
     expect(events[0].turnId).toBe(events[1].turnId)
     expect(events[2].turnId).not.toBe(events[0].turnId)
   })

@@ -8,6 +8,7 @@ import {
   type JarvisCaptureControls
 } from './jarvis-capture-controls'
 import { createStoppedSessionTracker } from './jarvis-stopped-sessions-tracker'
+import { activeBoardThreadId } from '../board/board-route/adam-voice-thread'
 import { useJarvisVoiceSettings } from './use-jarvis-voice-settings'
 import { useJarvisSpeechEvents } from './use-jarvis-speech-events'
 import { startJarvisTurnSession } from './start-jarvis-turn-session'
@@ -138,7 +139,7 @@ export function useJarvisTurn(): JarvisTurn {
     async (utterance: string): Promise<void> => {
       setPhase('thinking')
       try {
-        const result = await window.api.jarvis.ask(utterance)
+        const result = await window.api.jarvis.ask(utterance, activeBoardThreadId())
         if (result.kind === 'cancelled') {
           return
         }

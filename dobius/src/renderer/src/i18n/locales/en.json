@@ -13297,9 +13297,6 @@
     "relay": {
       "sent": "Sent to {{name}}."
     },
-    "conductor": {
-      "enable": "Turn on Voice Conductor in Settings"
-    },
     "voice": {
       "off": "Turn on voice dictation in Settings to talk to the Board.",
       "processing": "processing",
@@ -13996,7 +13993,6 @@
       "noConsoles": "No consoles on the board.",
       "loopFromPlanner": "Creating a loop by voice",
       "rejected": "I could not make a valid plan: {{reason}}",
-      "unsafe": "Ignored: that looked like instructions hidden inside the text.",
       "confirmTitle": "Go ahead with this?",
       "confirmAction": "Confirm",
       "notSent": "Nothing was sent.",

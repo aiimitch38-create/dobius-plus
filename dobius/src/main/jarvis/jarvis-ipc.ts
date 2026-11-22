@@ -1,11 +1,11 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { getDefaultVoiceSettings } from '../../shared/constants'
-import type { AdamTurnSource, VoiceSettings } from '../../shared/speech-types'
+import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { adamProjectDirectory } from '../adam-connection'
-import { ADAM_TURN_CHANNEL, AdamConversation } from './adam-conversation'
+import { ADAM_TURN_CHANNEL, AdamConversation, type AdamAskOptions } from './adam-conversation'
 import { AdamHermesVoice } from './adam-hermes-voice'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
 import { SelfEditStore, selfEditRoots } from './self-edit'
@@ -71,7 +71,7 @@ function getAdamVoice(): AdamHermesVoice {
         app.focus({ steal: true })
         const { response } = await dialog.showMessageBox({
           type: 'question',
-          title: 'Adam voice — allow command?',
+          title: 'ADAM — allow command?',
           message: description || 'Adam is requesting permission to run a command.',
           detail: command,
           buttons: ['Cancel', 'Allow once'],
@@ -95,10 +95,7 @@ let adamConversation: AdamConversation | null = null
  * Board thread, a future live voice engine). One Hermes session, one turn at a
  * time, and every turn is sent to the window so it lands in the Board thread.
  */
-export function askAdam(
-  text: string,
-  options: { source: AdamTurnSource; said?: string }
-): ReturnType<AdamConversation['ask']> {
+export function askAdam(text: string, options: AdamAskOptions): ReturnType<AdamConversation['ask']> {
   if (!adamConversation) {
     const broadcast = createBroadcastPort()
     adamConversation = new AdamConversation(
@@ -114,7 +111,7 @@ function createJarvisDeps(store: Store): JarvisServiceDeps {
     store,
     broadcast: createBroadcastPort(),
     shortcut: createGlobalShortcutPort(),
-    askAgent: (utterance) => askAdam(utterance, { source: 'voice' }),
+    askAgent: (utterance, threadId) => askAdam(utterance, { source: 'voice', threadId }),
     cancelAgent: () => adamVoice?.cancel()
   }
 }
@@ -288,6 +285,11 @@ function registerLiveSessionHandlers(store: Store): void {
   ipcMain.removeHandler('jarvis:liveSessionTest')
 }
 
+/** The Board thread a turn came from, as the window reported it; anything odd is "unknown". */
+function threadIdOf(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 && value.length <= 512 ? value : null
+}
+
 function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.removeHandler('jarvis:setMode')
   ipcMain.handle('jarvis:setMode', (_event, active: unknown) => {
@@ -302,7 +304,9 @@ function registerHandlers(store: Store, service: JarvisService): void {
   })
 
   ipcMain.removeHandler('jarvis:ask')
-  ipcMain.handle('jarvis:ask', (_event, utterance: string) => service.ask(utterance))
+  ipcMain.handle('jarvis:ask', (_event, utterance: string, threadId?: unknown) =>
+    service.ask(utterance, threadIdOf(threadId))
+  )
 
   ipcMain.removeHandler('jarvis:cancelAsk')
   ipcMain.handle('jarvis:cancelAsk', () => {
@@ -425,11 +429,14 @@ function registerHandlers(store: Store, service: JarvisService): void {
   // Why a text-only ask: during a live conversation the AGENT speaks, so
   // service.ask() would talk over it with a second voice.
   ipcMain.removeHandler('jarvis:askAdamText')
-  ipcMain.handle('jarvis:askAdamText', (_event, utterance: string, source?: unknown) =>
-    // Why voice by default: the only caller without a source is the live voice agent's tool.
-    askAdam(typeof utterance === 'string' ? utterance : '', {
-      source: source === 'thread' ? 'thread' : 'voice'
-    })
+  ipcMain.handle(
+    'jarvis:askAdamText',
+    (_event, utterance: string, source?: unknown, threadId?: unknown) =>
+      // Why voice by default: the only caller without a source is the live voice agent's tool.
+      askAdam(typeof utterance === 'string' ? utterance : '', {
+        source: source === 'thread' ? 'thread' : 'voice',
+        threadId: threadIdOf(threadId)
+      })
   )
 }
 
