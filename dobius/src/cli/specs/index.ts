@@ -19,6 +19,7 @@ import { VM_COMMAND_SPECS } from './vm'
 import { TASK_COMMAND_SPECS } from './tasks'
 import { BOARD_COMMAND_SPECS } from './board'
 import { LEAD_COMMAND_SPECS } from './lead'
+import { TABS_COMMAND_SPECS } from './tabs'
 
 export const COMMAND_SPECS: CommandSpec[] = [
   ...CORE_COMMAND_SPECS,
@@ -40,5 +41,6 @@ export const COMMAND_SPECS: CommandSpec[] = [
   ...EMULATOR_COMMAND_SPECS,
   ...TASK_COMMAND_SPECS,
   ...BOARD_COMMAND_SPECS,
-  ...LEAD_COMMAND_SPECS
+  ...LEAD_COMMAND_SPECS,
+  ...TABS_COMMAND_SPECS
 ]
