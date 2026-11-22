@@ -702,6 +702,51 @@ export class ClaudeUsageStore {
       })
   }
 
+  // Why: the workspace brief is built before a terminal's shell starts and
+  // must never wait on a scan. It reads what the last scan counted; a stale
+  // count refreshes in the background for the next brief.
+  getCachedWorktreeSpend(worktreeId: string): {
+    enabled: boolean
+    countedAt: number | null
+    sessions: number
+    estimatedCostUsd: number | null
+  } {
+    const { enabled, lastScanCompletedAt } = this.state.scanState
+    if (!enabled) {
+      return { enabled, countedAt: null, sessions: 0, estimatedCostUsd: null }
+    }
+    void this.refresh(false).catch((error: unknown) => {
+      console.warn('[claude-usage] background refresh failed:', error)
+    })
+    let estimatedCostUsd = 0
+    let hasAnyBillableCost = false
+    for (const row of this.state.dailyAggregates) {
+      if (row.worktreeId !== worktreeId) {
+        continue
+      }
+      const cost = estimateCostUsd(
+        row.model,
+        row.inputTokens,
+        row.outputTokens,
+        row.cacheReadTokens,
+        row.cacheWriteTokens
+      )
+      if (cost !== null) {
+        hasAnyBillableCost = true
+        estimatedCostUsd += cost
+      }
+    }
+    const sessions = this.state.sessions.filter(
+      (session) => session.primaryWorktreeId === worktreeId
+    ).length
+    return {
+      enabled,
+      countedAt: lastScanCompletedAt,
+      sessions,
+      estimatedCostUsd: hasAnyBillableCost ? estimatedCostUsd : null
+    }
+  }
+
   async getAutomationRunUsage(input: AutomationUsageLookupInput): Promise<AutomationRunUsage> {
     const collectedAt = Date.now()
     const unavailable = (

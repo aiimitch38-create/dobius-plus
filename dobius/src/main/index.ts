@@ -30,6 +30,7 @@ import { applyAppIcon } from './app-icon'
 import { applyLaunchAtLogin } from './launch-at-login'
 import { StatsCollector, initStatsPath } from './stats/collector'
 import { ClaudeUsageStore, initClaudeUsagePath } from './claude-usage/store'
+import { setWorkspacePreflightSources } from './agents/session-workspace-preflight'
 import { CodexUsageStore, initCodexUsagePath } from './codex-usage/store'
 import { OpenCodeUsageStore, initOpenCodeUsagePath } from './opencode-usage/store'
 import { killAllPty } from './ipc/pty'
@@ -1855,6 +1856,11 @@ app.whenReady().then(async () => {
       isAgentStatusHooksEnabled(store?.getSettings()) ? agentHookServer.buildPtyEnv() : {}
   })
   runtime = runtimeService
+  // Why: the workspace brief's pre-flight reads these when a terminal opens.
+  setWorkspacePreflightSources({
+    liveTerminals: (worktreeId) => runtimeService.countConnectedPtysForWorktree(worktreeId),
+    spend: (worktreeId) => claudeUsage?.getCachedWorktreeSpend(worktreeId) ?? null
+  })
   automations = new AutomationService(store, {
     claudeUsage,
     codexUsage,
