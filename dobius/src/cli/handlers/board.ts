@@ -103,18 +103,43 @@ export const BOARD_HANDLERS: Record<string, CommandHandler> = {
       card
     })
     const { handle, title } = resolved.result
-    const result = await client.call<{ send: RuntimeTerminalSend }>('terminal.send', {
-      terminal: handle,
-      text,
-      enter: flags.get('enter') === true,
-      client: { id: 'dobius-cli', type: 'desktop' }
-    })
-    if (!result.result.send.accepted) {
-      throw new RuntimeClientError(
-        'board_card_send_refused',
-        `Console card "${title}" (${handle}) did not accept the text; nothing was sent.`
+    // Why guarded and in two steps: text for an agent must not land in a bare
+    // shell or on a permission prompt. The runtime checks that an agent is
+    // running and is not waiting on a permission before the text, and again
+    // before Enter; it refuses a guarded call that carries both at once.
+    const guardedSend = async (
+      part: { text: string } | { enter: true },
+      refused: (reason: string) => string
+    ): Promise<{ send: RuntimeTerminalSend }> => {
+      const sent = await client.call<{ send: RuntimeTerminalSend }>('terminal.send', {
+        terminal: handle,
+        ...part,
+        requireAgentStatus: 'sendable',
+        client: { id: 'dobius-cli', type: 'desktop' }
+      })
+      if (!sent.result.send.accepted) {
+        const reason =
+          sent.result.send.refusedReason === 'no-agent'
+            ? 'no agent is running in it'
+            : sent.result.send.refusedReason === 'permission'
+              ? 'its agent is waiting on a permission prompt'
+              : 'it is not accepting input'
+        throw new RuntimeClientError('board_card_send_refused', refused(reason))
+      }
+      return sent.result
+    }
+    const typed = await guardedSend(
+      { text },
+      (reason) => `Console card "${title}" (${handle}) did not accept the text: ${reason}. Nothing was sent.`
+    )
+    if (flags.get('enter') === true) {
+      await guardedSend(
+        { enter: true },
+        (reason) =>
+          `Console card "${title}" (${handle}) has the text typed in, but Enter was not pressed: ${reason}.`
       )
     }
+    const result = { ...resolved, result: typed }
     printResult(
       result,
       json,
