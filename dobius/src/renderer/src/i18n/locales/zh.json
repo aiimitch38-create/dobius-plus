@@ -5716,14 +5716,15 @@
           "d3756cf5bc": "已禁用"
         },
         "OpenAiTranscriptionKeyDialog": {
+          "0eea7bc276": "OpenAI API 密钥",
+          "d284d59f4c": "用于 OpenAI 转录和 OpenAI Live 语音。仅在使用其中之一时才会将音频发送到 OpenAI。",
+          "82063d50f5": "需要已设置账单的 OpenAI 开发者平台 API 密钥。ChatGPT 订阅不包含 API 用量。",
           "fa83512e48": "保存密钥",
           "07b26f2742": "清除键",
           "d246b2bdb3": "本地运行时密钥使用 Electron 加密存储（如果可用）存储在 ~/.dobius 中。",
           "c3380e4ca5": "sk-...",
           "2f797018f0": "API 密钥已配置",
-          "16015322f9": "API密钥",
-          "07ed3e512e": "仅当选择 OpenAI 语音模型时，音频才会发送到 OpenAI。",
-          "439e91879e": "OpenAI 转录"
+          "16015322f9": "API密钥"
         },
         "OpenAiTranscriptionSettingsRow": {
           "85c589cd61": "添加API密钥",

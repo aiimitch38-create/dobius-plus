@@ -16,9 +16,21 @@ const KEY = 'sk_fake_new_key'
 
 const jarvisApi = {
   status: vi.fn(async () => ({ shortcutActive: true, phase: 'idle' })),
-  getElevenLabsKeyStatus: vi.fn(async () => ({ configured: true, sessionOnly: false, unreadable: false })),
-  saveElevenLabsKey: vi.fn(async (_key: string) => ({ configured: true, sessionOnly: false, unreadable: false })),
-  clearElevenLabsKey: vi.fn(async () => ({ configured: false, sessionOnly: false, unreadable: false })),
+  getElevenLabsKeyStatus: vi.fn(async () => ({
+    configured: true,
+    sessionOnly: false,
+    unreadable: false
+  })),
+  saveElevenLabsKey: vi.fn(async (_key: string) => ({
+    configured: true,
+    sessionOnly: false,
+    unreadable: false
+  })),
+  clearElevenLabsKey: vi.fn(async () => ({
+    configured: false,
+    sessionOnly: false,
+    unreadable: false
+  })),
   speak: vi.fn()
 }
 
@@ -39,6 +51,7 @@ async function render(
         permissionPending={false}
         onToggleJarvis={vi.fn()}
         onUpdateVoiceSettings={onUpdateVoiceSettings}
+        onOpenOpenAiDialog={vi.fn()}
       />
     )
   })
@@ -108,7 +121,9 @@ describe('JarvisSettingsSection ElevenLabs key (#24)', () => {
     })
     const container = await render({ elevenlabsVoiceId: 'voice-a' }, vi.fn())
 
-    expect(keyInput(container).placeholder).toBe("Saved key can't be read on this build. Re-enter it.")
+    expect(keyInput(container).placeholder).toBe(
+      "Saved key can't be read on this build. Re-enter it."
+    )
   })
 
   it('saves a new key through the key store, not through voice settings', async () => {
@@ -147,5 +162,30 @@ describe('JarvisSettingsSection ElevenLabs key (#24)', () => {
 
     expect(jarvisApi.clearElevenLabsKey).toHaveBeenCalledOnce()
     expect(keyInput(container).placeholder).toBe('ElevenLabs API key')
+  })
+
+  it('opens and saves with damaged numeric IDs in saved settings', async () => {
+    const onUpdate = vi.fn()
+    const container = await render(
+      {
+        elevenlabsVoiceId: 42 as unknown as string,
+        elevenlabsAgentId: 42 as unknown as string,
+        preferNativeAdamVoice: false
+      },
+      onUpdate
+    )
+
+    const voiceInput = container.querySelector<HTMLInputElement>('#jarvis-elevenlabs-voice')
+    const agentInput = container.querySelector<HTMLInputElement>('#jarvis-elevenlabs-agent')
+    expect(voiceInput?.value).toBe('')
+    expect(agentInput?.value).toBe('')
+    expect(container.textContent).not.toContain('Live mode is on')
+
+    if (!voiceInput) {
+      throw new Error('voice input missing')
+    }
+    await typeInto(voiceInput, 'voice-b')
+    await click(buttonNamed(container, 'Save'))
+    expect(onUpdate).toHaveBeenCalledWith({ elevenlabsVoiceId: 'voice-b', elevenlabsAgentId: '' })
   })
 })
