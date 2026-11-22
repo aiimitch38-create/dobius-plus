@@ -175,7 +175,7 @@ export function registerJarvisIpcHandlers(store: Store, mainWindow: BrowserWindo
   migrateElevenLabsKeyOutOfSettings(store)
   const service = getJarvisService(createJarvisDeps(store))
   registerHandlers(store, service)
-  registerElevenLabsKeyHandlers(store)
+  registerElevenLabsKeyHandlers(store, (event) => trustedLiveSender(event) !== null)
   registerLiveVoiceIpc(store, {
     trustedSender: trustedLiveSender,
     askAdam,
@@ -305,7 +305,7 @@ function registerHandlers(store: Store, service: JarvisService): void {
     buildAgentContext(join(getUserDataRoot(), 'terminal-history'))
   )
 
-  registerSelfEditHandlers()
+  registerSelfEditHandlers((event) => trustedLiveSender(event) !== null)
 
   // Why a separate call from agentContext: this hits the ElevenLabs API, so it
   // is fetched after the call connects rather than delaying the connection.

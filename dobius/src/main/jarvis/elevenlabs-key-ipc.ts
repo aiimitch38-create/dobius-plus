@@ -22,12 +22,26 @@ function elevenLabsKeyStatus(store: Store): ElevenLabsApiKeyStatus {
 
 // Why separate channels: the key is written to the protected store only and is
 // never sent back to the renderer (#24); Settings learns only whether one exists.
-export function registerElevenLabsKeyHandlers(store: Store): void {
+// Why checked: only Settings in the main window's top frame may see or
+// change the key; any other frame is refused with an error.
+export function registerElevenLabsKeyHandlers(
+  store: Store,
+  isMainFrame: (event: Electron.IpcMainInvokeEvent) => boolean
+): void {
+  const guard = (event: Electron.IpcMainInvokeEvent): void => {
+    if (!isMainFrame(event)) {
+      throw new Error('ElevenLabs key access is not allowed from this window.')
+    }
+  }
   ipcMain.removeHandler('jarvis:getElevenLabsKeyStatus')
-  ipcMain.handle('jarvis:getElevenLabsKeyStatus', () => elevenLabsKeyStatus(store))
+  ipcMain.handle('jarvis:getElevenLabsKeyStatus', (event) => {
+    guard(event)
+    return elevenLabsKeyStatus(store)
+  })
 
   ipcMain.removeHandler('jarvis:saveElevenLabsKey')
-  ipcMain.handle('jarvis:saveElevenLabsKey', (_event, apiKey: unknown) => {
+  ipcMain.handle('jarvis:saveElevenLabsKey', (event, apiKey: unknown) => {
+    guard(event)
     const status = saveElevenLabsApiKey(typeof apiKey === 'string' ? apiKey : '')
     if (!status.sessionOnly) {
       dropLegacyElevenLabsKeyFromSettings(store)
@@ -36,7 +50,8 @@ export function registerElevenLabsKeyHandlers(store: Store): void {
   })
 
   ipcMain.removeHandler('jarvis:clearElevenLabsKey')
-  ipcMain.handle('jarvis:clearElevenLabsKey', () => {
+  ipcMain.handle('jarvis:clearElevenLabsKey', (event) => {
+    guard(event)
     clearElevenLabsApiKey()
     dropLegacyElevenLabsKeyFromSettings(store)
     return elevenLabsKeyStatus(store)

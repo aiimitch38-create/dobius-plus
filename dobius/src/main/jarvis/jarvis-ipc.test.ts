@@ -84,9 +84,11 @@ vi.mock('../speech/speech-runtime-service', () => ({
   getSpeechSttService: () => ({ startDictation: async () => undefined })
 }))
 
+const selfEditWin = vi.hoisted(() => ({ current: null as unknown }))
 vi.mock('../window/self-edit-window', () => ({
   closeSelfEditWindow: () => undefined,
-  showSelfEditProposal: () => undefined
+  showSelfEditProposal: () => undefined,
+  getSelfEditWindow: () => selfEditWin.current
 }))
 
 vi.mock('./self-edit-repo-root', () => ({
@@ -714,6 +716,42 @@ describe('OpenAI Live session IPC', () => {
     forceEndLiveCallForTest(1)
     expect(reload).toHaveBeenCalledTimes(1)
     expect(getActiveLiveSessionForTest()).toBeNull()
+  })
+
+  it('self-edit and ElevenLabs key handlers answer only trusted top frames', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    const review = liveWindow(50).contents
+    selfEditWin.current = { isDestroyed: () => false, webContents: review }
+    const other = liveWindow(99).contents
+    const strangers = [
+      {},
+      { sender: other, senderFrame: other.mainFrame },
+      { sender: contents, senderFrame: { name: 'embedded frame' } }
+    ]
+    const notAllowed = { ok: false, error: expect.stringContaining('not allowed') }
+    for (const event of strangers) {
+      expect(await handler('jarvis:proposeSelfEdit')(event, 'a.ts', 'x', 'd')).toMatchObject(notAllowed)
+      expect(await handler('jarvis:applySelfEdit')(event, 'id1')).toMatchObject(notAllowed)
+      expect(await handler('jarvis:undoSelfEdit')(event, 'id1')).toMatchObject(notAllowed)
+      expect(await handler('jarvis:discardSelfEdit')(event, 'id1')).toEqual({ ok: false })
+      for (const channel of [
+        'jarvis:getElevenLabsKeyStatus',
+        'jarvis:saveElevenLabsKey',
+        'jarvis:clearElevenLabsKey'
+      ]) {
+        expect(() => handler(channel)(event, 'sk-new')).toThrow('not allowed')
+      }
+    }
+    // The review window may apply or discard what it shows, nothing else.
+    const fromReview = { sender: review, senderFrame: review.mainFrame }
+    expect(await handler('jarvis:applySelfEdit')(fromReview, 'id1')).not.toMatchObject(notAllowed)
+    expect(await handler('jarvis:proposeSelfEdit')(fromReview, 'a.ts', 'x', 'd')).toMatchObject(notAllowed)
+    expect(await handler('jarvis:getElevenLabsKeyStatus')(from(contents))).toMatchObject({
+      configured: false
+    })
+    expect(await handler('jarvis:undoSelfEdit')(from(contents), 'id1')).not.toMatchObject(notAllowed)
+    selfEditWin.current = null
   })
 
   it('has no connection-test handler, so nothing can open a session just to test', async () => {
