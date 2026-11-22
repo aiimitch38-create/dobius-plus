@@ -646,9 +646,48 @@ describe('OpenAI Live session IPC', () => {
     await handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
     contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: true })
     expect(getActiveLiveSessionForTest()).not.toBeNull()
+    // Starting to navigate is not enough: the old page may still be alive.
     contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+    expect(getActiveLiveSessionForTest()).not.toBeNull()
+    contents.emit('did-navigate')
     expect(getActiveLiveSessionForTest()).toBeNull()
+    expect(contents.listenerCount('did-navigate')).toBe(0)
     expect(contents.listenerCount('did-start-navigation')).toBe(0)
+  })
+
+  it('keeps a stalled hard-stop reload owned and metered, so the crash step still runs', async () => {
+    const { window, contents } = liveWindow(7)
+    const reload = vi.fn(() =>
+      contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+    )
+    const crash = vi.fn(() => contents.emit('render-process-gone'))
+    Object.assign(contents, { reload, forcefullyCrashRenderer: crash })
+    await register(liveStore({}), window)
+    const { getActiveLiveSessionForTest, forceEndLiveCallForTest } = await import('./jarvis-ipc')
+    await callToken(contents)
+    forceEndLiveCallForTest(1)
+    expect(getActiveLiveSessionForTest()).not.toBeNull()
+    forceEndLiveCallForTest(2)
+    expect(crash).toHaveBeenCalledTimes(1)
+    expect(getActiveLiveSessionForTest()).toBeNull()
+  })
+
+  it('a navigation that starts during setup still aborts the create', async () => {
+    const { window, contents } = liveWindow()
+    await register(liveStore({}), window)
+    let seenSignal: AbortSignal | undefined
+    live.create.mockImplementationOnce((_offer, _options, deps) => {
+      seenSignal = (deps as { signal: AbortSignal }).signal
+      return new Promise((resolve) => {
+        seenSignal?.addEventListener('abort', () =>
+          resolve({ ok: false, kind: 'cancelled', error: 'cancelled' } as never)
+        )
+      })
+    })
+    const pending = handler('jarvis:liveSessionConnect')(from(contents), { offerSdp: 'v=0 offer' })
+    await vi.waitFor(() => expect(seenSignal).toBeDefined())
+    contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+    expect(await pending).toMatchObject({ ok: false, kind: 'cancelled' })
   })
 
   it('a stop during the thread save keeps the request from ever reaching ADAM', async () => {
@@ -706,9 +745,7 @@ describe('OpenAI Live session IPC', () => {
 
   it('ends a call from main by reloading a window that ignores the cap', async () => {
     const { window, contents } = liveWindow(7)
-    const reload = vi.fn(() =>
-      contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
-    )
+    const reload = vi.fn(() => contents.emit('did-navigate'))
     Object.assign(contents, { reload, forcefullyCrashRenderer: vi.fn() })
     await register(liveStore({}), window)
     const { getActiveLiveSessionForTest, forceEndLiveCallForTest } = await import('./jarvis-ipc')

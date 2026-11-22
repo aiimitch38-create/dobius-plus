@@ -100,25 +100,34 @@ export function forceEndLiveCallForTest(attempt: number): void {
 }
 
 /**
- * Calls `onGone` once when the window's page goes away: closed, crashed, or
- * reloaded / navigated (a reload keeps the same WebContents, so 'destroyed'
- * alone would leave a paid call owned by a page that no longer exists).
- * Returns the unsubscribe.
+ * Calls `onGone` when the window's page goes away: closed, crashed, or
+ * replaced by a reload / navigation (a reload keeps the same WebContents,
+ * so 'destroyed' alone would leave a paid call owned by a page that no
+ * longer exists). Returns the unsubscribe.
+ *
+ * `early`: also on a navigation that only STARTED. Used to abort a setup;
+ * an active call stays owned and metered until the old page is confirmed
+ * gone, so a stalled reload still reaches the crash step of the hard stop.
  */
-function watchOwnerGone(owner: LiveSender, onGone: () => void): () => void {
-  const onNavigate = (details: { isMainFrame?: boolean; isSameDocument?: boolean }): void => {
+function watchOwnerGone(owner: LiveSender, onGone: () => void, early = false): () => void {
+  const onStart = (details: { isMainFrame?: boolean; isSameDocument?: boolean }): void => {
     if (details?.isMainFrame !== false && details?.isSameDocument !== true) {
       onGone()
     }
   }
-  const navigate = onNavigate as unknown as (...args: unknown[]) => void
-  owner.once('destroyed', onGone)
-  owner.once('render-process-gone', onGone)
-  owner.on('did-start-navigation', navigate)
+  const started = onStart as unknown as (...args: unknown[]) => void
+  const gone = ['destroyed', 'render-process-gone', 'did-navigate', 'did-finish-load'] as const
+  for (const name of gone) {
+    owner.on(name as 'destroyed', onGone)
+  }
+  if (early) {
+    owner.on('did-start-navigation', started)
+  }
   return () => {
-    owner.removeListener('destroyed', onGone)
-    owner.removeListener('render-process-gone', onGone)
-    owner.removeListener('did-start-navigation', navigate)
+    for (const name of gone) {
+      owner.removeListener(name as 'destroyed', onGone)
+    }
+    owner.removeListener('did-start-navigation', started)
   }
 }
 
@@ -180,7 +189,7 @@ async function connectLiveSession(
     return refused
   }
   const controller = new AbortController()
-  const unwatch = watchOwnerGone(sender, () => controller.abort())
+  const unwatch = watchOwnerGone(sender, () => controller.abort(), true)
   try {
     const options = await liveSessionOptions(store, deps)
     // Why re-check: the page may have closed or reloaded while the thread was read.

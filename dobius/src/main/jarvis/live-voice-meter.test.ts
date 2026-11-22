@@ -122,3 +122,32 @@ describe('LiveVoiceMeter fail-closed (review round 2b)', () => {
     expect(JSON.parse(readFileSync(file, 'utf8')).days[day as string].activeSec).toBe(0)
   })
 })
+
+describe('LiveVoiceMeter midnight (review round 3)', () => {
+  it('splits an interval that spans midnight between the two days', () => {
+    now = new Date(2026, 10, 22, 23, 59, 30).getTime()
+    const meter = new LiveVoiceMeter(file, clock)
+    const before = localDayKey(now)
+    meter.start()
+    now += 60_000
+    meter.stop()
+    const days = JSON.parse(readFileSync(file, 'utf8')).days
+    expect(days[before].activeSec).toBe(30)
+    expect(days[localDayKey(now)].activeSec).toBe(30)
+  })
+
+  it('uses prepaid seconds once, from the start of the call', () => {
+    now = new Date(2026, 10, 22, 23, 59, 50).getTime()
+    const meter = new LiveVoiceMeter(file, clock)
+    const before = localDayKey(now)
+    meter.start(15)
+    now += 30_000
+    meter.accrue()
+    now += 30_000
+    meter.stop()
+    const days = JSON.parse(readFileSync(file, 'utf8')).days
+    // 10 s before midnight are prepaid; 5 more prepaid after it; 45 billed after.
+    expect(days[before]).toBeUndefined()
+    expect(days[localDayKey(now)].activeSec).toBe(45)
+  })
+})

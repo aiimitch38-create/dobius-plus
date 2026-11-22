@@ -153,17 +153,27 @@ export class LiveVoiceMeter {
     const now = this.now()
     const slice = Math.min(Math.max(0, (now - running.since) / 1000), LIVE_METER_MAX_SLICE_SEC)
     running.since = now
-    const seconds = Math.max(0, slice - running.prepaidSec)
-    running.prepaidSec = Math.max(0, running.prepaidSec - slice)
-    if (seconds === 0) {
+    // Prepaid seconds are the first of the slice, and are used up once.
+    const prepaid = Math.min(slice, running.prepaidSec)
+    running.prepaidSec -= prepaid
+    if (slice - prepaid <= 0) {
       return
     }
     const days = this.load()
-    const key = localDayKey(now)
-    const day = days[key] ?? { activeSec: 0, standbySec: 0 }
-    days[key] = running.standby
-      ? { ...day, standbySec: day.standbySec + seconds }
-      : { ...day, activeSec: day.activeSec + seconds }
+    // Why split at midnight: each day's total is what its cap is checked against.
+    let from = now - (slice - prepaid) * 1000
+    while (from < now) {
+      const date = new Date(from)
+      const midnight = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime()
+      const to = Math.min(midnight, now)
+      const seconds = (to - from) / 1000
+      const key = localDayKey(from)
+      const day = days[key] ?? { activeSec: 0, standbySec: 0 }
+      days[key] = running.standby
+        ? { ...day, standbySec: day.standbySec + seconds }
+        : { ...day, activeSec: day.activeSec + seconds }
+      from = to
+    }
     this.save()
   }
 
