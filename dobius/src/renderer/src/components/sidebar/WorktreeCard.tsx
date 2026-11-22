@@ -24,6 +24,7 @@ import WorktreeContextMenu from './WorktreeContextMenu'
 import { SshDisconnectedDialog } from './SshDisconnectedDialog'
 import { AutoRenameFailedDialog } from './AutoRenameFailedDialog'
 import WorktreeCardAgents from './WorktreeCardAgents'
+import WorktreeCardSnoozedShelf from './WorktreeCardSnoozedShelf'
 import { useWorktreeAgentRows } from './useWorktreeAgentRows'
 import { WorktreeCardStatusSlot } from './WorktreeCardStatusSlot'
 import { cn } from '@/lib/utils'
@@ -1326,7 +1327,9 @@ const WorktreeCard = React.memo(function WorktreeCard({
         onEditIssue={affiliateListMode ? undefined : handleEditIssue}
         onEditComment={affiliateListMode ? undefined : handleEditComment}
         onOpenGitHubIssueInDobius={
-          metaIssue && 'url' in metaIssue && metaIssue.url ? handleOpenGitHubIssueInDobius : undefined
+          metaIssue && 'url' in metaIssue && metaIssue.url
+            ? handleOpenGitHubIssueInDobius
+            : undefined
         }
         onOpenLinearIssueInDobius={linearIssue?.url ? handleOpenLinearIssueInDobius : undefined}
         onOpenReviewInDobius={
@@ -1738,6 +1741,9 @@ const WorktreeCard = React.memo(function WorktreeCard({
           />
         )}
 
+        {/* Tabs closed to come back later. Renders nothing when there are none. */}
+        <WorktreeCardSnoozedShelf worktreeId={worktree.id} />
+
         {showLineageChildChip && (
           <div
             className={cn('relative mt-1 flex min-w-0 justify-start', !newCardStyle && '-ml-1')}
@@ -1823,7 +1829,9 @@ const WorktreeCard = React.memo(function WorktreeCard({
         }
         onOpenLinearIssueInDobius={linearIssue?.url ? handleOpenLinearIssueInDobius : undefined}
         onOpenReviewInDobius={
-          hoverReview?.url && hoverReview.provider === 'github' ? handleOpenReviewInDobius : undefined
+          hoverReview?.url && hoverReview.provider === 'github'
+            ? handleOpenReviewInDobius
+            : undefined
         }
         onOpenAutomation={affiliateListMode ? undefined : handleOpenAutomation}
         onOpenAutomationRun={affiliateListMode ? undefined : handleOpenAutomationRun}
