@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdamTurnEvent } from '../../shared/speech-types'
+import { adamThreadRowOf } from './adam-thread-store'
 import {
   ADAM_BUSY_TEXT,
   AdamConversation,
@@ -153,6 +154,18 @@ describe('voice turns become thread rows in main', () => {
         at
       })
     ).toEqual({ id: 't1:answered', role: 'assistant', text: 'All quiet.', voice: true })
+  })
+
+  it('clips a very long reply so the thread keeps it across a restart', () => {
+    const long = voiceTurnRow({
+      turnId: 't5',
+      source: 'voice',
+      phase: 'answered',
+      result: { kind: 'answer', text: 'x'.repeat(50_000) },
+      at
+    })
+    expect(long?.text.length).toBe(20_001)
+    expect(adamThreadRowOf(long)).not.toBeNull()
   })
 
   it('shows a failed or stopped turn in plain words, and leaves typed turns to the thread itself', () => {

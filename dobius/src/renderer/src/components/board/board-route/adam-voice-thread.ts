@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useAppStore } from '@/store'
 import type { AdamLookingAt } from '../../../../../shared/speech-types'
+import { reportUnsaved } from './board-thread-store'
 
 // Voice and typed messages are one conversation with ADAM. Main writes every spoken
 // turn into his thread itself; this file only tells main which project is on screen.
@@ -24,6 +25,13 @@ export function currentlyLookingAt(): AdamLookingAt | null {
  * wake-word turn starts in main and has no other way to learn what "this project" means.
  */
 export function useAdamVoiceThread(): void {
+  useEffect(
+    () =>
+      window.api.jarvis.onAdamThreadUnsaved(
+        () => void reportUnsaved(Promise.resolve({ ok: false, error: 'not-saved' }))
+      ),
+    []
+  )
   useEffect(() => {
     let last: string | undefined
     const report = (): void => {

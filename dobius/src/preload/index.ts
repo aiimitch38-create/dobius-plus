@@ -4660,6 +4660,11 @@ const api = {
       ipcRenderer.on('jarvis:adam-thread', listener)
       return () => ipcRenderer.removeListener('jarvis:adam-thread', listener)
     },
+    onAdamThreadUnsaved: (callback: () => void): (() => void) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('jarvis:adam-thread-unsaved', listener)
+      return () => ipcRenderer.removeListener('jarvis:adam-thread-unsaved', listener)
+    },
     reportLookingAt: (lookingAt: AdamLookingAt | null): Promise<void> =>
       ipcRenderer.invoke('jarvis:lookingAt', lookingAt),
     onAdamTurn: (callback: (event: AdamTurnEvent) => void): (() => void) => {

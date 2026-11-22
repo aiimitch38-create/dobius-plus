@@ -58,11 +58,15 @@ export function voiceTurnRow(event: AdamTurnEvent): AdamThreadRow | null {
   if (event.source !== 'voice') {
     return null
   }
+  // Why clipped: the thread refuses a row over its size limit, and a long reply
+  // must still be kept (he has already said all of it out loud).
+  const clip = (value: string): string =>
+    value.length > MAX_VOICE_ROW_CHARS ? `${value.slice(0, MAX_VOICE_ROW_CHARS)}…` : value
   if (event.phase === 'asked') {
-    return { id: `${event.turnId}:asked`, role: 'user', text: event.text, voice: true }
+    return { id: `${event.turnId}:asked`, role: 'user', text: clip(event.text), voice: true }
   }
   const id = `${event.turnId}:answered`
-  const text = event.result.text.trim()
+  const text = clip(event.result.text.trim())
   if (event.result.kind === 'cancelled') {
     return {
       id,
@@ -83,6 +87,8 @@ export function voiceTurnRow(event: AdamTurnEvent): AdamThreadRow | null {
   return { id, role: 'assistant', text, voice: true }
 }
 
+const MAX_VOICE_ROW_CHARS = 20_000
+
 type AdamBrain = { ask: (text: string) => Promise<JarvisAskResult> }
 
 /**
@@ -96,7 +102,7 @@ export class AdamConversation {
 
   constructor(
     private readonly brain: AdamBrain,
-    private readonly announce: (event: AdamTurnEvent) => void
+    private readonly announce: (event: AdamTurnEvent) => void | Promise<void>
   ) {}
 
   async ask(
@@ -111,14 +117,14 @@ export class AdamConversation {
     this.inFlight = true
     const turn = { turnId: randomUUID(), source: options.source }
     try {
-      this.announce({ ...turn, phase: 'asked', text: options.said ?? text, at: Date.now() })
+      await this.announce({ ...turn, phase: 'asked', text: options.said ?? text, at: Date.now() })
       let result: JarvisAskResult
       try {
         result = await this.brain.ask(text)
       } catch {
         result = { kind: 'error', text: 'ADAM is unreachable' }
       }
-      this.announce({ ...turn, phase: 'answered', result, at: Date.now() })
+      await this.announce({ ...turn, phase: 'answered', result, at: Date.now() })
       return result
     } finally {
       this.inFlight = false

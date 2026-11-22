@@ -320,12 +320,15 @@ describe('terminal send RPC', () => {
 
   it('reports the bytes typed when the input floor is lost part-way through a long text', async () => {
     const text = 'a'.repeat(16 * 1024 + 10)
+    let driver: { kind: string; clientId?: string } = { kind: 'desktop' }
+    const written: string[] = []
     const runtime = stubRuntime({
       resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
-      getDriver: vi.fn().mockReturnValue({ kind: 'desktop' }),
+      getDriver: vi.fn(() => driver),
       getTerminalAgentStatus: vi
         .fn()
         .mockResolvedValue({ handle: 'terminal-1', isRunningAgent: true, status: 'working' }),
+      // As the real runtime does: the guard runs before every chunk, then the chunk is written.
       sendTerminal: vi.fn(
         async (
           _handle: string,
@@ -333,8 +336,12 @@ describe('terminal send RPC', () => {
           options: { beforeWrite?: (ptyId: string) => Promise<void> }
         ) => {
           await options.beforeWrite?.('pty-1')
-          // Someone else takes the terminal between two chunks.
-          throw new Error('terminal_guard_not_writable')
+          written.push('chunk 1')
+          // A phone takes the terminal between the two chunks.
+          driver = { kind: 'mobile', clientId: 'phone-1' }
+          await options.beforeWrite?.('pty-1')
+          written.push('chunk 2')
+          return { handle: 'terminal-1', accepted: true, bytesWritten: text.length }
         }
       )
     })
@@ -352,6 +359,7 @@ describe('terminal send RPC', () => {
     expect(response.ok && response.result).toEqual({
       send: { handle: 'terminal-1', accepted: false, bytesWritten: 16 * 1024 }
     })
+    expect(written).toEqual(['chunk 1'])
   })
 
   it('allows guarded terminal sends when the agent is sendable', async () => {

@@ -3387,6 +3387,8 @@ export type PreloadApi = {
     adamThreadAppend: (row: AdamThreadRow) => Promise<{ ok: boolean; error?: 'not-saved' }>
     adamThreadClear: () => Promise<{ ok: boolean; error?: 'not-saved' }>
     onAdamThread: (callback: (rows: AdamThreadRow[]) => void) => () => void
+    /** Main could not save a row it wrote itself (a spoken turn). */
+    onAdamThreadUnsaved: (callback: () => void) => () => void
     /** Tells main which project is on screen, for turns that start there (the wake word). */
     reportLookingAt: (lookingAt: AdamLookingAt | null) => Promise<void>
     /** Every accepted ADAM turn, voice or typed: the words asked, then the reply. */

@@ -2,7 +2,12 @@ import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { AdamLookingAt, JarvisAskResult, VoiceSettings } from '../../shared/speech-types'
-import { ADAM_THREAD_CHANNEL, AdamThreadStore, adamThreadRowOf } from './adam-thread-store'
+import {
+  ADAM_THREAD_CHANNEL,
+  ADAM_THREAD_UNSAVED_CHANNEL,
+  AdamThreadStore,
+  adamThreadRowOf
+} from './adam-thread-store'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { adamProjectDirectory } from '../adam-connection'
@@ -123,13 +128,20 @@ export function askAdam(text: string, options: AdamAskOptions): ReturnType<AdamC
     const broadcast = createBroadcastPort()
     adamConversation = new AdamConversation(
       { ask: (prompt) => getAdamVoice().ask(prompt) },
-      (event) => {
-        // Spoken turns are written to the thread here, before any window hears of them.
+      async (event) => {
+        // Spoken turns are in the thread before any window hears of the turn.
         const row = voiceTurnRow(event)
         if (row) {
-          void getAdamThread()
+          await getAdamThread()
             .append(row)
-            .catch((error) => console.warn('ADAM voice turn could not be saved:', error))
+            .catch((error) => {
+              console.warn('ADAM voice turn could not be saved:', error)
+              // No window asked for this write, so main tells the window itself.
+              const host = jarvisHostWindow
+              if (host && !host.isDestroyed()) {
+                host.webContents.send(ADAM_THREAD_UNSAVED_CHANNEL)
+              }
+            })
         }
         broadcast(ADAM_TURN_CHANNEL, event)
       }
@@ -386,8 +398,11 @@ function registerHandlers(store: Store, service: JarvisService): void {
   })
 
   ipcMain.removeHandler('jarvis:cancelAsk')
-  ipcMain.handle('jarvis:cancelAsk', () => {
-    service.cancelAsk()
+  ipcMain.handle('jarvis:cancelAsk', (event) => {
+    // Why: stopping ADAM mid-turn is the main window's call, never an embedded page's.
+    if (trustedLiveSender(event)) {
+      service.cancelAsk()
+    }
     return { ok: true }
   })
 

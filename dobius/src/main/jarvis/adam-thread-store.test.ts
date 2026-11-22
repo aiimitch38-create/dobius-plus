@@ -61,6 +61,28 @@ describe('AdamThreadStore: main owns the one thread', () => {
     expect(texts(await open().get())).toEqual(['a', 'b', 'c'])
   })
 
+  it('a repeated row waits for the write that carries it, and retries one that failed', async () => {
+    const store = open()
+    const first = store.append(row('a'))
+    const repeat = store.append(row('a'))
+    await Promise.all([first, repeat])
+    expect(texts(await open().get())).toEqual(['a'])
+    await rm(directory, { recursive: true, force: true })
+    await writeFile(directory, 'a file where the folder was')
+    await expect(store.append(row('b'))).rejects.toThrow()
+    // Still not on disk: sending the same row again must not claim success.
+    await expect(store.append(row('b'))).rejects.toThrow()
+    await rm(directory, { force: true })
+    await store.append(row('b'))
+    expect(texts(await open().get())).toEqual(['a', 'b'])
+  })
+
+  it('refuses a row it would drop on the next load', async () => {
+    const store = open()
+    await expect(store.append(row('big', 'x'.repeat(40_000)))).rejects.toThrow('adam_thread_row_invalid')
+    expect(await store.get()).toEqual([])
+  })
+
   it('clears for every window and survives a corrupt file', async () => {
     await writeFile(file, '{not json')
     const store = open()

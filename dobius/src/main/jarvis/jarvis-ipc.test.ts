@@ -13,6 +13,7 @@ const electron = vi.hoisted(() => ({
   shortcutHandler: null as null | (() => void),
   registerResult: true,
   focused: null as unknown,
+  windows: [] as unknown[],
   userData: ''
 }))
 
@@ -45,7 +46,7 @@ vi.mock('electron', () => ({
     getPath: () => electron.userData
   },
   dialog: { showMessageBox: vi.fn(async () => ({ response: 0 })) },
-  BrowserWindow: { getFocusedWindow: () => electron.focused, getAllWindows: () => [] },
+  BrowserWindow: { getFocusedWindow: () => electron.focused, getAllWindows: () => electron.windows },
   globalShortcut: {
     register: (_accelerator: string, handler: () => void) => {
       electron.shortcutHandler = handler
@@ -191,6 +192,8 @@ describe('Adam Hermes voice routing', () => {
     const frame = { name: 'main' }
     Object.assign(main.webContents, { mainFrame: frame, isDestroyed: () => false })
     const top = { sender: main.webContents, senderFrame: frame }
+    const otherWindow = fakeWindow()
+    electron.windows = [main, otherWindow]
     await register(store, main)
     main.webContents.send.mockClear()
     // Only the main window's top frame may start a turn with ADAM.
@@ -260,6 +263,14 @@ describe('Adam Hermes voice routing', () => {
     expect(
       main.webContents.send.mock.calls.filter(([channel]) => channel === 'jarvis:adam-thread').length
     ).toBeGreaterThan(0)
+    // Another window of the app (a preview, a web tile host) is never sent the thread.
+    expect(otherWindow.webContents.send).not.toHaveBeenCalled()
+    // The spoken words were already in the thread when the window first heard of that turn.
+    const sends = main.webContents.send.mock.calls
+    const firstTurn = sends.findIndex(([channel]) => channel === 'jarvis:adam-turn')
+    const firstThread = sends.findIndex(([channel]) => channel === 'jarvis:adam-thread')
+    expect(firstThread).toBeGreaterThanOrEqual(0)
+    expect(firstThread).toBeLessThan(firstTurn)
     // Voice and the thread go through one entry point to the one ADAM session.
     expect(adam.created).toHaveBeenCalledTimes(1)
     expect(
@@ -283,7 +294,10 @@ describe('Adam Hermes voice routing', () => {
         sessionFile: join(electron.userData, 'adam-voice-session.json')
       })
     )
-    await electron.handlers.get('jarvis:cancelAsk')?.()
+    // Only the main window's top frame may stop ADAM mid-turn.
+    await electron.handlers.get('jarvis:cancelAsk')?.({})
+    expect(adam.cancel).not.toHaveBeenCalled()
+    await electron.handlers.get('jarvis:cancelAsk')?.(top)
     expect(adam.cancel).toHaveBeenCalledTimes(1)
   })
 })
