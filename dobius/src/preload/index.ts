@@ -2929,6 +2929,21 @@ const api = {
     }
   } satisfies PreloadApi['updater'],
 
+  tabSnooze: {
+    add: (request) => ipcRenderer.invoke('tabSnooze:add', request),
+    list: () => ipcRenderer.invoke('tabSnooze:list'),
+    take: (ref, options) => ipcRenderer.invoke('tabSnooze:take', ref, options),
+    settle: (ref) => ipcRenderer.invoke('tabSnooze:settle', ref),
+    putBack: (ref) => ipcRenderer.invoke('tabSnooze:putBack', ref),
+    setTime: (ref, until) => ipcRenderer.invoke('tabSnooze:setTime', ref, until),
+    discard: (ref) => ipcRenderer.invoke('tabSnooze:discard', ref),
+    onChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent) => callback()
+      ipcRenderer.on('tabSnooze:changed', listener)
+      return () => ipcRenderer.removeListener('tabSnooze:changed', listener)
+    }
+  } satisfies PreloadApi['tabSnooze'],
+
   whatsNew: {
     getPending: () => ipcRenderer.invoke('whatsNew:getPending'),
     dismiss: () => ipcRenderer.invoke('whatsNew:dismiss'),

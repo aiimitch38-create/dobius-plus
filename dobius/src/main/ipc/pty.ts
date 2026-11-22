@@ -28,6 +28,11 @@ import {
   type AgentResumeOwner
 } from '../../shared/agent-resume-owner'
 import { mainProcessAgentResumeClaims } from '../pty/agent-resume-claims'
+import {
+  isSnoozedTabReturnOwner,
+  releaseSnoozedTabReturn,
+  stageSnoozedTabReturnSettle
+} from '../tab-snooze-active'
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
 import {
   isWslShellName,
@@ -1384,8 +1389,27 @@ export function registerPtyHandlers(
 
   const isPersistedAgentResumeOwner = (
     owner: AgentResumeOwner,
-    allowClaimedOwnerAfterRecordClear = false
+    allowClaimedOwnerAfterRecordClear = false,
+    senderId?: number
   ): boolean => {
+    // Why: a snoozed tab's layout and sleeping record left the session when it
+    // closed, so the window bringing it back is vouched for by main's snooze
+    // reservation instead, and only once nothing still runs the conversation.
+    if (senderId !== undefined && isSnoozedTabReturnOwner(owner, senderId)) {
+      return (
+        !hasLivePty(owner.ptyId) &&
+        !agentHookServer
+          .getStatusSnapshot()
+          .some(
+            (entry) =>
+              entry.providerSession?.key === owner.providerSession.key &&
+              entry.providerSession?.id === owner.providerSession.id &&
+              entry.state !== 'done' &&
+              Boolean(entry.ptyId) &&
+              hasLivePty(entry.ptyId as string)
+          )
+      )
+    }
     const session = store?.getWorkspaceSession()
     const saved = session?.sleepingAgentSessionsByPaneKey?.[owner.paneKey]
     const layoutPtyId =
@@ -1422,20 +1446,30 @@ export function registerPtyHandlers(
     return true
   }
 
-  ipcMain.handle('pty:claimAgentResume', (_event, request: unknown) => {
+  ipcMain.handle('pty:claimAgentResume', (event, request: unknown) => {
     const owner = parseAgentResumeOwner(request)
-    if (!owner || !isPersistedAgentResumeOwner(owner)) {
+    const senderId: number | undefined = event.sender?.id
+    if (!owner || !isPersistedAgentResumeOwner(owner, false, senderId)) {
       return null
+    }
+    if (senderId !== undefined && isSnoozedTabReturnOwner(owner, senderId)) {
+      // Why here and not when the tab was snoozed: only now has main checked
+      // that the terminal which ran the conversation is gone.
+      mainProcessAgentResumeClaims.forgetStarted(owner)
     }
     return mainProcessAgentResumeClaims.claim(owner)
   })
-  ipcMain.handle('pty:releaseAgentResume', (_event, request: unknown) => {
+  ipcMain.handle('pty:releaseAgentResume', (event, request: unknown) => {
     if (typeof request !== 'object' || request === null) {
       return false
     }
     const { token, owner: rawOwner } = request as Record<string, unknown>
     const owner = parseAgentResumeOwner(rawOwner)
-    if (typeof token !== 'string' || !owner || !isPersistedAgentResumeOwner(owner)) {
+    if (
+      typeof token !== 'string' ||
+      !owner ||
+      !isPersistedAgentResumeOwner(owner, false, event.sender?.id)
+    ) {
       return false
     }
     return mainProcessAgentResumeClaims.release(token, owner)
@@ -2353,7 +2387,7 @@ export function registerPtyHandlers(
           }
           result = await provider.spawn(spawnOptions)
           if (resumeClaim) {
-            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, true)
+            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, true, result.id)
           }
         } catch (err) {
           if (resumeClaim) {
@@ -3139,18 +3173,22 @@ export function registerPtyHandlers(
                 resumeClaim.owner,
                 resumeClaim.target
               ) ||
-              !isPersistedAgentResumeOwner(resumeClaim.owner, true))
+              !isPersistedAgentResumeOwner(resumeClaim.owner, true, event.sender?.id))
           ) {
             throw new Error('Automatic agent-resume ownership changed before PTY spawn')
           }
           result = await provider.spawn(spawnOptions)
           if (resumeClaim) {
-            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, true)
+            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, true, result.id)
           }
           spawnTiming.mark('provider_spawn')
         } catch (err) {
-          if (resumeClaim) {
-            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, false)
+          if (resumeClaim && mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, false)) {
+            // Why: a snoozed tab whose conversation did not start goes back on
+            // the shelf from here, whether or not its window is still around.
+            // Why only when this token's spawn had begun: a stale request must
+            // not shelve the newer return that now owns the same conversation.
+            releaseSnoozedTabReturn(resumeClaim.owner)
           }
           const rawMessage = err instanceof Error ? err.message : String(err)
           const spawnError = normalizeNodePtySpawnError(err)
@@ -3255,6 +3293,32 @@ export function registerPtyHandlers(
         // other field; patch the load-bearing (tab.ptyId, ptyIdsByLeafId)
         // binding synchronously so a force-quit in the ~450 ms debounce window
         // cannot orphan either daemon history or a remote relay PTY lease.
+        // Why staged before the binding save and with no await in between: a
+        // returning snoozed tab's row must leave the list in the same save
+        // that writes its terminal binding, and come back if that save fails.
+        const snoozeReturn = resumeClaim ? stageSnoozedTabReturnSettle(resumeClaim.owner) : null
+        // Why only once the terminal is confirmed dead: a claim made
+        // retryable while it may still run would allow a second resume.
+        const retrySnoozeReturnClaim = (): void => {
+          if (resumeClaim && snoozeReturn) {
+            mainProcessAgentResumeClaims.failStarted(resumeClaim.owner, result.id)
+          }
+        }
+        if (snoozeReturn?.cancelled) {
+          // The user closed the returning tab while its terminal was starting.
+          // Its row stays off the shelf until the terminal has been stopped.
+          try {
+            await provider.shutdown(result.id, { immediate: true })
+            clearProviderPtyState(result.id)
+            deletePtyOwnership(result.id)
+            ptySizes.delete(result.id)
+            retrySnoozeReturnClaim()
+          } catch (shutdownErr) {
+            console.warn('[pty] failed to stop a cancelled snooze return:', shutdownErr)
+          }
+          snoozeReturn.rollback()
+          throw new Error('Snoozed tab return was cancelled before its terminal started')
+        }
         if (
           (isDaemonHostSpawn || args.connectionId) &&
           store &&
@@ -3272,9 +3336,13 @@ export function registerPtyHandlers(
             })
           } catch (err) {
             console.error('[pty] failed to persist PTY binding after spawn:', err)
+            // Why before any await: the staged row removal must be undone
+            // before another save could write it without the binding.
+            snoozeReturn?.rollback()
             if (!result.isReattach) {
               try {
                 await provider.shutdown(result.id, { immediate: true })
+                retrySnoozeReturnClaim()
               } catch (shutdownErr) {
                 console.warn('[pty] failed to clean up PTY after persistence failure:', shutdownErr)
               }
@@ -3287,6 +3355,7 @@ export function registerPtyHandlers(
             throw new Error(createTerminalSessionStateSaveFailureMessage())
           }
         }
+        snoozeReturn?.commit()
         // Why: pre-signal cooperation gate — when the renderer has declared it
         // will own the serializer for this paneKey, suppress the daemon-snapshot
         // seed so the renderer's hydration path (maybeHydrateHeadlessFromRenderer)
@@ -3877,16 +3946,13 @@ export function registerPtyHandlers(
     }
   })
 
-  ipcMain.handle(
-    'pty:hasChildProcesses',
-    async (event, args: { id: string }): Promise<boolean> => {
-      assertTrustedPtySender(event)
-      if (!hasPtyProviderForInspection(args.id)) {
-        return false
-      }
-      return getProviderForPty(args.id).hasChildProcesses(args.id)
+  ipcMain.handle('pty:hasChildProcesses', async (event, args: { id: string }): Promise<boolean> => {
+    assertTrustedPtySender(event)
+    if (!hasPtyProviderForInspection(args.id)) {
+      return false
     }
-  )
+    return getProviderForPty(args.id).hasChildProcesses(args.id)
+  })
 
   ipcMain.handle(
     'pty:getForegroundProcess',

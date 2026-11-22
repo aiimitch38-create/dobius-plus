@@ -1,4 +1,11 @@
 import type { WhatsNewPayload, WhatsNewSection } from '../shared/whats-new'
+import type {
+  SnoozedTabEntry,
+  SnoozedTabRef,
+  SnoozeTabRequest,
+  SnoozeTabResult,
+  TakenSnoozedTab
+} from '../shared/tab-snooze-types'
 import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
 import type {
   RuntimeBoardOpenWebTileEvent,
@@ -2492,6 +2499,23 @@ export type PreloadApi = {
     dismissNudge: () => Promise<void>
     onStatus: (callback: (status: UpdateStatus) => void) => () => void
     onClearDismissal: (callback: () => void) => () => void
+  }
+  /** Snoozed tabs: closed now, back later (main/tab-snooze.ts owns the list). */
+  tabSnooze: {
+    add: (request: SnoozeTabRequest) => Promise<SnoozeTabResult>
+    list: () => Promise<SnoozedTabEntry[]>
+    /** Hands the entry to this window once; null if another window got it. */
+    take: (
+      ref: SnoozedTabRef,
+      options?: { onlyReady?: boolean; returnTabId?: string }
+    ) => Promise<TakenSnoozedTab | null>
+    /** A plain reopened tab's terminal started; a conversation is settled by main alone. */
+    settle: (ref: SnoozedTabRef) => Promise<boolean>
+    /** The return failed: back on the shelf until brought back by hand. */
+    putBack: (ref: SnoozedTabRef) => Promise<boolean>
+    setTime: (ref: SnoozedTabRef, until: number | null) => Promise<boolean>
+    discard: (ref: SnoozedTabRef) => Promise<boolean>
+    onChanged: (callback: () => void) => () => void
   }
   whatsNew: {
     /** Notes to show once after an update, newest version first, or null. */

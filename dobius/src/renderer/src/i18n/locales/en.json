@@ -12520,7 +12520,15 @@
         "SortableTabContextMenu": {
           "switchToTerminalView": "Switch to terminal view",
           "switchToChatView": "Switch to chat view",
-          "openInNewWindow": "Open in new window"
+          "openInNewWindow": "Open in new window",
+          "snooze": "Snooze"
+        },
+        "SnoozeTabConfirmDialog": {
+          "title": "Snooze a tab that is still working?",
+          "stops": "Snoozing stops it now. What it was doing will not carry on when the tab comes back.",
+          "resumes": "Snoozing stops it now. The conversation picks up where it left off when the tab comes back.",
+          "cancel": "Cancel",
+          "confirm": "Snooze"
         }
       }
     },
@@ -12533,6 +12541,14 @@
           "gitlabMergeRequestNumber": "MR #{{value0}}",
           "githubPullRequestNumber": "PR #{{value0}}"
         }
+      }
+    },
+    "sidebar": {
+      "WorktreeCardSnoozedShelf": {
+        "title": "Snoozed",
+        "bringBack": "Bring back now",
+        "snoozeUntil": "Snooze until",
+        "closeForGood": "Close for good"
       }
     }
   },
@@ -14300,6 +14316,29 @@
       "adding": "Adding…",
       "add": "Add screenshot",
       "empty": "None yet. Paste or drop an image here, or add one."
+    }
+  },
+  "lib": {
+    "tabSnooze": {
+      "pick": {
+        "tonight": "Tonight",
+        "tomorrowNight": "Tomorrow night",
+        "morning": "Tomorrow morning",
+        "24h": "24 hours",
+        "2d": "2 days",
+        "week": "Next week",
+        "manual": "Until I bring it back",
+        "devMinute": "1 minute (dev only)"
+      },
+      "untilBroughtBack": "until you bring it back",
+      "snoozed": "Tab snoozed. It waits in the sidebar.",
+      "splitPanes": "Snooze works on tabs with one pane. Close the extra panes first.",
+      "conversationNotResumable": "This conversation cannot be saved for later yet. Try again in a moment.",
+      "full": "The Snoozed shelf is full. Bring a tab back or close one for good first.",
+      "failed": "This tab could not be snoozed.",
+      "back": "A snoozed tab is back",
+      "alreadyOpen": "That conversation is already open in another tab.",
+      "putBack": "This tab could not pick its conversation back up, so it is still in Snoozed."
     }
   }
 }
