@@ -4,6 +4,7 @@ import {
   continueStoppedGroupForShell,
   isForegroundSignal,
   isGroupStoppedForShell,
+  jobStateFromPsRows,
   resetStoppedGroupsForTest,
   signalForegroundProcessGroup,
   type JobState
@@ -126,28 +127,35 @@ describe('signalForegroundProcessGroup', () => {
     expect(t.kill).not.toHaveBeenCalledWith(-250, 'SIGCONT')
   })
 
-  it.runIf(posix)('retries a failed resume while the agent is still stopped', async () => {
+  it.runIf(posix)('types fg only once per pause, however often resume is retried', async () => {
     const t = wrapped()
     t.set({ fgEffect: 'nothing' })
     await pause(t)
     expect(await resume(t)).toBe('handoff-failed')
     expect(isGroupStoppedForShell(90)).toBe(true)
+    // Still stopped, shell still at its prompt: the first `fg` may yet be queued.
     t.set({ fgEffect: 'job' })
+    expect(await resume(t)).toBe('handoff-failed')
+    expect(t.write).toHaveBeenCalledTimes(1)
+    // The queued `fg` finally lands: the retry sees it and finishes.
+    t.userFg()
     expect(await resume(t)).toBe('signalled')
-    expect(t.write).toHaveBeenCalledTimes(2)
-    expect(t.foreground()).toBe(250)
+    expect(t.write).toHaveBeenCalledTimes(1)
     expect(isGroupStoppedForShell(90)).toBe(false)
   })
 
-  it.runIf(posix)('does not type fg again while the first one may still be queued', async () => {
+  it.runIf(posix)('a new pause of the same agent may type fg again', async () => {
     const t = wrapped()
     t.set({ fgEffect: 'nothing' })
     await pause(t)
     expect(await resume(t)).toBe('handoff-failed')
-    // The agent is no longer stopped, so the first `fg` is not known to be used up.
-    t.set({ state: 'running' })
-    expect(await resume(t)).toBe('handoff-failed')
-    expect(t.write).toHaveBeenCalledTimes(1)
+    // The agent got going again in the background; the user pauses it once more.
+    t.set({ state: 'running', fgEffect: 'job' })
+    expect(await pause(t)).toBe('signalled')
+    expect(t.state()).toBe('stopped')
+    expect(await resume(t)).toBe('signalled')
+    expect(t.write).toHaveBeenCalledTimes(2)
+    expect(t.foreground()).toBe(250)
   })
 
   it.runIf(posix)('types nothing when the user foregrounds the agent first', async () => {
@@ -195,7 +203,7 @@ describe('signalForegroundProcessGroup', () => {
       write: vi.fn(),
       readGroup: async () => 100,
       readJobState: async (): Promise<JobState> => 'stopped',
-      handoffTimeoutMs: 30,
+      handoffTimeoutMs: 400,
       handoffPollMs: 5
     }
     const pausing = signalForegroundProcessGroup(90, 'SIGSTOP_FOREGROUND', deps)
@@ -222,6 +230,89 @@ describe('signalForegroundProcessGroup', () => {
     t.set({ foreground: 100 })
     expect(await resume(t)).toBe('signalled')
     expect(t.foreground()).toBe(250)
+  })
+
+  it.runIf(posix)('a background continue is not a resume, even if the agent keeps running', async () => {
+    const t = wrapped()
+    await pause(t)
+    const kill = vi.fn()
+    const deps = {
+      ...t.deps,
+      kill,
+      readGroup: async () => 777,
+      readJobState: async (): Promise<JobState> => 'running'
+    }
+    expect(await signalForegroundProcessGroup(90, 'SIGCONT_FOREGROUND', deps)).toBe(
+      'handoff-failed'
+    )
+    expect(kill).toHaveBeenCalledWith(-250, 'SIGCONT')
+    expect(isGroupStoppedForShell(90)).toBe(true)
+  })
+
+  it.runIf(posix)('keeps a paused agent when its state cannot be read', async () => {
+    const t = wrapped()
+    await pause(t)
+    t.set({ state: 'unknown' })
+    expect(await resume(t)).toBe('handoff-failed')
+    expect(t.write).not.toHaveBeenCalled()
+    expect(isGroupStoppedForShell(90)).toBe(true)
+    expect(await pause(t)).toBe('signalled')
+    expect(t.kill).toHaveBeenCalledTimes(1)
+  })
+
+  it.runIf(posix)('does nothing more once the terminal is torn down mid-resume', async () => {
+    const t = wrapped()
+    await pause(t)
+    let release = (): void => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const deps = {
+      ...t.deps,
+      readJobState: async (): Promise<JobState> => {
+        await gate
+        return 'stopped'
+      }
+    }
+    const resuming = signalForegroundProcessGroup(90, 'SIGCONT_FOREGROUND', deps)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const teardownKill = vi.fn()
+    expect(continueStoppedGroupForShell(90, teardownKill)).toBe(true)
+    release()
+    expect(await resuming).toBe('no-foreground-job')
+    // Nothing is typed into, or signalled in, whatever reuses that pid.
+    expect(t.write).not.toHaveBeenCalled()
+    expect(t.kill).toHaveBeenCalledTimes(1)
+    expect(isGroupStoppedForShell(90)).toBe(false)
+  })
+
+  it.runIf(posix)('does nothing more once the terminal is torn down mid-pause', async () => {
+    const kill = vi.fn()
+    const deps = {
+      kill,
+      write: vi.fn(),
+      // Nothing reclaims the terminal, so the pause keeps polling.
+      readGroup: async () => 250,
+      readJobState: async (): Promise<JobState> => 'stopped',
+      handoffTimeoutMs: 5_000,
+      handoffPollMs: 5
+    }
+    const pausing = signalForegroundProcessGroup(90, 'SIGSTOP_FOREGROUND', deps)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    const teardownKill = vi.fn()
+    expect(continueStoppedGroupForShell(90, teardownKill)).toBe(true)
+    expect(teardownKill).toHaveBeenCalledWith(-250, 'SIGCONT')
+    expect(await pausing).toBe('no-foreground-job')
+    expect(kill.mock.calls).toEqual([[-250, 'SIGSTOP']])
+  })
+
+  it('reads a job state from its group members, not just the leader', () => {
+    const rows = ['  250 Z', '  250 T', '  250 S', '  300 S+', ' 2500 T'].join('\n')
+    expect(jobStateFromPsRows(250, rows)).toBe('stopped')
+    // The leader has exited but a child is still alive.
+    expect(jobStateFromPsRows(300, rows)).toBe('running')
+    expect(jobStateFromPsRows(25, rows)).toBe('gone')
+    expect(jobStateFromPsRows(400, '  400 Z')).toBe('gone')
   })
 
   it.runIf(posix)('reports failure when fg brings a different job forward', async () => {

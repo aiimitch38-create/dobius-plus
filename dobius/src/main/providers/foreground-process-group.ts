@@ -44,18 +44,36 @@ export function readForegroundGroup(shellPid: number): Promise<number | null> {
   })
 }
 
-export type JobState = 'stopped' | 'running' | 'gone'
+export type JobState = 'stopped' | 'running' | 'gone' | 'unknown'
 
-/** Whether a process group's leader is stopped, running or gone (POSIX `ps -o stat`). */
+/** Reads `pgid stat` rows from `ps -ax -o pgid=,stat=` for one process group. */
+export function jobStateFromPsRows(pgid: number, rows: string): JobState {
+  let members = 0
+  let stopped = false
+  for (const row of rows.split('\n')) {
+    const [group, stat] = row.trim().split(/\s+/)
+    // Zombies have already exited; they only wait to be reaped.
+    if (Number(group) !== pgid || !stat || stat.startsWith('Z')) {
+      continue
+    }
+    members += 1
+    stopped ||= stat.startsWith('T')
+  }
+  if (members === 0) {
+    return 'gone'
+  }
+  return stopped ? 'stopped' : 'running'
+}
+
+/**
+ * Whether a process group is stopped, running or gone, by its members (the
+ * leader alone may have exited). A failed lookup is 'unknown', never 'gone':
+ * forgetting a paused agent on a `ps` hiccup would leave it frozen for good.
+ */
 export function readJobState(pgid: number): Promise<JobState> {
   return new Promise((resolve) => {
-    execFile('ps', ['-o', 'stat=', '-p', String(pgid)], { timeout: 2_000 }, (error, stdout) => {
-      const stat = error ? '' : stdout.trim()
-      if (stat === '') {
-        resolve('gone')
-        return
-      }
-      resolve(stat.startsWith('T') ? 'stopped' : 'running')
+    execFile('ps', ['-ax', '-o', 'pgid=,stat='], { timeout: 2_000 }, (error, stdout) => {
+      resolve(error ? 'unknown' : jobStateFromPsRows(pgid, stdout))
     })
   })
 }
@@ -95,13 +113,15 @@ type StoppedJob = {
   job: number
   /** The group that took the terminal back when the agent stopped (the shell); null until seen. */
   shell: number | null
-  /** `fg` was typed for this pause and has not been seen to work yet. */
+  /** `fg` was typed for this pause. Never typed twice for the same pause. */
   fgSent: boolean
 }
 
 type Kill = (pid: number, sig: string) => void
 type Ctx = {
   ptyPid: number
+  /** The terminal's lifetime at the time of the call; see `alive`. */
+  lifetime: object
   readGroup: (pid: number) => Promise<number | null>
   readState: (pgid: number) => Promise<JobState>
   kill: Kill
@@ -112,6 +132,12 @@ type Ctx = {
 const stoppedGroups = new Map<number, StoppedJob>()
 /** pty pid -> last queued pause/resume, so they run one at a time per terminal. */
 const operations = new Map<number, Promise<unknown>>()
+/**
+ * pty pid -> token for the terminal currently using that pid. Teardown drops
+ * it, so an operation still waiting on `ps` can tell its terminal is gone (and
+ * the pid possibly reused) before it signals or types anything.
+ */
+const lifetimes = new Map<number, object>()
 let exitHookInstalled = false
 
 function installExitHook(kill: Kill): void {
@@ -134,6 +160,7 @@ export function continueAllStoppedGroups(
     }
   }
   stoppedGroups.clear()
+  lifetimes.clear()
   return n
 }
 
@@ -147,6 +174,8 @@ export function continueStoppedGroupForShell(
   ptyPid: number,
   kill: Kill = (pid, sig) => process.kill(pid, sig)
 ): boolean {
+  lifetimes.delete(ptyPid)
+  operations.delete(ptyPid)
   const stopped = stoppedGroups.get(ptyPid)
   if (stopped === undefined) {
     return false
@@ -154,6 +183,11 @@ export function continueStoppedGroupForShell(
   stoppedGroups.delete(ptyPid)
   tryKill(kill, stopped.job, 'SIGCONT')
   return true
+}
+
+/** False once the terminal this operation was started for has been torn down. */
+function alive(ctx: Ctx): boolean {
+  return lifetimes.get(ctx.ptyPid) === ctx.lifetime
 }
 
 function tryKill(kill: Kill, pgid: number, sig: string): boolean {
@@ -179,6 +213,9 @@ async function waitForOwner(ctx: Ctx, done: (owner: number) => boolean): Promise
   const deadline = Date.now() + (ctx.deps.handoffTimeoutMs ?? HANDOFF_TIMEOUT_MS)
   for (;;) {
     const owner = await ctx.readGroup(ctx.ptyPid)
+    if (!alive(ctx)) {
+      return null
+    }
     if (owner !== null && done(owner)) {
       return owner
     }
@@ -189,21 +226,37 @@ async function waitForOwner(ctx: Ctx, done: (owner: number) => boolean): Promise
   }
 }
 
+// Returned when the terminal was torn down mid-operation: teardown already
+// continued and forgot the agent, so there is nothing left to act on.
+const TORN_DOWN: ForegroundSignalResult = 'no-foreground-job'
+
 async function pauseForegroundGroup(ctx: Ctx): Promise<ForegroundSignalResult> {
   const { ptyPid, kill } = ctx
   const existing = stoppedGroups.get(ptyPid)
   if (existing) {
     // Already paused: the foreground is the shell now, and that must never be stopped.
     const state = await ctx.readState(existing.job)
+    if (!alive(ctx)) {
+      return TORN_DOWN
+    }
+    if (state === 'running') {
+      // An earlier resume left it running; this is a new pause of the same agent.
+      if (!tryKill(kill, existing.job, 'SIGSTOP')) {
+        forget(ptyPid, existing)
+        return 'no-foreground-job'
+      }
+      existing.fgSent = false
+      return 'signalled'
+    }
     if (state !== 'gone') {
-      // 'running' = an earlier resume could only continue it in the background.
-      return state === 'stopped' || tryKill(kill, existing.job, 'SIGSTOP')
-        ? 'signalled'
-        : 'no-foreground-job'
+      return 'signalled'
     }
     forget(ptyPid, existing)
   }
   const job = await ctx.readGroup(ptyPid)
+  if (!alive(ctx)) {
+    return TORN_DOWN
+  }
   if (job === null || job === ptyPid) {
     return 'no-foreground-job'
   }
@@ -215,6 +268,9 @@ async function pauseForegroundGroup(ctx: Ctx): Promise<ForegroundSignalResult> {
   const stopped: StoppedJob = { job, shell: null, fgSent: false }
   stoppedGroups.set(ptyPid, stopped)
   const shell = await waitForOwner(ctx, (owner) => owner !== job)
+  if (!alive(ctx)) {
+    return TORN_DOWN
+  }
   if (shell === null) {
     // Nothing took the terminal back, so what we stopped was the shell itself
     // (a bare prompt) or a job no shell can foreground again: never leave it frozen.
@@ -229,55 +285,59 @@ async function pauseForegroundGroup(ctx: Ctx): Promise<ForegroundSignalResult> {
 async function resumeStoppedGroup(ctx: Ctx, stopped: StoppedJob): Promise<ForegroundSignalResult> {
   const { ptyPid, kill } = ctx
   const state = await ctx.readState(stopped.job)
+  if (!alive(ctx)) {
+    return TORN_DOWN
+  }
   if (state === 'gone') {
     // Never type `fg` for a dead agent: it would foreground some other job.
     forget(ptyPid, stopped)
     return 'no-foreground-job'
   }
-  // ponytail: the owner is read last and the write follows it with no await in
-  // between, but the user can still type `fg` themselves in the few
-  // milliseconds `ps` takes, and then these keys reach the agent. Closing that
-  // fully needs a shell-side control channel with an acknowledgement.
+  if (state === 'unknown') {
+    return 'handoff-failed'
+  }
+  // ponytail: known limit, accepted. The owner is read last and the write
+  // follows it with no await in between, but the user can still type `fg`
+  // themselves in the few milliseconds `ps` takes, and then Ctrl-C + `fg`
+  // reach the agent. Closing that fully needs a shell-side control channel
+  // with an acknowledgement (shell integration).
   const owner = await ctx.readGroup(ptyPid)
+  if (!alive(ctx)) {
+    return TORN_DOWN
+  }
   if (owner === null) {
     return 'handoff-failed'
   }
-  if (owner === stopped.job) {
-    // The agent already has the terminal: a plain continue is enough.
+  if (owner !== stopped.shell) {
+    // Either the agent already has the terminal, or the user started something
+    // else in it. There is no prompt to type `fg` at, so a plain continue is
+    // all that is left. Only the agent owning the terminal counts as resumed:
+    // in the background a full-screen agent may stop again, so the record stays
+    // for a later resume or quit to find.
     if (!tryKill(kill, stopped.job, 'SIGCONT')) {
       forget(ptyPid, stopped)
       return 'no-foreground-job'
+    }
+    if (owner !== stopped.job) {
+      return 'handoff-failed'
     }
     forget(ptyPid, stopped)
     return 'signalled'
   }
-  if (owner !== stopped.shell) {
-    // The user started something else in this terminal, so there is no prompt
-    // to type `fg` at. Continue in the background and keep the record: a
-    // full-screen agent may stop again there, and a later resume or quit must
-    // still find it.
-    if (!tryKill(kill, stopped.job, 'SIGCONT')) {
-      forget(ptyPid, stopped)
-      return 'no-foreground-job'
-    }
-    await new Promise((resolve) => setTimeout(resolve, ctx.deps.handoffPollMs ?? HANDOFF_POLL_MS))
-    const after = await ctx.readState(stopped.job)
-    if (after === 'gone') {
-      forget(ptyPid, stopped)
-      return 'no-foreground-job'
-    }
-    return after === 'stopped' ? 'handoff-failed' : 'signalled'
-  }
-  // Why: an `fg` typed earlier may still be queued in the terminal. Only type
-  // another once the shell is back at its prompt with the agent still stopped,
-  // which means the earlier one was used up without effect.
-  if (!stopped.fgSent || state === 'stopped') {
+  // Why once per pause: an `fg` typed earlier may still be queued in the
+  // terminal, and a second copy would be typed into the agent once the first
+  // one lands. A retry only waits for the first to take effect.
+  if (!stopped.fgSent) {
     stopped.fgSent = true
     ctx.deps.write(SHELL_FOREGROUND_COMMAND)
   }
   // Bare `fg` picks the shell's current job, which may not be ours: only the
   // recorded group owning the terminal counts as success.
-  if ((await waitForOwner(ctx, (now) => now === stopped.job)) === null) {
+  const handedOver = await waitForOwner(ctx, (now) => now === stopped.job)
+  if (!alive(ctx)) {
+    return TORN_DOWN
+  }
+  if (handedOver === null) {
     return 'handoff-failed'
   }
   forget(ptyPid, stopped)
@@ -297,14 +357,23 @@ export function signalForegroundProcessGroup(
   if (!real || process.platform === 'win32') {
     return Promise.resolve('unsupported')
   }
+  let lifetime = lifetimes.get(ptyPid)
+  if (!lifetime) {
+    lifetime = {}
+    lifetimes.set(ptyPid, lifetime)
+  }
   const ctx: Ctx = {
     ptyPid,
+    lifetime,
     readGroup: deps.readGroup ?? readForegroundGroup,
     readState: deps.readJobState ?? readJobState,
     kill: deps.kill ?? ((pid: number, sig: string) => process.kill(pid, sig)),
     deps
   }
   const run = async (): Promise<ForegroundSignalResult> => {
+    if (!alive(ctx)) {
+      return TORN_DOWN
+    }
     if (real === 'SIGSTOP') {
       return pauseForegroundGroup(ctx)
     }
@@ -331,5 +400,6 @@ export function isGroupStoppedForShell(shellPid: number): boolean {
 
 export function resetStoppedGroupsForTest(): void {
   operations.clear()
+  lifetimes.clear()
   stoppedGroups.clear()
 }
