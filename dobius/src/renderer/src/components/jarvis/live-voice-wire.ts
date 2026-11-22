@@ -25,7 +25,8 @@ export const LIVE_EVENT = {
 
 // Why: commentary.append is capped at 500 tokens (design doc section 1.3).
 // Main already shapes ADAM's reply below this; this is the last backstop.
-export const LIVE_COMMENTARY_MAX_CHARS = 1_600
+// ponytail: chars, not tokens; 1,000 stays under 500 tokens for nearly all text. Use a tokenizer if dense scripts get cut.
+export const LIVE_COMMENTARY_MAX_CHARS = 1_000
 
 export type LiveEvent =
   | { type: 'started'; expiresAtMs: number | null }

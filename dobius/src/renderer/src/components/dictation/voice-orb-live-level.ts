@@ -47,9 +47,8 @@ export function setAdamVoiceHangUp(hangUp: () => void): () => void {
  * push-to-talk mode a press mutes the call instead of hanging up.
  */
 export function endAdamVoiceFromOrb(): void {
-  if (presentation.state !== 'idle') {
-    adamVoiceHangUp?.()
-  }
+  // Why unconditional: a muted or standby call shows as idle but still bills.
+  adamVoiceHangUp?.()
 }
 
 export function startAdamVoiceTurnFromOrb(pressPtt: () => Promise<unknown>): boolean {
