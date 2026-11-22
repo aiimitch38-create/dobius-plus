@@ -1,0 +1,112 @@
+import type { LiveDelegateResult } from '../../../../shared/speech-types'
+import {
+  LIVE_DELEGATION_SETTLE_MAX_MS,
+  LIVE_DELEGATION_SETTLE_MS,
+  LIVE_MAX_PENDING_DELEGATIONS,
+  LIVE_NOT_HEARD_TEXT,
+  LIVE_UNREACHABLE_TEXT,
+  type LiveVoiceApi
+} from './live-voice-call-types'
+import type { NamedTimers } from './live-voice-timers'
+import { isHangUpIntent, isStopIntent, type LiveTranscript } from './live-voice-transcript'
+import { commentaryEvent } from './live-voice-wire'
+
+/** What the delegation bridge needs from the call that owns it. */
+export type DelegationHost = {
+  api: LiveVoiceApi
+  transcript: LiveTranscript
+  timers: NamedTimers
+  now: () => number
+  lastInputAt: () => number
+  /** The call's generation; a change means the call this work was for is over. */
+  generation: () => number
+  send: (data: string) => void
+  /** Re-derives the shown state (thinking while work is pending). */
+  settle: () => void
+}
+
+/**
+ * The client side of `client` delegation: the voice model says "ADAM should
+ * handle this", the bridge takes Carson's words from the transcript, asks
+ * ADAM through main, and hands the spoken answer back as commentary.
+ */
+export class LiveDelegations {
+  private pending = 0
+
+  constructor(private readonly host: DelegationHost) {}
+
+  get count(): number {
+    return this.pending
+  }
+
+  reset(): void {
+    this.pending = 0
+  }
+
+  /** Drops ADAM's work for this call, if any is running. */
+  cancel(): void {
+    if (this.pending > 0) {
+      void this.host.api.liveCancel().catch(() => undefined)
+    }
+  }
+
+  async run(delegationId: string | null): Promise<void> {
+    const host = this.host
+    if (this.pending >= LIVE_MAX_PENDING_DELEGATIONS) {
+      return
+    }
+    const generation = host.generation()
+    const isCurrent = (): boolean => host.generation() === generation
+    this.pending += 1
+    host.settle()
+    try {
+      const startedAt = host.now()
+      while (
+        host.now() - host.lastInputAt() < LIVE_DELEGATION_SETTLE_MS &&
+        host.now() - startedAt < LIVE_DELEGATION_SETTLE_MAX_MS
+      ) {
+        await host.timers.sleep(100)
+        if (!isCurrent()) {
+          return
+        }
+      }
+      const request = host.transcript.takeRequest()
+      if (!request) {
+        host.send(commentaryEvent(LIVE_NOT_HEARD_TEXT, delegationId))
+        return
+      }
+      // Why: the model may hand "stop" itself over as a request. It must
+      // cancel ADAM's work, not reach ADAM as a new message.
+      if (isStopIntent(request)) {
+        void host.api.liveCancel().catch(() => undefined)
+        return
+      }
+      const result = await host.api
+        .liveDelegate({ request, callLines: host.transcript.recentLines() })
+        .catch((): LiveDelegateResult => ({ ok: false, error: 'unreachable' }))
+      const say = result.ok ? result.speak : LIVE_UNREACHABLE_TEXT
+      if (isCurrent() && say) {
+        host.send(commentaryEvent(say, delegationId))
+      }
+    } finally {
+      if (isCurrent()) {
+        this.pending = Math.max(0, this.pending - 1)
+        host.settle()
+      }
+    }
+  }
+
+  /**
+   * Checks Carson's finished phrase: "stop" cancels ADAM's work, "hang up"
+   * asks the call to end. Returns true for a hang-up.
+   */
+  checkIntent(): boolean {
+    const said = this.host.transcript.peekInput()
+    if (isStopIntent(said)) {
+      this.host.transcript.discardInput()
+      this.cancel()
+      return false
+    }
+    return isHangUpIntent(said)
+  }
+}

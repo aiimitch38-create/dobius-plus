@@ -10,7 +10,15 @@ export function shouldMountVoiceCoordinator(
 }
 
 export type JarvisOrbState = CharacterState | 'error'
-export type VoiceAgentOrbState = 'idle' | 'connecting' | 'listening' | 'speaking' | 'error'
+export type VoiceAgentOrbState =
+  | 'idle'
+  | 'connecting'
+  | 'listening'
+  | 'speaking'
+  | 'error'
+  // Only an OpenAI Live call has these two: ADAM working, and paid standby.
+  | 'thinking'
+  | 'standby'
 export type VoiceOrbActivitySource = 'input' | 'output' | 'preview'
 
 export type VoiceOrbPresentation = {
@@ -58,7 +66,7 @@ export function resolveVoiceOrbPresentation({
     if (agentState === 'speaking') {
       return presentation('speaking', 'output')
     }
-    if (agentState === 'connecting') {
+    if (agentState === 'connecting' || agentState === 'thinking') {
       return presentation('thinking')
     }
     return IDLE_PRESENTATION
