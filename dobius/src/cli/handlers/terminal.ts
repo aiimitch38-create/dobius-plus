@@ -1,4 +1,5 @@
 import type {
+  RuntimeTerminalAgentStatus,
   RuntimeTerminalClose,
   RuntimeTerminalCreate,
   RuntimeTerminalFocus,
@@ -172,6 +173,17 @@ export const TERMINAL_HANDLERS: Record<string, CommandHandler> = {
       terminal: await getTerminalHandle(flags, cwd, client)
     })
     printResult(result, json, formatTerminalClose)
+  },
+  'terminal agent': async ({ flags, client, cwd, json }) => {
+    const result = await client.call<{ agentStatus: RuntimeTerminalAgentStatus }>(
+      'terminal.agentStatus',
+      { terminal: await getTerminalHandle(flags, cwd, client) }
+    )
+    printResult(result, json, ({ agentStatus }) =>
+      agentStatus.isRunningAgent
+        ? `${agentStatus.handle}: agent ${agentStatus.status ?? 'running (status unknown)'}`
+        : `${agentStatus.handle}: no agent running`
+    )
   },
   'terminal split': async ({ flags, client, cwd, json }) => {
     const directionFlag = getOptionalStringFlag(flags, 'direction')

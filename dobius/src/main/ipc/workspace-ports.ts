@@ -72,8 +72,9 @@ export function registerWorkspacePortHandlers(
       if (!args) {
         return { ok: false, reason: 'Invalid process or port.' }
       }
-      const worktrees = getStoreWorkspacePortProbes(store, args.repoId)
-      return killWorkspacePort(worktrees, args)
+      // Why every worktree: a repo filter hides nested worktrees of other
+      // repos, whose listeners would then be credited to the parent.
+      return killWorkspacePort(getStoreWorkspacePortProbes(store), args)
     }
   )
 }

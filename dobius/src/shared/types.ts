@@ -3713,6 +3713,9 @@ export type SearchOptions = {
   useRegex?: boolean
   includePattern?: string
   excludePattern?: string
+  /** Extra excludes matched case-insensitively and never split or merged
+   *  with excludePattern (agent file search keeps secrets out with these). */
+  caseInsensitiveExcludeGlobs?: readonly string[]
   maxResults?: number
 }
 

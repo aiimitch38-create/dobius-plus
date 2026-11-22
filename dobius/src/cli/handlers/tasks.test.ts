@@ -8,7 +8,7 @@ const callMock = vi.fn()
 // Why: isolate the handler's flag-to-RPC mapping; printResult only writes output.
 vi.mock('../format', () => ({ printResult: vi.fn() }))
 
-import { REPEATED_FLAG_SEPARATOR } from '../args'
+import { REPEATED_FLAG_SEPARATOR, parseArgs } from '../args'
 import { TASK_HANDLERS } from './tasks'
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
@@ -135,5 +135,129 @@ describe('dobius tasks attach / review / block', () => {
     await TASK_HANDLERS['tasks block'](ctx({ id: 't1', by: 'w', reason: 'needs Carson' }))
     expect(callMock).toHaveBeenCalledTimes(1)
     expect(callMock).toHaveBeenCalledWith('tasks.block', { id: 't1', by: 'w', reason: 'needs Carson' })
+  })
+})
+
+describe('dobius tasks update', () => {
+  it('maps flags to tasks.update, with repeated --label replacing labels', async () => {
+    callMock.mockResolvedValueOnce({ result: { ok: true, task: okTask } })
+    await TASK_HANDLERS['tasks update'](
+      ctx({
+        id: 't1',
+        by: 'adam',
+        title: 'New title',
+        label: ['auth', 'urgent'].join(REPEATED_FLAG_SEPARATOR),
+        priority: 'high',
+        assignee: 'console-w2',
+        'assignee-kind': 'console'
+      })
+    )
+    expect(callMock.mock.calls[0]).toEqual([
+      'tasks.update',
+      {
+        id: 't1',
+        by: 'adam',
+        title: 'New title',
+        description: undefined,
+        labels: ['auth', 'urgent'],
+        priority: 'high',
+        assignee: { id: 'console-w2', kind: 'console', name: 'console-w2' }
+      }
+    ])
+    expect(process.exitCode).toBeUndefined()
+  })
+
+  it('exits 3 when the board refuses (held by someone else)', async () => {
+    callMock.mockResolvedValueOnce({ result: { ok: false, reason: 'held-by:console-w1' } })
+    await TASK_HANDLERS['tasks update'](ctx({ id: 't1', by: 'adam', title: 'x' }))
+    expect(process.exitCode).toBe(3)
+  })
+
+  it('refuses --assignee-kind without --assignee and a bad priority before calling', async () => {
+    await expect(
+      TASK_HANDLERS['tasks update'](ctx({ id: 't1', by: 'adam', 'assignee-kind': 'console' }))
+    ).rejects.toThrow(/need --assignee/)
+    await expect(
+      TASK_HANDLERS['tasks update'](ctx({ id: 't1', by: 'adam', priority: 'now' }))
+    ).rejects.toThrow(/--priority must be one of/)
+    expect(callMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('dobius tasks move', () => {
+  it('maps --to and --index to tasks.move', async () => {
+    callMock.mockResolvedValueOnce({ result: { ok: true, task: okTask } })
+    await TASK_HANDLERS['tasks move'](ctx({ id: 't1', by: 'adam', to: 'review', index: '0' }))
+    expect(callMock.mock.calls[0]).toEqual([
+      'tasks.move',
+      { id: 't1', by: 'adam', to: 'review', index: 0 }
+    ])
+  })
+
+  it('refuses done, in-progress, a missing --to and a bad --index without calling', async () => {
+    const cases: Record<string, string>[] = [
+      { id: 't1', by: 'adam', to: 'done' },
+      { id: 't1', by: 'adam', to: 'in-progress' },
+      { id: 't1', by: 'adam' },
+      { id: 't1', by: 'adam', to: 'todo', index: '-1' }
+    ]
+    for (const flags of cases) {
+      await expect(TASK_HANDLERS['tasks move'](ctx(flags))).rejects.toThrow()
+    }
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
+  it('exits 3 on a refusal from the board', async () => {
+    callMock.mockResolvedValueOnce({ result: { ok: false, reason: 'agent-dispatch' } })
+    await TASK_HANDLERS['tasks move'](ctx({ id: 't1', by: 'adam', to: 'todo' }))
+    expect(process.exitCode).toBe(3)
+  })
+})
+
+describe('dobius tasks update labels', () => {
+  it('refuses a bare or empty --label instead of wiping every label', async () => {
+    const cases: Map<string, string | boolean>[] = [
+      new Map<string, string | boolean>([['id', 't1'], ['by', 'adam'], ['label', true]]),
+      new Map<string, string | boolean>([['id', 't1'], ['by', 'adam'], ['label', '']]),
+      new Map<string, string | boolean>([
+        ['id', 't1'],
+        ['by', 'adam'],
+        ['label', ['auth', ''].join(REPEATED_FLAG_SEPARATOR)]
+      ])
+    ]
+    for (const flags of cases) {
+      await expect(
+        TASK_HANDLERS['tasks update']({ flags, client: { call: callMock, isRemote: false }, cwd, json: true } as never)
+      ).rejects.toThrow(/Every --label needs a value/)
+    }
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
+  it('--clear-labels sends an empty list; with --label it is refused', async () => {
+    callMock.mockResolvedValueOnce({ result: { ok: true, task: okTask } })
+    const flags = new Map<string, string | boolean>([['id', 't1'], ['by', 'adam'], ['clear-labels', true]])
+    await TASK_HANDLERS['tasks update']({ flags, client: { call: callMock, isRemote: false }, cwd, json: true } as never)
+    expect(callMock.mock.calls[0]?.[1]).toMatchObject({ labels: [] })
+    flags.set('label', 'x')
+    await expect(
+      TASK_HANDLERS['tasks update']({ flags, client: { call: callMock, isRemote: false }, cwd, json: true } as never)
+    ).rejects.toThrow(/either --label or --clear-labels/)
+  })
+})
+
+describe('dobius tasks update label parsing (through parseArgs)', () => {
+  it('a bare --label between valued ones is refused, not silently dropped', async () => {
+    const { flags } = parseArgs(['tasks', 'update', '--id', 't1', '--by', 'adam', '--label', 'old', '--label', '--label', 'new'])
+    await expect(
+      TASK_HANDLERS['tasks update']({ flags, client: { call: callMock, isRemote: false }, cwd, json: true } as never)
+    ).rejects.toThrow(/Every --label needs a value/)
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
+  it('--clear-labels=true is refused instead of doing nothing', async () => {
+    const { flags } = parseArgs(['tasks', 'update', '--id', 't1', '--by', 'adam', '--clear-labels=true'])
+    await expect(
+      TASK_HANDLERS['tasks update']({ flags, client: { call: callMock, isRemote: false }, cwd, json: true } as never)
+    ).rejects.toThrow(/--clear-labels takes no value/)
   })
 })

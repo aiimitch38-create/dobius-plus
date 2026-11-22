@@ -56,6 +56,8 @@ export type WorkspacePortAdvertisedUrlChangedEvent = {
 
 export type WorkspacePortKillRequest = {
   repoId?: string
+  /** When set, the listener must belong to this worktree, not just any one. */
+  worktreeId?: string
   pid: number
   port: number
 }

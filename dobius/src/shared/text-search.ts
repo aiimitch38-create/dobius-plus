@@ -158,7 +158,12 @@ function pushMatch(
 
 export type SearchOptionsLike = Pick<
   SearchOptions,
-  'caseSensitive' | 'wholeWord' | 'useRegex' | 'includePattern' | 'excludePattern'
+  | 'caseSensitive'
+  | 'wholeWord'
+  | 'useRegex'
+  | 'includePattern'
+  | 'excludePattern'
+  | 'caseInsensitiveExcludeGlobs'
 >
 
 export function splitSearchGlobPatterns(patterns: string): string[] {
@@ -234,6 +239,9 @@ export function buildRgArgs(query: string, target: string, opts: SearchOptionsLi
     for (const pat of splitSearchGlobPatterns(opts.excludePattern)) {
       args.push('--glob', `!${pat}`)
     }
+  }
+  for (const pat of opts.caseInsensitiveExcludeGlobs ?? []) {
+    args.push('--iglob', `!${pat}`)
   }
   args.push('--', query, target)
   return args
@@ -372,6 +380,10 @@ export function buildGitGrepArgs(query: string, opts: SearchOptionsLike): string
       gitArgs.push(toGitGlobPathspec(pat, true))
       hasPathspecs = true
     }
+  }
+  for (const pat of opts.caseInsensitiveExcludeGlobs ?? []) {
+    gitArgs.push(`:(exclude,icase,glob)${pat.includes('/') ? pat : `**/${pat}`}`)
+    hasPathspecs = true
   }
   // Why: when no include patterns are given, git grep needs a pathspec to
   // search the working tree. '.' means "everything under cwd".

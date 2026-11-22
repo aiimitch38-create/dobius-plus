@@ -93,6 +93,22 @@ export async function killWorkspacePort(
   if (port.kind !== 'workspace') {
     return { ok: false, reason: 'Only workspace-owned local processes can be stopped here.' }
   }
+  if (args.repoId !== undefined && port.owner.repoId !== args.repoId) {
+    return { ok: false, reason: 'The port belongs to a different repository.' }
+  }
+  if (args.worktreeId !== undefined) {
+    if (port.owner.worktreeId !== args.worktreeId) {
+      return { ok: false, reason: 'The port belongs to a different worktree.' }
+    }
+    // Why: a command line that merely mentions the path is a guess; only a
+    // process whose working folder is the worktree counts as its own.
+    if (port.owner.confidence !== 'cwd') {
+      return {
+        ok: false,
+        reason: 'Dobius cannot prove the process was started from that worktree.'
+      }
+    }
+  }
   const pid = port.pid
   if (!pid) {
     return { ok: false, reason: 'The owning process is unknown.' }
