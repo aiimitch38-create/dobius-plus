@@ -118,6 +118,19 @@ function sanitizeRun(entry: unknown): AgentRun | null {
 // to pick up its final status and reply.
 const RECENTLY_ENDED_GRACE_MS = 30_000
 
+// Ended runs whose check or retry hand-off is still in progress. Memory only:
+// after a restart nothing is mid-loop, so normal retention applies.
+const pinnedRuns = new Set<string>()
+
+/** Keeps an ended run out of history eviction until it is unpinned. */
+export function pinStoredAgentRun(runId: string): void {
+  pinnedRuns.add(runId)
+}
+
+export function unpinStoredAgentRun(runId: string): void {
+  pinnedRuns.delete(runId)
+}
+
 // Why: MAX_RUNS bounds settled history only. A running run is live state —
 // evicting it made its completion/cancellation updates (and its outbox) miss.
 // Settled runs go oldest-FINISHED first, so a long run that just ended is kept.
@@ -130,7 +143,9 @@ function retainRuns(runs: AgentRun[]): AgentRun[] {
   const settledAt = (run: AgentRun): number => run.endedAt ?? run.startedAt
   const evicted = new Set(
     runs
-      .filter((run) => run.status !== 'running' && settledAt(run) < graceStart)
+      .filter(
+        (run) => run.status !== 'running' && settledAt(run) < graceStart && !pinnedRuns.has(run.id)
+      )
       .toSorted((a, b) => settledAt(a) - settledAt(b))
       .slice(0, excess)
   )

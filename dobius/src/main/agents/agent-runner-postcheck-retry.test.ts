@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
   engine: 'claude' as 'claude' | 'codex',
   query: vi.fn(),
   precheck: vi.fn(),
+  sandboxFailure: null as string | null,
+  storedSessionId: 'session-1',
+  pinned: new Set<string>(),
   subscribe: vi.fn(),
   startCodexAgentProcess: vi.fn(),
   runs: new Map<string, Record<string, unknown>>(),
@@ -15,7 +18,15 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({ query: mocks.query }))
-vi.mock('../automations/precheck-runner', () => ({ runAutomationPrecheck: mocks.precheck }))
+// The real module runs sandbox-exec; it has its own test. Here `precheck`
+// stands for the sandboxed check and `sandboxFailure` for a sandbox that
+// could not be applied.
+vi.mock('./agent-run-postcheck-sandbox', () => ({
+  runSandboxedPostcheck: async (args: unknown) =>
+    mocks.sandboxFailure
+      ? { ok: false, reason: mocks.sandboxFailure }
+      : { ok: true, result: await mocks.precheck(args) }
+}))
 vi.mock('./agents-config-store', () => ({
   getAgentsControlState: () => ({
     paused: mocks.paused,
@@ -35,13 +46,15 @@ vi.mock('./agents-store', () => ({
     cwd: '/repo',
     bypassPermissions: false
   }),
-  getAgentSessionForKey: () => ({ sessionId: 'session-1', cwd: '/repo' }),
+  getAgentSessionForKey: () => ({ sessionId: mocks.storedSessionId, cwd: '/repo' }),
   updateAgentSession: vi.fn()
 }))
 vi.mock('./agent-runs-store', () => ({
   addStoredAgentRun: (run: { id: string }) => mocks.runs.set(run.id, { ...run }),
   getStoredAgentRun: (id: string) => mocks.runs.get(id),
   listStoredAgentRuns: () => Array.from(mocks.runs.values()),
+  pinStoredAgentRun: (id: string) => mocks.pinned.add(id),
+  unpinStoredAgentRun: (id: string) => mocks.pinned.delete(id),
   updateStoredAgentRun: (id: string, updates: Record<string, unknown>) => {
     const run = mocks.runs.get(id)
     if (run) {
@@ -97,6 +110,7 @@ vi.mock('./codex-agent-execution', () => ({
 vi.mock('../codex-cli/command', () => ({ resolveClaudeCommand: () => 'claude' }))
 
 import { startAgentRun, stopAgentRun } from './agent-runner'
+import { claimRunSession, releaseRunSession } from './agent-session-lease'
 
 type StreamSpec = { subtype?: 'success' | 'error_max_turns'; cost?: number; events?: object[] }
 
@@ -163,6 +177,9 @@ function loopNotes(): string[] {
 beforeEach(() => {
   mocks.paused = false
   mocks.engine = 'claude'
+  mocks.sandboxFailure = null
+  mocks.storedSessionId = 'session-1'
+  mocks.pinned.clear()
   mocks.runs.clear()
   mocks.events.length = 0
   mocks.listeners.clear()
@@ -392,28 +409,81 @@ describe('postcheck and retry', () => {
     expect(mocks.query).toHaveBeenCalledTimes(2)
   })
 
-  it('runs the check in the run folder without credentials in its environment', async () => {
-    process.env.ANTHROPIC_API_KEY = 'sk-test'
-    process.env.GITHUB_TOKEN = 'ghp-test'
-    try {
-      mocks.precheck.mockResolvedValue(checkResult(0))
-      const cb = callbacks()
-      await start({ postcheck, ...cb })
+  it('hands the check and the run folder to the sandboxed runner', async () => {
+    mocks.precheck.mockResolvedValue(checkResult(0))
+    const cb = callbacks()
+    await start({ postcheck, ...cb })
 
+    await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
+    expect(mocks.precheck).toHaveBeenCalledWith({ postcheck, cwd: '/repo' })
+  })
+
+  it('does not run the check when the sandbox cannot be applied', async () => {
+    mocks.sandboxFailure = 'the sandbox did not start (sandbox_apply: Operation not permitted)'
+    const cb = callbacks()
+    await start({ postcheck, ...cb })
+
+    await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
+    expect(mocks.precheck).not.toHaveBeenCalled()
+    expect(mocks.query).toHaveBeenCalledTimes(1)
+    expect(storedRuns()[0].outcome).toBe('needs-review')
+    expect(storedRuns()[0].postcheck).toBeUndefined()
+    expect(loopNotes().at(-1)).toContain('check not run')
+    expect(cb.order).toEqual(['result', 'settled'])
+  })
+
+  it('refuses the retry when another run replaced the conversation during the check', async () => {
+    mocks.precheck.mockImplementation(async () => {
+      mocks.storedSessionId = 'session-of-another-run'
+      return checkResult(1)
+    })
+    const cb = callbacks()
+    await start({ postcheck, ...cb })
+
+    await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
+    expect(mocks.query).toHaveBeenCalledTimes(1)
+    expect(storedRuns()[0].outcome).toBe('blocked')
+    expect(loopNotes().at(-1)).toBe('loop: blocked, another run has since used this conversation')
+  })
+
+  it('refuses the retry while another run holds the conversation', async () => {
+    mocks.precheck.mockImplementation(async () => {
+      claimRunSession('other-run', 'a', 'default')
+      return checkResult(1)
+    })
+    const cb = callbacks()
+    try {
+      await start({ postcheck, ...cb })
       await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
-      const call = mocks.precheck.mock.calls[0][0]
-      expect(call.precheck).toEqual(postcheck)
-      expect(call.target).toMatchObject({ type: 'local', cwd: '/repo' })
-      expect(call.target.env.ANTHROPIC_API_KEY).toBeUndefined()
-      expect(call.target.env.GITHUB_TOKEN).toBeUndefined()
-      expect(call.target.env.PATH).toBe(process.env.PATH)
-      for (const name of Object.keys(call.target.env)) {
-        expect(name).toMatch(/^(?:PATH|HOME|LANG|TMPDIR|NODE_ENV|CI|TERM|LC_[A-Z]+)$/)
-      }
     } finally {
-      delete process.env.ANTHROPIC_API_KEY
-      delete process.env.GITHUB_TOKEN
+      releaseRunSession('other-run')
     }
+    expect(mocks.query).toHaveBeenCalledTimes(1)
+    expect(storedRuns()[0].outcome).toBe('blocked')
+  })
+
+  it('keeps the run record pinned for as long as its check is running', async () => {
+    let pinnedDuringCheck: string[] = []
+    mocks.precheck.mockImplementation(async () => {
+      pinnedDuringCheck = Array.from(mocks.pinned)
+      return checkResult(0)
+    })
+    const cb = callbacks()
+    const runId = await start({ postcheck, ...cb })
+
+    await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
+    expect(pinnedDuringCheck).toEqual([runId])
+    expect(mocks.pinned.size).toBe(0)
+  })
+
+  it('leaves no record pinned after a retried loop', async () => {
+    mocks.precheck.mockResolvedValueOnce(checkResult(1)).mockResolvedValueOnce(checkResult(0))
+    const cb = callbacks()
+    await start({ postcheck, ...cb })
+
+    await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
+    expect(mocks.query).toHaveBeenCalledTimes(2)
+    expect(mocks.pinned.size).toBe(0)
   })
 
   it('does not retry while the crew is paused', async () => {
@@ -445,19 +515,12 @@ describe('postcheck and retry', () => {
     expect(storedRuns()[0].outcome).toBe('blocked')
   })
 
-  it('does not retry a Codex run', async () => {
+  it('refuses a check on a Codex run before anything starts', async () => {
     mocks.engine = 'codex'
-    mocks.startCodexAgentProcess.mockReturnValue({ kill: vi.fn() })
-    mocks.precheck.mockResolvedValue(checkResult(1))
-    const cb = callbacks()
-    // Codex runs refuse onResult (no structured result), so only the other two.
-    await start({ postcheck, onRunEnded: cb.onRunEnded, onSettled: cb.onSettled })
-    mocks.startCodexAgentProcess.mock.calls[0][0].onFinish('success', 'done')
-
-    await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
-    expect(mocks.startCodexAgentProcess).toHaveBeenCalledTimes(1)
-    expect(storedRuns()[0].outcome).toBe('blocked')
-    expect(loopNotes().at(-1)).toBe('loop: blocked, Codex runs are never retried')
+    await expect(start({ postcheck })).rejects.toMatchObject({ name: 'CodexRunUnsupportedError' })
+    expect(mocks.startCodexAgentProcess).not.toHaveBeenCalled()
+    expect(mocks.precheck).not.toHaveBeenCalled()
+    expect(storedRuns()).toEqual([])
   })
 
   it('does not retry when the loop budget is spent', async () => {

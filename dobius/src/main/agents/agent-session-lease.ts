@@ -43,6 +43,11 @@ export function claimRunSession(runId: string, agentId: string, sessionKey: stri
   return owner
 }
 
+/** True while any run holds the key, so a new run on it would start fresh. */
+export function isRunSessionKeyBusy(agentId: string, sessionKey: string): boolean {
+  return (liveClaims.get(leaseKey(agentId, sessionKey)) ?? 0) > 0
+}
+
 /** Idempotent; the key is free once every claim on it is released. */
 export function releaseRunSession(runId: string): void {
   const claim = claims.get(runId)

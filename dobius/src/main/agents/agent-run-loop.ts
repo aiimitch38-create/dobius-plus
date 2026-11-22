@@ -41,8 +41,14 @@ import {
   type GuardedRunEndCallbacks,
   type RunEndCallbacks
 } from './agent-run-end-callbacks'
-import { buildPostcheckEnv } from './agent-run-postcheck-env'
-import { getStoredAgentRun, updateStoredAgentRun } from './agent-runs-store'
+import {
+  getStoredAgentRun,
+  pinStoredAgentRun,
+  unpinStoredAgentRun,
+  updateStoredAgentRun
+} from './agent-runs-store'
+import { isRunSessionKeyBusy } from './agent-session-lease'
+import { getAgent, getAgentSessionForKey } from './agents-store'
 import { checkExecutionAdmission } from './execution-gate'
 
 /** The run options the loop reads or rewrites for a retry. */
@@ -120,6 +126,9 @@ export function attachRunLoop<A extends RunLoopStartArgs>(args: {
     }
   }
 
+  // A check can outlast the history's grace period for ended runs; the record
+  // must still be there to take the check result and the outcome.
+  pinStoredAgentRun(runId)
   record({ attempt: loop.attempt, rootRunId: loop.rootRunId })
 
   let outwardTool: string | null = null
@@ -156,6 +165,8 @@ export function attachRunLoop<A extends RunLoopStartArgs>(args: {
   /** Returns true when a retry took over, so this attempt must stay silent. */
   const runLoopStep = async (): Promise<boolean> => {
     const run = getStoredAgentRun(runId)
+    const sessionKey = options.sessionKey ?? 'default'
+    const sessionId = held?.kind === 'result' ? held.message.session_id : undefined
     const spentUsd = loop.spentUsd + attemptSpendUsd(run?.costUsd, runBudgetUsd)
     const loopCostUsd = loop.spentUsd + (run?.costUsd ?? 0)
     const nextBudgetUsd = retryBudgetUsd({
@@ -187,17 +198,16 @@ export function attachRunLoop<A extends RunLoopStartArgs>(args: {
       return false
     }
 
-    // The check runs OUTSIDE the agent's sandbox (the sandbox belongs to the
-    // Claude CLI and cannot wrap an arbitrary command), so it only runs when
-    // the rules above found nothing outward and no tooling change, and with a
-    // short allow list of environment variables.
     // Why loaded here: the check runner pulls in the SSH stack, which a run
     // with no check never needs.
-    const { runAutomationPrecheck } = await import('../automations/precheck-runner')
-    const result: AutomationPrecheckResult = await runAutomationPrecheck({
-      precheck: postcheck,
-      target: { type: 'local', cwd: args.cwd, env: buildPostcheckEnv(process.env) }
-    })
+    const { runSandboxedPostcheck } = await import('./agent-run-postcheck-sandbox')
+    const sandboxed = await runSandboxedPostcheck({ postcheck, cwd: args.cwd })
+    if (!sandboxed.ok) {
+      // Never run the check unsandboxed instead.
+      finish('needs-review', `${sandboxed.reason}; check not run`, loopCostUsd)
+      return false
+    }
+    const result: AutomationPrecheckResult = sandboxed.result
     record({ postcheck: result })
     const passed = didAutomationPrecheckPass(result)
     // 'agents-page' runs skip the pause switch, so the loop asks for itself.
@@ -222,6 +232,23 @@ export function attachRunLoop<A extends RunLoopStartArgs>(args: {
     if ((loopRunCounts.get(loop.rootRunId) ?? 0) >= HARD_MAX_LOOP_RUNS) {
       note(`postcheck: failed ${describePostcheckFailure(result)}`)
       finish('blocked', `after ${HARD_MAX_LOOP_RUNS} runs`, loopCostUsd)
+      return false
+    }
+    // The retry must continue the conversation this attempt just left. The
+    // session lease was released before the check, so another run may have
+    // taken the key or replaced its session since; restart() claims the key
+    // synchronously, so nothing can change between this look and that claim.
+    const currentAgent = getAgent(agent.id)
+    const storedSessionId = currentAgent
+      ? getAgentSessionForKey(currentAgent, sessionKey)?.sessionId
+      : undefined
+    if (
+      !sessionId ||
+      storedSessionId !== sessionId ||
+      isRunSessionKeyBusy(agent.id, sessionKey)
+    ) {
+      note(`postcheck: failed ${describePostcheckFailure(result)}`)
+      finish('blocked', 'another run has since used this conversation', loopCostUsd)
       return false
     }
     note(
@@ -259,6 +286,7 @@ export function attachRunLoop<A extends RunLoopStartArgs>(args: {
     }
     // Why: a caller holding a slot until the run ends must always hear back,
     // whatever went wrong above.
+    unpinStoredAgentRun(runId)
     if (!handedOff) {
       loopRunCounts.delete(loop.rootRunId)
       flushToCaller()

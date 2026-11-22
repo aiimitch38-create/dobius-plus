@@ -55,6 +55,28 @@ describe('agent-runs-store permission denials', () => {
   })
 })
 
+describe('agent-runs-store pinned runs', () => {
+  it('keeps a pinned ended run past the history cap until it is unpinned', async () => {
+    const store = await import('./agent-runs-store')
+    store.addStoredAgentRun({ id: 'checked', agentId: 'a1', prompt: 'go', startedAt: 1, endedAt: 2, status: 'success' })
+    store.addStoredAgentRun({ id: 'plain', agentId: 'a1', prompt: 'go', startedAt: 1, endedAt: 2, status: 'success' })
+    store.pinStoredAgentRun('checked')
+    for (let i = 0; i < 60; i += 1) {
+      store.addStoredAgentRun({ id: `done-${i}`, agentId: 'a1', prompt: 'go', startedAt: 10 + i, endedAt: 10 + i, status: 'success' })
+    }
+    expect(store.getStoredAgentRun('plain')).toBeNull()
+    // Still there to take the check result long after the 30 s grace.
+    expect(store.updateStoredAgentRun('checked', { outcome: 'verified' })).toMatchObject({
+      id: 'checked',
+      outcome: 'verified'
+    })
+
+    store.unpinStoredAgentRun('checked')
+    store.addStoredAgentRun({ id: 'one-more', agentId: 'a1', prompt: 'go', startedAt: 99, endedAt: 99, status: 'success' })
+    expect(store.getStoredAgentRun('checked')).toBeNull()
+  })
+})
+
 describe('agent-runs-store run loop fields', () => {
   it('keeps the loop fields across a restart and drops malformed ones', async () => {
     const postcheck = {

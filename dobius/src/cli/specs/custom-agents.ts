@@ -81,7 +81,8 @@ export const CUSTOM_AGENT_COMMAND_SPECS: CommandSpec[] = [
       'Requires the Dobius+ app to be running; the run uses the agent\'s saved Claude or Codex engine and OAuth account.',
       'Use --check to have the app run a command in the agent\'s folder after the run ends; exit code 0 means the work passed. A failed check starts one retry with the check output.',
       'The check is skipped, and the run marked needs-review, when the run used anything that could act outside this Mac or changed tooling files (package.json, lockfiles, tool config, node_modules, .git).',
-      'The check runs outside the agent sandbox, with only basic environment variables (no sign-in tokens or keys). --check-timeout defaults to 60 seconds, maximum 600.',
+      'The check runs in its own macOS sandbox: no network, writes only inside the agent\'s folder, no access to sign-in files or .env files, and only basic environment variables. If that sandbox cannot be applied the check does not run. --check-timeout defaults to 60 seconds, maximum 600.',
+      '--check is for Claude agents only; a Codex agent refuses it.',
       'Use `agents runs --json` to see each attempt, its check result and the outcome (verified, blocked or needs-review).'
     ],
     examples: [
