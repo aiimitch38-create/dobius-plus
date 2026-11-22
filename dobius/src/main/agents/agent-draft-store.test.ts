@@ -37,6 +37,18 @@ afterEach(() => {
 })
 
 describe('agent draft store', () => {
+  it('discardDraft marks a draft discarded and refuses an unknown id', async () => {
+    const store = await loadStore()
+    const draft = store.appendDraft({
+      agentId: 'agent-1',
+      target: { kind: 'asana', gid: '120' },
+      body: 'Not this one'
+    })
+    expect(store.discardDraft(draft.id)).toMatchObject({ id: draft.id, status: 'discarded' })
+    expect(store.getDraft(draft.id)?.status).toBe('discarded')
+    expect(() => store.discardDraft('missing')).toThrow('Draft not found')
+  })
+
   it('appends and lists pending drafts first', async () => {
     const store = await loadStore()
     const draft = store.appendDraft({

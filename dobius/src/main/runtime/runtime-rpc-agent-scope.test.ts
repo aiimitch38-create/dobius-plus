@@ -97,7 +97,12 @@ describe('runtime RPC agent key', () => {
       expect(asAgent.error?.code).toBe('forbidden')
       expect(asAgent.error?.message).toContain("'agent.run' is not allowed with the agent key")
 
-      for (const method of ['settings.update', 'terminal.create', 'computer.click', 'browser.eval']) {
+      for (const method of [
+        'settings.update',
+        'terminal.create',
+        'computer.click',
+        'browser.eval'
+      ]) {
         const reply = await send(endpoint, { id: method, authToken: agent.authToken, method })
         expect(reply.error?.code, method).toBe('forbidden')
       }
@@ -178,6 +183,17 @@ describe('runtime RPC agent key', () => {
     }
   })
 
+  it('lets the agent key read crew.state but nothing that changes or reveals crew work', () => {
+    expect(AGENT_RPC_METHOD_ALLOWLIST.has('crew.state')).toBe(true)
+    const crewMethods = ALL_RPC_METHODS.map((method) => method.name).filter((name) =>
+      name.startsWith('crew.')
+    )
+    expect(crewMethods.filter((name) => AGENT_RPC_METHOD_ALLOWLIST.has(name))).toEqual([
+      'crew.state'
+    ])
+    expect(AGENT_RPC_METHOD_ALLOWLIST.has('agentApprovals.grant')).toBe(false)
+  })
+
   it('only allowlists methods that are registered', () => {
     const registered = new Set(ALL_RPC_METHODS.map((method) => method.name))
     expect([...AGENT_RPC_METHOD_ALLOWLIST].filter((name) => !registered.has(name))).toEqual([])
@@ -213,7 +229,11 @@ describe('runtime RPC agent key: indirect host-command paths', () => {
     const { server, agent } = await startServer()
     const auth = authOf(server)
     try {
-      for (const method of ['agentTeams.prepareLaunch', 'agentTeams.tmuxCompat', 'terminal.rename']) {
+      for (const method of [
+        'agentTeams.prepareLaunch',
+        'agentTeams.tmuxCompat',
+        'terminal.rename'
+      ]) {
         const result = auth(JSON.stringify({ id: '1', method, authToken: agent.authToken }))
         expect(result.error?.error?.code, method).toBe('forbidden')
       }

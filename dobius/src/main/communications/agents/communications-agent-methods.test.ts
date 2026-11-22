@@ -21,7 +21,9 @@ vi.mock('./observer-channel-index-store', () => ({
   indexObserverChannelIds: vi.fn(),
   readIndexedEventsForChannel: vi.fn()
 }))
+vi.mock('../../runtime/rpc/methods/crew-confirm', () => ({ appConfirmationGate: vi.fn() }))
 vi.mock('./agent-decision-approval-bridge', () => ({
+  getPendingDecision: vi.fn(),
   listApprovalsForRun: vi.fn(),
   grantAgentApproval: vi.fn(),
   denyAgentApproval: vi.fn()
@@ -45,9 +47,21 @@ import {
 } from './observer-channel-index-store'
 import {
   denyAgentApproval,
+  getPendingDecision,
   grantAgentApproval,
   listApprovalsForRun
 } from './agent-decision-approval-bridge'
+import { appConfirmationGate } from '../../runtime/rpc/methods/crew-confirm'
+
+const PENDING_DECISION = {
+  id: 'tok-1',
+  runId: 'run-1',
+  agentId: 'agent-1',
+  toolName: 'Bash',
+  input: { command: 'ls' },
+  cwd: '/repo',
+  createdAt: 0
+}
 import { buildObserverControlEvent, decryptObserverEvent } from './observer-event-crypto'
 import { COMMUNICATIONS_AGENT_METHODS } from './communications-agent-methods'
 
@@ -88,7 +102,9 @@ describe('communications agent RPC methods', () => {
       null
     )
 
-    const deleteResult = await dispatcher.dispatch(makeRequest('agentHarness.delete', { id: 'goose' }))
+    const deleteResult = await dispatcher.dispatch(
+      makeRequest('agentHarness.delete', { id: 'goose' })
+    )
     expect(deleteResult).toMatchObject({ ok: true, result: { removed: true, id: 'goose' } })
     expect(deleteCustomHarness).toHaveBeenCalledWith('goose')
   })
@@ -132,7 +148,9 @@ describe('communications agent RPC methods', () => {
     vi.mocked(getAgentManagedProfiles).mockReturnValue(false)
     vi.mocked(setAgentManagedProfiles).mockReturnValue(true)
     const dispatcher = makeDispatcher()
-    await expect(dispatcher.dispatch(makeRequest('agentManagedProfiles.get'))).resolves.toMatchObject({
+    await expect(
+      dispatcher.dispatch(makeRequest('agentManagedProfiles.get'))
+    ).resolves.toMatchObject({
       ok: true,
       result: { enabled: false }
     })
@@ -189,6 +207,7 @@ describe('communications agent RPC methods', () => {
   })
 
   it('lists, grants, and denies approvals through the decision bridge', async () => {
+    vi.mocked(getPendingDecision).mockReturnValue(PENDING_DECISION as never)
     vi.mocked(listApprovalsForRun).mockReturnValue([])
     vi.mocked(grantAgentApproval).mockResolvedValue({
       token: 'tok-1',
@@ -213,10 +232,39 @@ describe('communications agent RPC methods', () => {
     expect(denyAgentApproval).toHaveBeenCalledWith('tok-2', 'no')
   })
 
+  it('grant needs the in-app confirmation; deny does not', async () => {
+    vi.mocked(getPendingDecision).mockReturnValue(PENDING_DECISION as never)
+    vi.mocked(appConfirmationGate).mockRejectedValueOnce(new Error('Not confirmed in Dobius+'))
+    const dispatcher = makeDispatcher()
+    await expect(
+      dispatcher.dispatch(makeRequest('agentApprovals.grant', { token: 'tok-1' }))
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining('Not confirmed') }
+    })
+    expect(grantAgentApproval).not.toHaveBeenCalled()
+
+    vi.mocked(appConfirmationGate).mockClear()
+    await dispatcher.dispatch(makeRequest('agentApprovals.deny', { token: 'tok-1' }))
+    expect(appConfirmationGate).not.toHaveBeenCalled()
+  })
+
+  it('grant of an unknown token fails before any dialog', async () => {
+    vi.mocked(getPendingDecision).mockReturnValue(null)
+    const result = await makeDispatcher().dispatch(
+      makeRequest('agentApprovals.grant', { token: 'x' })
+    )
+    expect(result.ok).toBe(false)
+    expect(appConfirmationGate).not.toHaveBeenCalled()
+  })
+
   it('propagates a decision-bridge failure as a dispatch error', async () => {
+    vi.mocked(getPendingDecision).mockReturnValue(PENDING_DECISION as never)
     vi.mocked(grantAgentApproval).mockRejectedValue(new Error('Approval not found'))
     const dispatcher = makeDispatcher()
-    const result = await dispatcher.dispatch(makeRequest('agentApprovals.grant', { token: 'missing' }))
+    const result = await dispatcher.dispatch(
+      makeRequest('agentApprovals.grant', { token: 'missing' })
+    )
     expect(result.ok).toBe(false)
   })
 
@@ -226,13 +274,18 @@ describe('communications agent RPC methods', () => {
     const dispatcher = makeDispatcher()
 
     await expect(
-      dispatcher.dispatch(makeRequest('agentObserver.decryptEvent', { eventJson: '{"pubkey":"a"}' }))
+      dispatcher.dispatch(
+        makeRequest('agentObserver.decryptEvent', { eventJson: '{"pubkey":"a"}' })
+      )
     ).resolves.toMatchObject({ ok: true, result: { payload: { type: 'cancel_turn' } } })
     expect(decryptObserverEvent).toHaveBeenCalledWith('{"pubkey":"a"}')
 
     await expect(
       dispatcher.dispatch(
-        makeRequest('agentObserver.buildControlEvent', { agentPubkey: 'agent-pub', payload: { type: 'cancel_turn' } })
+        makeRequest('agentObserver.buildControlEvent', {
+          agentPubkey: 'agent-pub',
+          payload: { type: 'cancel_turn' }
+        })
       )
     ).resolves.toMatchObject({ ok: true, result: { eventJson: '{"kind":24200}' } })
     expect(buildObserverControlEvent).toHaveBeenCalledWith('agent-pub', { type: 'cancel_turn' })
