@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const callMock = vi.fn()
 const getTerminalHandleMock = vi.hoisted(() => vi.fn())
+const resolveTerminalAddressMock = vi.hoisted(() => vi.fn())
 const originalTerminalHandle = process.env.DOBIUS_TERMINAL_HANDLE
 function lifecycleGroupRecipientError(type: 'worker_done' | 'heartbeat'): string {
   return `${type} messages must be sent to a concrete coordinator terminal handle, not a group address.`
@@ -9,9 +10,17 @@ function lifecycleGroupRecipientError(type: 'worker_done' | 'heartbeat'): string
 
 // Why: isolate the handler's flag-to-param mapping; printResult only writes output.
 vi.mock('../format', () => ({ printResult: vi.fn() }))
-vi.mock('../selectors', () => ({ getTerminalHandle: getTerminalHandleMock }))
+vi.mock('../selectors', () => ({
+  getTerminalHandle: getTerminalHandleMock,
+  resolveTerminalAddress: resolveTerminalAddressMock
+}))
 
 import { ORCHESTRATION_HANDLERS } from './orchestration'
+
+// Why: by default an address passes through unchanged, as a plain handle does.
+beforeEach(() => {
+  resolveTerminalAddressMock.mockReset().mockImplementation(async (address: string) => address)
+})
 
 afterEach(() => {
   getTerminalHandleMock.mockReset()
@@ -293,4 +302,67 @@ describe('orchestration timeout flag validation', () => {
       { timeoutMs: 5_123 }
     )
   })
+})
+
+describe('orchestration card:<title> recipients', () => {
+  beforeEach(() => {
+    callMock.mockReset().mockResolvedValue({ result: { message: { id: 'msg_1' } } })
+    process.env.DOBIUS_TERMINAL_HANDLE = 'term_sender'
+  })
+
+  const run = (command: 'orchestration send' | 'orchestration dispatch', flags: [string, string][]) =>
+    ORCHESTRATION_HANDLERS[command]({
+      flags: new Map<string, string | boolean>(flags),
+      client: { call: callMock },
+      cwd: '/repo',
+      json: true
+    } as never)
+
+  it('send resolves card:<title> to the live handle before sending', async () => {
+    resolveTerminalAddressMock.mockResolvedValue('term_live')
+    await run('orchestration send', [
+      ['to', 'card:Builder 1'],
+      ['subject', 'hi']
+    ])
+    expect(resolveTerminalAddressMock).toHaveBeenCalledWith(
+      'card:Builder 1',
+      expect.any(Map),
+      '/repo',
+      expect.anything()
+    )
+    expect(callMock).toHaveBeenCalledWith(
+      'orchestration.send',
+      expect.objectContaining({ to: 'term_live', from: 'term_sender' })
+    )
+  })
+
+  it('dispatch resolves card:<title> to the live handle before dispatching', async () => {
+    callMock.mockResolvedValue({
+      result: { dispatch: { id: 'd1', task_id: 't1', status: 'dispatched' } }
+    })
+    resolveTerminalAddressMock.mockResolvedValue('term_live')
+    await run('orchestration dispatch', [
+      ['to', 'card:Builder 1'],
+      ['task', 't1']
+    ])
+    expect(callMock).toHaveBeenCalledWith(
+      'orchestration.dispatch',
+      expect.objectContaining({ to: 'term_live', task: 't1' })
+    )
+  })
+
+  it.each(['orchestration send', 'orchestration dispatch'] as const)(
+    '%s sends nothing when the card cannot be resolved',
+    async (command) => {
+      resolveTerminalAddressMock.mockRejectedValue(new Error('board_card_not_found: no console'))
+      await expect(
+        run(command, [
+          ['to', 'card:Nope'],
+          ['subject', 'hi'],
+          ['task', 't1']
+        ])
+      ).rejects.toThrow('board_card_not_found')
+      expect(callMock).not.toHaveBeenCalled()
+    }
+  )
 })

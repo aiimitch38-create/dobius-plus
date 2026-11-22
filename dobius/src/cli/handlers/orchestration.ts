@@ -7,7 +7,7 @@ import {
   getRequiredStringFlag
 } from '../flags'
 import { RuntimeClientError } from '../runtime-client'
-import { getTerminalHandle } from '../selectors'
+import { getTerminalHandle, resolveTerminalAddress } from '../selectors'
 
 // Why: 15 s is well under Claude Code's empirical ~2 min Bash-tool silence
 // budget and generates only ~40 lines per 10 min wait — enough to assure the
@@ -173,9 +173,10 @@ function rejectLifecycleGroupRecipient(type: string | undefined, to: string): vo
 
 export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
   'orchestration send': async ({ flags, client, cwd, json }) => {
-    const to = getRequiredStringFlag(flags, 'to')
+    const rawTo = getRequiredStringFlag(flags, 'to')
     const type = getOptionalStringFlag(flags, 'type')
-    rejectLifecycleGroupRecipient(type, to)
+    rejectLifecycleGroupRecipient(type, rawTo)
+    const to = await resolveTerminalAddress(rawTo, flags, cwd, client)
 
     const from = await resolveOrchestrationTerminalHandle(flags, cwd, client, 'from')
     const result = await client.call<
@@ -365,7 +366,8 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
     const dryRun = flags.has('dry-run') ? true : undefined
     const returnPreamble = flags.has('return-preamble') ? true : undefined
     // Why: --to is only required for non-dry-run; the RPC handler re-enforces.
-    const to = dryRun ? getOptionalStringFlag(flags, 'to') : getRequiredStringFlag(flags, 'to')
+    const rawTo = dryRun ? getOptionalStringFlag(flags, 'to') : getRequiredStringFlag(flags, 'to')
+    const to = rawTo ? await resolveTerminalAddress(rawTo, flags, cwd, client) : rawTo
     const result = await client.call<{
       dispatch: { id: string; task_id: string; status: string } | null
       injected?: boolean

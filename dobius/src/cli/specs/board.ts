@@ -45,6 +45,24 @@ export const BOARD_COMMAND_SPECS: CommandSpec[] = [
     examples: ['dobius board consoles --json', 'dobius board consoles --worktree branch:main']
   },
   {
+    path: ['board', 'send'],
+    summary: 'Type text into a Board console card, addressed by its title',
+    usage:
+      'dobius board send --card <title> --text <text> [--enter] [--worktree <selector>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'card', 'text', 'enter', 'worktree'],
+    notes: [
+      '--card is the card title shown on the Board (exact match first, then ignoring letter case) or the card id. `dobius board consoles` lists them.',
+      'The card is looked up at send time, so it keeps working after the console restarts.',
+      'Fails with board_card_not_found, board_card_ambiguous or board_card_not_running. It never falls back to the active terminal.',
+      '--worktree defaults to active (the worktree enclosing the current directory).',
+      'The same address works elsewhere as card:<title>: `dobius terminal send --terminal card:<title>`, `dobius orchestration send --to card:<title>`, `dobius orchestration dispatch --to card:<title>`.'
+    ],
+    examples: [
+      'dobius board send --card "Builder 1" --text "run the tests" --enter',
+      'dobius orchestration send --to "card:Builder 1" --subject "Review" --body "Please review PR 12"'
+    ]
+  },
+  {
     path: ['board', 'open-tile'],
     summary: 'Open a web tile (private session) on the worktree Board for an agent to drive',
     usage:

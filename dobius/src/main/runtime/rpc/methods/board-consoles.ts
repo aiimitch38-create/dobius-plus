@@ -81,6 +81,10 @@ export type SpawnBoardConsoleResult = {
 }
 
 const ListBoardConsolesParams = z.object({ worktree: WorktreeSelector })
+const ResolveBoardConsoleParams = z.object({
+  worktree: WorktreeSelector,
+  card: z.string().trim().min(1, 'Missing card name').max(MAX_TITLE_CHARS, 'card name is too long')
+})
 
 export type BoardConsoleSummary = {
   id: string
@@ -162,6 +166,45 @@ export async function listBoardConsoleRows(
       worktreePath: worktree.path
     }
   })
+}
+
+const quoted = (values: string[]): string => values.map((v) => `"${v}"`).join(', ')
+
+/**
+ * Picks the one running console a name refers to. A card id wins, then an exact
+ * title, then a title that differs only by letter case.
+ * Why it throws instead of guessing: a message typed into the wrong agent is
+ * worse than a failed send, so there is no fallback to any other terminal.
+ */
+export function resolveBoardConsole(
+  rows: BoardConsoleRow[],
+  query: string
+): BoardConsoleRow & { handle: string } {
+  const name = query.trim()
+  const byId = rows.filter((r) => r.id === name)
+  const exact = rows.filter((r) => r.title.trim() === name)
+  const loose = rows.filter((r) => r.title.trim().toLowerCase() === name.toLowerCase())
+  const matches = byId.length > 0 ? byId : exact.length > 0 ? exact : loose
+  if (matches.length === 0) {
+    const known = rows.length > 0 ? ` Console cards here: ${quoted(rows.map((r) => r.title))}.` : ''
+    throw new Error(
+      `board_card_not_found: no console card named "${name}" on this Board.${known}`
+    )
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      `board_card_ambiguous: ${matches.length} console cards are named "${name}" (card ids: ${matches
+        .map((r) => r.id)
+        .join(', ')}). Rename one on the Board, or use its card id.`
+    )
+  }
+  const [row] = matches
+  if (!row.running || !row.handle) {
+    throw new Error(
+      `board_card_not_running: console card "${row.title}" has no running terminal. Restart it on the Board, then send again.`
+    )
+  }
+  return { ...row, handle: row.handle }
 }
 
 function readPromptFile(path: string): string {
@@ -251,5 +294,11 @@ export const BOARD_CONSOLE_METHODS: RpcMethod[] = [
     params: ListBoardConsolesParams,
     handler: (params, { runtime }): Promise<BoardConsoleRow[]> =>
       listBoardConsoleRows(runtime, params.worktree)
+  }),
+  defineMethod({
+    name: 'board.resolveConsole',
+    params: ResolveBoardConsoleParams,
+    handler: async (params, { runtime }) =>
+      resolveBoardConsole(await listBoardConsoleRows(runtime, params.worktree), params.card)
   })
 ]

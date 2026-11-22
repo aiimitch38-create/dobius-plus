@@ -202,7 +202,7 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
     path: ['terminal', 'send'],
     summary: 'Send input to a live terminal',
     usage:
-      'dobius terminal send [--terminal <handle>] [--text <text>] [--enter] [--interrupt] [--expected-runtime-id <id>] [--require-agent-status sendable] [--json]',
+      'dobius terminal send [--terminal <handle|card:title>] [--text <text>] [--enter] [--interrupt] [--expected-runtime-id <id>] [--require-agent-status sendable] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'terminal',
@@ -213,6 +213,8 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
       'require-agent-status'
     ],
     notes: [
+      '--terminal card:<title> targets a Board console card by its title, looked up at send time; an unknown, ambiguous or not-running card is an error.',
+      'Leaving --terminal out uses the active terminal. --terminal with an empty value is an error, never the active terminal.',
       'Use --expected-runtime-id to bind submission to one exact runtime identity; this selects terminal.sendBound.',
       'Older hosts that do not support terminal.sendBound refuse the request instead of silently falling back to terminal.send.',
       'Use --require-agent-status sendable to refuse submission when no agent is active or it requests permission.'

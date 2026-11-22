@@ -373,3 +373,82 @@ describe('board.listConsoles', () => {
     expect(await call()).toMatchObject({ result: [{ handle: 'term_new' }] })
   })
 })
+
+describe('board.resolveConsole', () => {
+  const live = (n: number): TestTerminal => ({
+    handle: `term_${n}`,
+    tabId: `tab-${n}`,
+    ptyId: `pty-${n}`,
+    connected: true
+  })
+
+  async function resolve(cards: unknown[], terminals: TestTerminal[], card: unknown) {
+    const { runtime } = makeRuntime(cards, true, terminals)
+    const dispatcher = new RpcDispatcher({ runtime, methods: BOARD_CONSOLE_METHODS })
+    return dispatcher.dispatch(
+      makeRequest('board.resolveConsole', { worktree: `id:${WT}`, card })
+    )
+  }
+
+  it('returns the running console with that exact title', async () => {
+    const response = await resolve([consoleCard(1, null), consoleCard(2, null)], [live(1), live(2)], 'Console 2')
+    expect(response).toMatchObject({
+      ok: true,
+      result: { id: 'c2', tabId: 'tab-2', title: 'Console 2', handle: 'term_2', running: true }
+    })
+  })
+
+  it('ignores letter case and outer spaces when no exact title matches', async () => {
+    const response = await resolve([consoleCard(1, null)], [live(1)], '  console 1 ')
+    expect(response).toMatchObject({ ok: true, result: { id: 'c1', handle: 'term_1' } })
+  })
+
+  it('prefers an exact title over a case-insensitive one', async () => {
+    const cards = [
+      { ...consoleCard(1, null), title: 'builder' },
+      { ...consoleCard(2, null), title: 'Builder' }
+    ]
+    const response = await resolve(cards, [live(1), live(2)], 'Builder')
+    expect(response).toMatchObject({ ok: true, result: { id: 'c2' } })
+  })
+
+  it('accepts a card id', async () => {
+    const response = await resolve([consoleCard(1, null), consoleCard(2, null)], [live(1), live(2)], 'c1')
+    expect(response).toMatchObject({ ok: true, result: { id: 'c1', handle: 'term_1' } })
+  })
+
+  it('fails with board_card_not_found for an unknown card and names the known ones', async () => {
+    const response = await resolve([consoleCard(1, null)], [live(1)], 'Nope')
+    expect(response.ok).toBe(false)
+    expect(JSON.stringify(response)).toContain('board_card_not_found')
+    expect(JSON.stringify(response)).toContain('Console 1')
+  })
+
+  it('fails with board_card_ambiguous when two cards share the title', async () => {
+    const cards = [
+      { ...consoleCard(1, null), title: 'Builder' },
+      { ...consoleCard(2, null), title: 'Builder' }
+    ]
+    const response = await resolve(cards, [live(1), live(2)], 'Builder')
+    expect(response.ok).toBe(false)
+    expect(JSON.stringify(response)).toContain('board_card_ambiguous')
+    expect(JSON.stringify(response)).toContain('c1, c2')
+  })
+
+  it('fails with board_card_not_running when the card has no live terminal', async () => {
+    const missing = await resolve([consoleCard(1, null)], [], 'Console 1')
+    expect(JSON.stringify(missing)).toContain('board_card_not_running')
+    const exited = await resolve(
+      [consoleCard(1, null)],
+      [{ handle: 'term_dead', tabId: 'tab-1', ptyId: null, connected: false }],
+      'Console 1'
+    )
+    expect(exited.ok).toBe(false)
+    expect(JSON.stringify(exited)).toContain('board_card_not_running')
+  })
+
+  it('rejects a missing or blank card name', async () => {
+    expect((await resolve([consoleCard(1, null)], [live(1)], '   ')).ok).toBe(false)
+    expect((await resolve([consoleCard(1, null)], [live(1)], undefined)).ok).toBe(false)
+  })
+})

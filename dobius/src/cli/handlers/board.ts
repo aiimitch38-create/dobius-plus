@@ -1,10 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { CommandHandler } from '../dispatch'
+import type { RuntimeTerminalSend } from '../../shared/runtime-types'
 import { getOptionalStringFlag, getRequiredStringFlag } from '../flags'
 import { printResult } from '../format'
+import { RuntimeClientError } from '../runtime-client'
 import {
   getOptionalWorktreeSelector,
+  BOARD_CARD_ADDRESS_PREFIX,
   getRequiredWorktreeSelector,
   resolveCurrentWorktreeSelector
 } from '../selectors'
@@ -76,6 +79,40 @@ export const BOARD_HANDLERS: Record<string, CommandHandler> = {
       (await resolveCurrentWorktreeSelector(cwd, client))
     const result = await client.call<BoardConsole[]>('board.listConsoles', { worktree })
     printResult(result, json, formatConsoles)
+  },
+  'board send': async ({ client, flags, cwd, json }) => {
+    const cardFlag = getRequiredStringFlag(flags, 'card')
+    const card = cardFlag.startsWith(BOARD_CARD_ADDRESS_PREFIX)
+      ? cardFlag.slice(BOARD_CARD_ADDRESS_PREFIX.length)
+      : cardFlag
+    const text = getRequiredStringFlag(flags, 'text')
+    const worktree =
+      (await getOptionalWorktreeSelector(flags, 'worktree', cwd, client)) ??
+      (await resolveCurrentWorktreeSelector(cwd, client))
+    // Why: the card is looked up right before the write, and the runtime refuses
+    // an unknown, ambiguous or not-running card. There is no other target.
+    const resolved = await client.call<{ handle: string; title: string }>('board.resolveConsole', {
+      worktree,
+      card
+    })
+    const { handle, title } = resolved.result
+    const result = await client.call<{ send: RuntimeTerminalSend }>('terminal.send', {
+      terminal: handle,
+      text,
+      enter: flags.get('enter') === true,
+      client: { id: 'dobius-cli', type: 'desktop' }
+    })
+    if (!result.result.send.accepted) {
+      throw new RuntimeClientError(
+        'board_card_send_refused',
+        `Console card "${title}" (${handle}) did not accept the text; nothing was sent.`
+      )
+    }
+    printResult(
+      result,
+      json,
+      (value) => `Sent ${value.send.bytesWritten} bytes to card "${title}" (${value.send.handle}).`
+    )
   },
   'board open-tile': async ({ client, flags, cwd, json }) => {
     const worktree =
