@@ -62,10 +62,16 @@ describe('createLocalToolTracker: tooling files changed before a tool that runs 
     expect(tools.isLocal('Write', write('/repo/src/a.test.ts'))).toBe(true)
     expect(tools.isLocal('Bash', bash('npm test'))).toBe(true)
     expect(tools.isLocal('Bash', bash('git status'))).toBe(true)
+    expect(tools.changedTooling()).toBe(false)
   })
 
   it.each([
     '/repo/package.json',
+    '/repo/pnpm-lock.yaml',
+    '/repo/package-lock.json',
+    '/repo/yarn.lock',
+    '/repo/electron.vite.config.ts',
+    '/repo/tailwind.config.js',
     '/repo/.git/hooks/pre-commit',
     '/repo/.git/config',
     '/repo/.husky/pre-commit',
@@ -79,7 +85,9 @@ describe('createLocalToolTracker: tooling files changed before a tool that runs 
     '/repo/.npmrc'
   ])('counts a check tool as outward after a write to %s', (filePath) => {
     const tools = createLocalToolTracker()
+    expect(tools.changedTooling()).toBe(false)
     expect(tools.isLocal('Write', write(filePath))).toBe(true)
+    expect(tools.changedTooling()).toBe(true)
     expect(tools.isLocal('Bash', bash('ls'))).toBe(true)
     expect(tools.isLocal('Bash', bash('npm test'))).toBe(false)
     expect(tools.isLocal('Bash', bash('npx vitest run'))).toBe(false)

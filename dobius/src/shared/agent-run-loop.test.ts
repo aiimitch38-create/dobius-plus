@@ -24,6 +24,7 @@ function input(overrides: Partial<LoopDecisionInput> = {}): LoopDecisionInput {
     sessionKey: 'default',
     origin: 'agent-run',
     usedOutwardTool: false,
+    changedTooling: false,
     nextBudgetUsd: 1,
     executionAdmitted: true,
     ...overrides
@@ -52,8 +53,8 @@ describe('decideNextStep', () => {
     expect(decideNextStep(input({ checkPassed: null }))).toEqual({ step: 'check' })
   })
 
-  it('is done when the check passes, even after an outward tool', () => {
-    expect(decideNextStep(input({ checkPassed: true, usedOutwardTool: true }))).toMatchObject({
+  it('is done when the check passes', () => {
+    expect(decideNextStep(input({ checkPassed: true }))).toMatchObject({
       step: 'final',
       outcome: 'verified'
     })
@@ -72,11 +73,16 @@ describe('decideNextStep', () => {
     })
   })
 
-  it('marks a failed check after an outward or unknown tool as needs-review', () => {
-    expect(decideNextStep(input({ usedOutwardTool: true }))).toMatchObject({
-      step: 'final',
-      outcome: 'needs-review'
-    })
+  it.each<[string, Partial<LoopDecisionInput>]>([
+    ['an outward or unknown tool', { usedOutwardTool: true }],
+    ['a tooling change', { changedTooling: true }]
+  ])('never asks for the check after %s, and never retries', (_label, overrides) => {
+    for (const checkPassed of [null, true, false]) {
+      expect(decideNextStep(input({ ...overrides, checkPassed }))).toMatchObject({
+        step: 'final',
+        outcome: 'needs-review'
+      })
+    }
   })
 
   it.each<[string, Partial<LoopDecisionInput>]>([

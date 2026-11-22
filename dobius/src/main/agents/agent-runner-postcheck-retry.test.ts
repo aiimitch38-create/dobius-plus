@@ -297,7 +297,7 @@ describe('postcheck and retry', () => {
     expect(loopNotes().at(-1)).toBe('loop: blocked, after 2 attempts')
   })
 
-  it('never retries a run that used an outward tool', async () => {
+  it('runs no check and no retry for a run that used an outward tool', async () => {
     mocks.query.mockImplementation(() =>
       streamOf({
         events: [
@@ -312,12 +312,13 @@ describe('postcheck and retry', () => {
 
     await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
     expect(mocks.query).toHaveBeenCalledTimes(1)
+    expect(mocks.precheck).not.toHaveBeenCalled()
     expect(storedRuns()[0].outcome).toBe('needs-review')
-    expect(loopNotes().at(-1)).toContain('mcp__claude_ai_Gmail__send_message')
+    expect(loopNotes().at(-1)).toContain('check not run (mcp__claude_ai_Gmail__send_message)')
     expect(mocks.listeners.size).toBe(0)
   })
 
-  it('never retries after a Bash command that is not known to be local', async () => {
+  it('runs no check and no retry after a Bash command that is not known to be local', async () => {
     mocks.query.mockImplementation(() =>
       streamOf({
         events: [{ kind: 'tool-use', toolName: 'Bash', detail: '{"command":"git status; curl x"}' }]
@@ -329,24 +330,48 @@ describe('postcheck and retry', () => {
 
     await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
     expect(mocks.query).toHaveBeenCalledTimes(1)
+    expect(mocks.precheck).not.toHaveBeenCalled()
     expect(storedRuns()[0].outcome).toBe('needs-review')
   })
 
-  it('never retries when the run changed package.json and then ran the tests', async () => {
+  it.each([
+    '/repo/package.json',
+    '/repo/pnpm-lock.yaml',
+    '/repo/vitest.config.ts',
+    '/repo/tsconfig.json',
+    '/repo/.git/hooks/pre-commit',
+    '/repo/node_modules/.bin/vitest',
+    '/repo/.husky/pre-commit'
+  ])('runs no check and no retry when the run wrote %s', async (filePath) => {
     mocks.query.mockImplementation(() =>
       streamOf({
-        events: [
-          { kind: 'tool-use', toolName: 'Edit', detail: '{"file_path":"/repo/package.json"}' },
-          { kind: 'tool-use', toolName: 'Bash', detail: '{"command":"npm test"}' }
-        ]
+        events: [{ kind: 'tool-use', toolName: 'Edit', detail: JSON.stringify({ file_path: filePath }) }]
       })
     )
-    mocks.precheck.mockResolvedValue(checkResult(1))
+    mocks.precheck.mockResolvedValue(checkResult(0))
     const cb = callbacks()
     await start({ postcheck, ...cb })
 
     await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
     expect(mocks.query).toHaveBeenCalledTimes(1)
+    expect(mocks.precheck).not.toHaveBeenCalled()
+    expect(storedRuns()[0].outcome).toBe('needs-review')
+    expect(storedRuns()[0].postcheck).toBeUndefined()
+    expect(loopNotes().at(-1)).toBe('loop: needs review, the run changed tooling; check not run')
+    expect(cb.order).toEqual(['result', 'settled'])
+  })
+
+  it('runs no check when a Bash command changed tooling', async () => {
+    mocks.query.mockImplementation(() =>
+      streamOf({
+        events: [{ kind: 'tool-use', toolName: 'Bash', detail: '{"command":"echo x > package.json"}' }]
+      })
+    )
+    const cb = callbacks()
+    await start({ postcheck, ...cb })
+
+    await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
+    expect(mocks.precheck).not.toHaveBeenCalled()
     expect(storedRuns()[0].outcome).toBe('needs-review')
   })
 
@@ -382,6 +407,9 @@ describe('postcheck and retry', () => {
       expect(call.target.env.ANTHROPIC_API_KEY).toBeUndefined()
       expect(call.target.env.GITHUB_TOKEN).toBeUndefined()
       expect(call.target.env.PATH).toBe(process.env.PATH)
+      for (const name of Object.keys(call.target.env)) {
+        expect(name).toMatch(/^(?:PATH|HOME|LANG|TMPDIR|NODE_ENV|CI|TERM|LC_[A-Z]+)$/)
+      }
     } finally {
       delete process.env.ANTHROPIC_API_KEY
       delete process.env.GITHUB_TOKEN

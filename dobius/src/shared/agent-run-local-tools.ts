@@ -50,6 +50,8 @@ export type LocalToolTracker = {
    * acted outside this Mac. `detail` is the event's detail (the input as JSON).
    */
   isLocal: (toolName: string | undefined, detail?: string) => boolean
+  /** True once the run changed a file that decides what git or the check tools run. */
+  changedTooling: () => boolean
 }
 
 /**
@@ -61,6 +63,7 @@ export type LocalToolTracker = {
 export function createLocalToolTracker(): LocalToolTracker {
   let toolingChanged = false
   return {
+    changedTooling: () => toolingChanged,
     isLocal: (toolName, detail) => {
       if (!toolName) {
         return false

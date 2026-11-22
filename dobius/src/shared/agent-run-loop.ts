@@ -92,6 +92,8 @@ export type LoopDecisionInput = {
   origin?: string
   spawnedBy?: string
   usedOutwardTool: boolean
+  /** The run changed package.json, tool config, node_modules, .git or similar. */
+  changedTooling: boolean
   /** What retryBudgetUsd() returned for the next attempt. */
   nextBudgetUsd: number
   /** False while the crew is paused. */
@@ -138,18 +140,28 @@ export function decideNextStep(input: LoopDecisionInput): LoopDecision {
     // Out of turns or budget, or crashed: a retry would only spend more.
     return { step: 'final', outcome: 'blocked', reason: 'the run ended with an error' }
   }
+  // Decided BEFORE the check, so the check never runs for these: it executes
+  // outside the agent's sandbox, and after such a run it would execute code
+  // nobody reviewed. There is also no retry.
+  if (input.usedOutwardTool) {
+    return {
+      step: 'final',
+      outcome: 'needs-review',
+      reason: 'the run used a tool that may have acted outside this Mac; check not run'
+    }
+  }
+  if (input.changedTooling) {
+    return {
+      step: 'final',
+      outcome: 'needs-review',
+      reason: 'the run changed tooling; check not run'
+    }
+  }
   if (input.checkPassed === null) {
     return { step: 'check' }
   }
   if (input.checkPassed) {
     return { step: 'final', outcome: 'verified', reason: 'the check passed' }
-  }
-  if (input.usedOutwardTool) {
-    return {
-      step: 'final',
-      outcome: 'needs-review',
-      reason: 'the run used a tool that may have acted outside this Mac'
-    }
   }
   const refusal = retryRefusal(input)
   return refusal === null ? { step: 'retry' } : { step: 'final', outcome: 'blocked', reason: refusal }

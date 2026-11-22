@@ -174,18 +174,23 @@ export function attachRunLoop<A extends RunLoopStartArgs>(args: {
       origin: options.origin,
       spawnedBy: options.spawnedBy,
       usedOutwardTool: outwardTool !== null,
+      changedTooling: tools.changedTooling(),
       nextBudgetUsd,
       executionAdmitted: true
     }
     const before = decideNextStep(facts)
     if (before.step === 'final') {
-      finish(before.outcome, before.reason, loopCostUsd)
+      finish(before.outcome, outwardTool ? `${before.reason} (${outwardTool})` : before.reason, loopCostUsd)
       return false
     }
     if (before.step !== 'check') {
       return false
     }
 
+    // The check runs OUTSIDE the agent's sandbox (the sandbox belongs to the
+    // Claude CLI and cannot wrap an arbitrary command), so it only runs when
+    // the rules above found nothing outward and no tooling change, and with a
+    // short allow list of environment variables.
     // Why loaded here: the check runner pulls in the SSH stack, which a run
     // with no check never needs.
     const { runAutomationPrecheck } = await import('../automations/precheck-runner')
@@ -208,11 +213,7 @@ export function attachRunLoop<A extends RunLoopStartArgs>(args: {
       if (!passed) {
         note(`postcheck: failed ${describePostcheckFailure(result)}`)
       }
-      const reason =
-        decision.outcome === 'needs-review' && outwardTool
-          ? `${decision.reason} (${outwardTool})`
-          : decision.reason
-      finish(decision.outcome, reason, loopCostUsd)
+      finish(decision.outcome, decision.reason, loopCostUsd)
       return false
     }
     if (decision.step !== 'retry') {
