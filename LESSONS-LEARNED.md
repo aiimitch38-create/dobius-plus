@@ -423,3 +423,6 @@ that is one plain command and passes every time.
 - Symptom: after choosing OpenAI Live (or Hermes) in Settings > Voice, the orb and Cmd+T kept running the engine chosen at launch.
 - Cause: main sends `settings:changed` to every window EXCEPT the one that made the change (`main/ipc/settings.ts`, `isOrigin` skip). `useJarvisVoiceSettings` only listened to that IPC event, and Settings lives in the same main window, so it never heard the change.
 - Rule: a renderer hook that mirrors settings must also follow the Zustand store (`useAppStore.subscribe`), or it misses same-window edits. Prove engine switches in a running copy without a reload.
+
+## Git: 2026-11-22
+- Branch names get reused across nights (wb/adam-thread already existed). Check `git rev-parse --verify --quiet <name>` before `git worktree add -b`, and create the worktree before spawning the agent that uses it, never in the same parallel batch.
