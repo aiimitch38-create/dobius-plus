@@ -3,7 +3,11 @@
 tightly coupled PTY lifecycle logic (scan → ready → write → exit cleanup) across
 files without a cleaner ownership seam. */
 import { basename, delimiter } from 'node:path'
-import { isForegroundSignal, signalForegroundProcessGroup } from './foreground-process-group'
+import {
+  continueStoppedGroupForShell,
+  isForegroundSignal,
+  signalForegroundProcessGroup
+} from './foreground-process-group'
 import { win32 as pathWin32 } from 'node:path'
 import { resolveWindowsShellLaunchArgs } from './windows-shell-args'
 import {
@@ -249,6 +253,12 @@ function getSpawnedShellName(shellPath: string): string {
  * Disposes the native PTY handle while avoiding recycled-pid signals on POSIX.
  */
 function destroyPtyProcess(proc: pty.IPty, options: { alreadyKilled?: boolean } = {}): void {
+  // Why: a console whose agent we paused must be continued before teardown.
+  // Most signals (including the kill here) stay pending on a stopped process,
+  // so the agent would stay frozen until the whole app quits.
+  if (typeof proc.pid === 'number') {
+    continueStoppedGroupForShell(proc.pid)
+  }
   // Why: node-pty's UnixTerminal.destroy() closes the master socket, which
   // releases the ptmx fd to the OS — without this call the fd leaks until GC
   // (see docs/fix-pty-fd-leak.md). destroy() also registers a close listener

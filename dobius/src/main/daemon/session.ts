@@ -1,6 +1,7 @@
 /* oxlint-disable max-lines */
 import { HeadlessEmulator } from './headless-emulator'
 import {
+  continueStoppedGroupForShell,
   isForegroundSignal,
   signalForegroundProcessGroup
 } from '../providers/foreground-process-group'
@@ -198,6 +199,8 @@ export class Session {
     }
     this._isTerminating = true
 
+    // Why: a paused agent holds the kill pending and would outlive this terminal frozen.
+    continueStoppedGroupForShell(this.subprocess.pid)
     this.subprocess.kill()
 
     this.killTimer = setTimeout(() => {
@@ -212,9 +215,9 @@ export class Session {
       return
     }
     if (isForegroundSignal(sig)) {
-      void signalForegroundProcessGroup(this.subprocess.pid, sig, {
+      signalForegroundProcessGroup(this.subprocess.pid, sig, {
         write: (data) => this.subprocess.write(data)
-      })
+      }).catch((err) => console.warn('[Session] foreground signal failed:', err))
       return
     }
     this.subprocess.signal(sig)
@@ -424,6 +427,7 @@ export class Session {
       return
     }
     this._disposed = true
+    continueStoppedGroupForShell(this.subprocess.pid)
     if (this.killTimer) {
       clearTimeout(this.killTimer)
       this.killTimer = null
@@ -505,6 +509,8 @@ export class Session {
       return
     }
 
+    // Drops the pause record with the terminal (the pid may be reused later).
+    continueStoppedGroupForShell(this.subprocess.pid)
     this._exitCode = code
     this._state = 'exited'
     this.releaseHeldShellReadyBytes()
