@@ -106,6 +106,11 @@ export async function runTabSnooze(
 
 function notifySnoozeOutcome(outcome: SnoozeTabOutcome): void {
   switch (outcome) {
+    // Nothing to show: the confirm dialog, or the missing tab, says it all.
+    case 'needs-confirm':
+    case 'missing':
+    case 'tab-gone':
+      return
     case 'snoozed':
       toast.success(translate('lib.tabSnooze.snoozed', 'Tab snoozed. It waits in the sidebar.'))
       return
@@ -136,11 +141,29 @@ function notifySnoozeOutcome(outcome: SnoozeTabOutcome): void {
     case 'invalid':
     case 'unavailable':
       toast.error(translate('lib.tabSnooze.failed', 'This tab could not be snoozed.'))
-      return
-    case 'needs-confirm':
-    case 'missing':
-    case 'tab-gone':
-      return
+  }
+}
+
+/** The app's own snooze wiring; `dobius tabs snooze` reuses it (snooze-tab-cli-event.ts). */
+export function snoozeTerminalTabDeps(): SnoozeTabDeps {
+  return {
+    getState: () => useAppStore.getState(),
+    captureOutput: (id) => {
+      try {
+        shutdownBufferCaptures.get(id)?.({ includeLocalBuffers: true })
+      } catch (err) {
+        // Why not fatal: the tab still snoozes, with whatever output the session last saved.
+        console.warn('[tab-snooze] output capture failed:', err)
+      }
+    },
+    collectAgentSessions: (worktreeId) =>
+      collectSleepingAgentSessionRecordsForWorktree(useAppStore.getState(), worktreeId, {
+        captureMode: 'manual-worktree-sleep'
+      }),
+    api: window.api.tabSnooze,
+    // Why force: a pinned tab keeps its pin in the entry and comes back pinned.
+    closeTab: (id) => closeTerminalTab(id, { force: true }),
+    notify: notifySnoozeOutcome
   }
 }
 
@@ -149,28 +172,5 @@ export function snoozeTerminalTab(
   until: number | null,
   options: { confirmed?: boolean } = {}
 ): Promise<SnoozeTabOutcome> {
-  return runTabSnooze(
-    {
-      getState: () => useAppStore.getState(),
-      captureOutput: (id) => {
-        try {
-          shutdownBufferCaptures.get(id)?.({ includeLocalBuffers: true })
-        } catch (err) {
-          // Why not fatal: the tab still snoozes, with whatever output the session last saved.
-          console.warn('[tab-snooze] output capture failed:', err)
-        }
-      },
-      collectAgentSessions: (worktreeId) =>
-        collectSleepingAgentSessionRecordsForWorktree(useAppStore.getState(), worktreeId, {
-          captureMode: 'manual-worktree-sleep'
-        }),
-      api: window.api.tabSnooze,
-      // Why force: a pinned tab keeps its pin in the entry and comes back pinned.
-      closeTab: (id) => closeTerminalTab(id, { force: true }),
-      notify: notifySnoozeOutcome
-    },
-    tabId,
-    until,
-    options
-  )
+  return runTabSnooze(snoozeTerminalTabDeps(), tabId, until, options)
 }

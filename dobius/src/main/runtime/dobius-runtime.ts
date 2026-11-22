@@ -132,6 +132,11 @@ import type {
 import type { AgentCursorEvent } from '../../shared/agent-cursor'
 import { toRuntimeActivateWorktreeEvent } from '../../shared/runtime-client-events'
 import type {
+  BoardCardActionReply,
+  BoardCardActionRequest
+} from '../../shared/board-card-actions'
+import type { TabSnoozeCliReply, TabSnoozeCliRequest } from '../../shared/tab-snooze-cli'
+import type {
   LinearCurrentIssueContextHints,
   LinearAttachResult,
   LinearCommentAddResult,
@@ -1235,6 +1240,10 @@ type RuntimeNotifier = {
   /** Resolves with the new card id once the renderer added the web tile card. */
   boardOpenWebTile?(event: RuntimeBoardOpenWebTileEvent): Promise<{ cardId: string }>
   agentCursor?(event: AgentCursorEvent): void
+  /** `dobius board restart|rename|note|close`: the Board window acts and replies. */
+  boardCardAction?(event: BoardCardActionRequest): Promise<BoardCardActionReply>
+  /** `dobius tabs snooze`: the window snoozes the tab and replies. */
+  tabSnoozeRequest?(event: TabSnoozeCliRequest): Promise<TabSnoozeCliReply>
   createTerminal(
     worktreeId: string,
     opts: {
@@ -2861,6 +2870,24 @@ export class DobiusRuntimeService {
     }
     const { cardId } = await notifier.boardOpenWebTile(event)
     return { cardId, delivered: true }
+  }
+
+  /**
+   * `dobius board restart|rename|note|close`. Window path only: the action
+   * needs the Board's answer (did it act, on which card), and paired remote
+   * clients have no reply channel. Null when no Board window is attached.
+   */
+  async requestBoardCardAction(
+    event: BoardCardActionRequest
+  ): Promise<BoardCardActionReply | null> {
+    const notifier = this.notifier?.boardCardAction ? this.notifier : null
+    return notifier?.boardCardAction ? await notifier.boardCardAction(event) : null
+  }
+
+  /** `dobius tabs snooze`: same window-only path as requestBoardCardAction. */
+  async requestTabSnooze(event: TabSnoozeCliRequest): Promise<TabSnoozeCliReply | null> {
+    const notifier = this.notifier?.tabSnoozeRequest ? this.notifier : null
+    return notifier?.tabSnoozeRequest ? await notifier.tabSnoozeRequest(event) : null
   }
 
   setAgentBrowserBridge(bridge: AgentBrowserBridge | null): void {

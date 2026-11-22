@@ -46,6 +46,7 @@ import { CHANNEL_TEMPLATE_METHODS } from './channel-templates'
 import { SAVE_SUBSCRIPTION_METHODS } from './save-subscriptions'
 import { TASK_METHODS } from './tasks'
 import { BOARD_CONSOLE_METHODS } from './board-consoles'
+import { BOARD_CARD_METHODS } from './board-cards'
 import { BOARD_WEB_TILE_METHODS } from './board-web-tiles'
 import { AGENT_CONTROL_METHODS } from './agent-control'
 import { CREW_METHODS } from './crew'
@@ -120,6 +121,7 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...SAVE_SUBSCRIPTION_METHODS,
   ...TASK_METHODS,
   ...BOARD_CONSOLE_METHODS,
+  ...BOARD_CARD_METHODS,
   ...BOARD_WEB_TILE_METHODS,
   ...AGENT_CONTROL_METHODS,
   ...CREW_METHODS,

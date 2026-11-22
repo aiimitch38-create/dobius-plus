@@ -7,6 +7,8 @@ import type {
   TakenSnoozedTab
 } from '../shared/tab-snooze-types'
 import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
+import type { BoardCardActionReply, BoardCardActionRequest } from '../shared/board-card-actions'
+import type { TabSnoozeCliReply, TabSnoozeCliRequest } from '../shared/tab-snooze-cli'
 import type {
   RuntimeBoardOpenWebTileEvent,
   RuntimeBoardSpawnConsoleEvent
@@ -2959,6 +2961,12 @@ export type PreloadApi = {
     /** `dobius board open-tile`: main asks this window to add a web tile card; reply with the card id. */
     onBoardOpenWebTile: (callback: (event: RuntimeBoardOpenWebTileEvent) => void) => () => void
     replyBoardOpenWebTile: (reply: { requestId: string; cardId?: string; error?: string }) => void
+    /** `dobius board restart|rename|note|close`: main asks this window to act on a card; reply once. */
+    onBoardCardAction: (callback: (event: BoardCardActionRequest) => void) => () => void
+    replyBoardCardAction: (reply: BoardCardActionReply) => void
+    /** `dobius tabs snooze`: main asks this window to snooze a terminal tab; reply once. */
+    onTabSnoozeRequest: (callback: (event: TabSnoozeCliRequest) => void) => () => void
+    replyTabSnoozeRequest: (reply: TabSnoozeCliReply) => void
     /** Agent cursor / co-presence stream (shared/agent-cursor.ts). */
     onAgentCursor: (callback: (event: AgentCursorEvent) => void) => () => void
     onCreateTerminal: (

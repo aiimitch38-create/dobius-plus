@@ -28,6 +28,7 @@ import { LINEAR_HANDLERS } from './handlers/linear'
 import { VM_HANDLERS } from './handlers/vm'
 import { TASK_HANDLERS } from './handlers/tasks'
 import { BOARD_HANDLERS } from './handlers/board'
+import { BOARD_CARD_HANDLERS } from './handlers/board-cards'
 import { LEAD_HANDLERS } from './handlers/lead'
 import { CREW_HANDLERS } from './handlers/crew'
 import { GIT_HANDLERS } from './handlers/git'
@@ -74,6 +75,7 @@ function buildHandlers(): Map<string, CommandHandler> {
     VM_HANDLERS,
     TASK_HANDLERS,
     BOARD_HANDLERS,
+    BOARD_CARD_HANDLERS,
     LEAD_HANDLERS,
     CREW_HANDLERS,
     GIT_HANDLERS,

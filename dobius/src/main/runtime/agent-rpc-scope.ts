@@ -27,6 +27,8 @@ export const AGENT_RPC_METHOD_ALLOWLIST: ReadonlySet<string> = new Set([
   'board.listConsoles',
   'board.resolveConsole',
   'board.agentState',
+  // `dobius board list`: read-only card list. Card actions stay full-key only.
+  'board.listCards',
   // Crew: only whether it is paused. Decisions and drafts hold tool inputs and
   // Asana text; every crew change stays full-key only.
   'crew.state',
