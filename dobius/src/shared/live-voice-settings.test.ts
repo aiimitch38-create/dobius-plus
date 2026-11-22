@@ -89,6 +89,10 @@ describe('resolveActiveVoiceEngine (runtime fallback)', () => {
     ).toBe('elevenlabs')
   })
 
+  it('runs OpenAI Live by default once a key is saved', () => {
+    expect(resolveActiveVoiceEngine(voice({ openAiApiKeyConfigured: true }))).toBe('openai-live')
+  })
+
   it('runs OpenAI Live once it is available', () => {
     expect(resolveActiveVoiceEngine(voice({ openAiApiKeyConfigured: true }), true)).toBe(
       'openai-live'

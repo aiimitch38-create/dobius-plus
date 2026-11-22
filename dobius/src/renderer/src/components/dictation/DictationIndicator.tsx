@@ -4,8 +4,20 @@ import { useAdamVoiceThread } from '../board/board-route/adam-voice-thread'
 import { useJarvisTurn } from '../jarvis/use-jarvis-turn'
 import { useJarvisVoiceSettings } from '../jarvis/use-jarvis-voice-settings'
 import { useVoiceAgent } from '../jarvis/use-voice-agent'
+import { useLiveVoice, type LiveVoice } from '../jarvis/use-live-voice'
 import { voiceOrbLevelSource, publishVoiceOrbPresentation } from './voice-orb-live-level'
 import { resolveVoiceOrbPresentation } from './voice-orb-state'
+
+/** What the orb says during an OpenAI Live call, for the states only it has. */
+function liveCallLabel(live: Pick<LiveVoice, 'state' | 'muted'>): string {
+  if (live.state === 'thinking') {
+    return 'ADAM is working on it...'
+  }
+  if (live.muted) {
+    return 'Muted - press Cmd+T to talk'
+  }
+  return live.state === 'standby' ? 'Standby - just start talking' : 'Listening...'
+}
 
 type DictationIndicatorProps = {
   /** Current mic level, 0..1, polled by the orb once per frame. */
@@ -25,19 +37,36 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
   const agent = useVoiceAgent()
   const toggleAgent = agent.toggle
   const { flags } = useJarvisVoiceSettings()
-  // preferNativeAdamVoice (default on) keeps the orb talking to Adam's real
-  // Hermes profile even when an ElevenLabs agent id is configured — set it
-  // false in Settings > Voice to go back to the ElevenLabs conversation.
-  const agentMode = flags.jarvisEnabled && flags.agentId !== '' && !flags.preferNativeAdamVoice
+  const live = useLiveVoice(flags.liveVoice.micMode)
+  const pressLive = live.press
+  const hangUpLive = live.hangUp
+  // The engine chosen in Settings > Voice, after its fallbacks (no key, no
+  // ElevenLabs agent id): OpenAI Live calls, the ElevenLabs conversation, or
+  // Hermes turns (useJarvisTurn) when neither runs.
+  const liveMode = flags.jarvisEnabled && flags.activeVoiceEngine === 'openai-live'
+  const elevenLabsMode = flags.jarvisEnabled && flags.activeVoiceEngine === 'elevenlabs'
+  const agentMode = liveMode || elevenLabsMode
 
-  // ⌘T reaches this window as a Jarvis press event; in live mode it opens or
-  // closes the conversation instead of starting a single turn.
+  // ⌘T reaches this window as a Jarvis press event; in a live engine it opens,
+  // mutes or closes the call instead of starting a single turn.
   useEffect(() => {
-    if (!agentMode) {
+    if (!elevenLabsMode) {
       return
     }
     return window.api.jarvis.onPttPressed(toggleAgent)
-  }, [toggleAgent, agentMode])
+  }, [toggleAgent, elevenLabsMode])
+
+  useEffect(() => {
+    if (!liveMode) {
+      // Why: switching engines (or turning voice off) must not leave a paid call open.
+      hangUpLive()
+      return
+    }
+    return window.api.jarvis.onPttPressed(pressLive)
+  }, [pressLive, hangUpLive, liveMode])
+
+  const agentState = liveMode ? live.state : agent.state
+  const agentErrorText = liveMode ? live.errorText : agent.errorText
 
   const agentActive = agentMode
   const jarvisActive = !agentMode && jarvis.hudState !== 'idle'
@@ -46,7 +75,7 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
   // Why separate from agentActive: agentActive is true the instant a live
   // agent is merely *configured*, at rest, forever. This is true only while
   // an actual agent turn is in progress.
-  const agentGenuinelyActive = agentActive && agent.state !== 'idle'
+  const agentGenuinelyActive = agentActive && agentState !== 'idle'
 
   const dictationLabel =
     dictationState === 'starting'
@@ -67,15 +96,17 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
             : 'Listening...'
 
   const agentLabel = agentMode
-    ? agent.state === 'idle'
+    ? agentState === 'idle'
       ? 'Tap or press Cmd+T to talk'
-      : agent.state === 'connecting'
+      : agentState === 'connecting'
         ? 'Connecting...'
-        : agent.state === 'speaking'
+        : agentState === 'speaking'
           ? 'Speaking...'
-          : agent.state === 'error'
-            ? (agent.errorText ?? 'Voice error')
-            : 'Listening...'
+          : agentState === 'error'
+            ? (agentErrorText ?? 'Voice error')
+            : liveMode
+              ? liveCallLabel(live)
+              : 'Listening...'
     : null
 
   // Why dictation and Jarvis outrank agentActive: ⌘E dictation runs
@@ -98,7 +129,7 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
     dictationState,
     jarvisState: jarvis.hudState,
     agentMode,
-    agentState: agent.state
+    agentState
   })
   const liveGetLevel =
     activitySource === 'input'
@@ -106,9 +137,13 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
         ? getAudioLevel
         : jarvisActive
           ? jarvis.getAudioLevel
-          : agent.getInputLevel
+          : liveMode
+            ? live.getInputLevel
+            : agent.getInputLevel
       : activitySource === 'output'
-        ? agent.getOutputLevel
+        ? liveMode
+          ? live.getOutputLevel
+          : agent.getOutputLevel
         : getAudioLevel
 
   useEffect(() => {
