@@ -273,6 +273,14 @@ export const GIT_HANDLERS: Record<string, CommandHandler> = {
     const worktree = await getGitWorktreeSelector(ctx)
     if (!allowDirty) {
       const status = await ctx.client.call<GitStatusResult>('git.status', { worktree })
+      // Why: a failed status read comes back as an empty list with no head
+      // commit; treat "could not tell" as unsafe instead of as clean.
+      if (!status.result.head) {
+        throw new RuntimeClientError(
+          'git_pull_blocked',
+          'Could not read git status, so the pull was stopped to protect local changes. Pass --allow-dirty to pull anyway.'
+        )
+      }
       if (status.result.entries.length > 0) {
         throw new RuntimeClientError(
           'git_pull_blocked',

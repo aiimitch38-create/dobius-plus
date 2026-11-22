@@ -366,7 +366,7 @@ describe('detached HEAD with an explicit --pr', () => {
 
 describe('--pr validation', () => {
   it('rejects a bare or non-numeric --pr instead of using the branch PR', async () => {
-    for (const value of [true, '', 'abc', '0', '-3', '4.5', '12abc']) {
+    for (const value of [true, '', 'abc', '0', '-3', '4.5', '12abc', '9'.repeat(309)]) {
       callMock.mockReset()
       callMock.mockResolvedValueOnce(worktree)
       await expect(PR_HANDLERS['pr show'](ctx({ pr: value }))).rejects.toThrow(

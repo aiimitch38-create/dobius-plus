@@ -45,11 +45,12 @@ export function getPrNumberFlag(flags: Map<string, string | boolean>): number | 
     return undefined
   }
   const value = flags.get('pr')
-  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) {
+  const prNumber = typeof value === 'string' && /^[1-9]\d*$/.test(value) ? Number(value) : NaN
+  if (!Number.isSafeInteger(prNumber)) {
     throw new RuntimeClientError(
       'invalid_argument',
       '--pr needs a pull request number, like --pr 42.'
     )
   }
-  return Number(value)
+  return prNumber
 }

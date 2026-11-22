@@ -302,7 +302,7 @@ describe('dobius git fetch / pull', () => {
   it('calls git.fetch and git.pull with only the worktree (no push target, no force)', async () => {
     callMock
       .mockResolvedValueOnce(ok({ ok: true }))
-      .mockResolvedValueOnce(ok({ entries: [], conflictOperation: 'unknown' }))
+      .mockResolvedValueOnce(ok({ entries: [], conflictOperation: 'unknown', head: 'abc' }))
       .mockResolvedValueOnce(ok({ ok: true }))
     await GIT_HANDLERS['git fetch'](ctx({ worktree: 'id:wt1' }))
     await GIT_HANDLERS['git pull'](ctx({ worktree: 'id:wt1' }))
@@ -326,6 +326,36 @@ describe('dobius git fetch / pull', () => {
     expect(callMock.mock.calls).toEqual([
       ['git.pull', { worktree: 'id:wt1' }, { timeoutMs: 120_000 }]
     ])
+  })
+
+  it('pull refuses when status could not be read (no head commit)', async () => {
+    callMock.mockResolvedValueOnce(ok({ entries: [], conflictOperation: 'unknown' }))
+    await expect(GIT_HANDLERS['git pull'](ctx({ worktree: 'id:wt1' }))).rejects.toThrow(
+      /Could not read git status/
+    )
+    expect(callMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks large-diff line counts as a minimum when the runtime stopped counting', async () => {
+    callMock.mockResolvedValueOnce(
+      ok({
+        kind: 'text',
+        originalContent: '',
+        modifiedContent: '',
+        originalIsBinary: false,
+        modifiedIsBinary: false,
+        largeDiffRenderLimit: {
+          limited: true,
+          reason: 'line-count',
+          lineCounts: { original: 120001, modified: 5 },
+          lineCountsAreMinimum: { original: true, modified: false },
+          characterCount: 1,
+          limits: { maxLinesPerSide: 50000, maxCombinedCharacters: 1 }
+        }
+      })
+    )
+    await GIT_HANDLERS['git diff'](ctx({ worktree: 'id:wt1', path: 'big.json' }))
+    expect(printed()).toContain('(at least 120006 lines omitted)')
   })
 
   it('says a diff is too large instead of claiming no changes', async () => {

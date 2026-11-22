@@ -133,8 +133,9 @@ export function formatGitDiff(path: string, staged: boolean, result: GitDiffResu
     return safeText(`${path} (${area}): binary file changed; no text diff to show.`)
   }
   if (result.largeDiffRenderLimit?.limited) {
-    const counts = result.largeDiffRenderLimit.lineCounts
-    const omitted = counts ? ` (${counts.original + counts.modified} lines omitted)` : ''
+    const { lineCounts: counts, lineCountsAreMinimum: minimum } = result.largeDiffRenderLimit
+    const atLeast = minimum?.original || minimum?.modified ? 'at least ' : ''
+    const omitted = counts ? ` (${atLeast}${counts.original + counts.modified} lines omitted)` : ''
     return safeText(
       `${path} (${area}): this diff is too large to show${omitted}. Pass --json for the size details.`
     )
