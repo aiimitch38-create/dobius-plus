@@ -19,7 +19,12 @@ export type MissionEvent =
   | { kind: 'settled'; orderId: string; finished: number }
 
 const TIMEOUT_SWEEP_MS = 30_000
+// Same size as the orders registry (board-orders.ts MAX_ORDERS): once an order
+// falls out of that list nothing can show it, so its missions (each holding the
+// agent's full last reply) go too.
+const MAX_TRACKED_ORDERS = 50
 const missions = new Map<string, Mission>()
+const trackedOrders = new Set<string>()
 const listeners = new Set<(event: MissionEvent) => void>()
 const settledOrders = new Set<string>()
 let watching = false
@@ -77,6 +82,21 @@ function ensureWatching(): void {
 export function trackMission(m: Mission): void {
   ensureWatching()
   missions.set(`${m.orderId}:${m.tabId}`, m)
+  trackedOrders.add(m.orderId)
+  while (trackedOrders.size > MAX_TRACKED_ORDERS) {
+    const oldest = trackedOrders.values().next().value as string
+    trackedOrders.delete(oldest)
+    settledOrders.delete(oldest)
+    for (const [key, mission] of missions) {
+      if (mission.orderId === oldest) {
+        missions.delete(key)
+      }
+    }
+  }
+}
+
+export function trackedMissionCountForTest(): { missions: number; settledOrders: number } {
+  return { missions: missions.size, settledOrders: settledOrders.size }
 }
 
 /** Missions (one per lane that received it) of one order, current state. */
