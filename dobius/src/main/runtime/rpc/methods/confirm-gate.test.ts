@@ -46,6 +46,13 @@ describe('confirmText', () => {
     expect(confirmText('rm\u0000 -rf‮\n\n  /tmp​/x', 'input')).toBe('rm -rf /tmp /x')
   })
 
+  it.each(['\u00ad', '\u061c', '\u2060', '\u200b', '\u202e', '\u2066', '\ufeff', '\u0007'])(
+    'strips the hidden character %j',
+    (hidden) => {
+      expect(confirmText(`a${hidden}b`, 'input')).toBe('a b')
+    }
+  )
+
   it('refuses text over the limit instead of clipping it', () => {
     expect(() => confirmText('a'.repeat(CONFIRM_TEXT_LIMIT + 1), 'draft')).toThrow(
       'too long to confirm here'

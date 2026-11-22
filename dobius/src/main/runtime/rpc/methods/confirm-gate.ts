@@ -32,12 +32,11 @@ export const CONFIRM_TEXT_LIMIT = 1500
 
 export class ConfirmTextTooLongError extends Error {}
 
-// Control characters, zero-width characters and bidi overrides: anything that
-// could make the dialog show something other than what will run.
-const HIDDEN_CHARACTERS = new RegExp(
-  '[\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2066-\\u2069\\ufeff]+',
-  'g'
-)
+// Control characters (Cc) and every invisible format character (Cf: zero-width,
+// soft hyphen, word joiner, bidi marks and overrides, BOM), plus the line and
+// paragraph separators: anything that could make the dialog show something
+// other than what will run.
+const HIDDEN_CHARACTERS = /[\p{Cc}\p{Cf}\u2028\u2029]+/gu
 
 export function createConfirmationGate(
   dialog: ConfirmDialog,
