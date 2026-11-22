@@ -126,7 +126,10 @@ type CreateMainWindowOptions = {
    *  the host can record diagnostics and surface a recovery prompt instead of
    *  letting Dobius crash-loop. */
   onRendererRecoveryExhausted?: (info: {
-    details: Electron.RenderProcessGoneDetails
+    /** The renderer loss that asked for the reload, or null for a page that failed to load. */
+    details: Electron.RenderProcessGoneDetails | null
+    /** Set when the reload was for the app page failing to load (did-fail-load). */
+    loadFailure?: RendererLoadFailure
     webContentsId: number
     recentRecoveryCount: number
   }) => void
@@ -141,6 +144,16 @@ type CreateMainWindowOptions = {
    *  before session restore re-attaches them (#5787). This callback lets the host
    *  mark that one reload so the sweep can be skipped for it. */
   onBeforeRecoveryReload?: (webContentsId: number) => void
+}
+
+export type RendererLoadFailure = { errorCode: number; errorDescription: string }
+
+// Chromium's net::ERR_ABORTED: a navigation replaced by another one, not a failure.
+const ERR_ABORTED = -3
+
+/** Pure: does this did-fail-load leave the app window blank? Only its own page, and not a replaced navigation. */
+export function appPageLoadFailureNeedsReload(errorCode: number, isMainFrame: boolean): boolean {
+  return isMainFrame === true && errorCode !== ERR_ABORTED
 }
 
 export function createAppRendererWebPreferences(): Electron.BrowserWindowConstructorOptions['webPreferences'] {
@@ -606,26 +619,28 @@ export function createMainWindow(
       rendererRecoveryTimer = null
     }
   }
-  const scheduleRendererRecovery = (details: Electron.RenderProcessGoneDetails): void => {
+  // Why: a renderer loss (render-process-gone) and the app page failing to
+  // load (did-fail-load, Line A #27) both leave a blank window; both take the
+  // same capped reload path. A load failure has no process-gone details.
+  type RecoveryCause =
+    | { details: Electron.RenderProcessGoneDetails; loadFailure?: undefined }
+    | { details: null; loadFailure: RendererLoadFailure }
+  const recoveryStillWanted = (cause: RecoveryCause): boolean =>
+    !windowClosing &&
+    !opts?.getIsQuitting?.() &&
+    !(cause.details && opts?.shouldRecoverRenderer?.(cause.details, rendererWebContentsId) === false) &&
+    !mainWindow.isDestroyed()
+  const scheduleRendererRecovery = (cause: RecoveryCause): void => {
     if (
       rendererRecoveryTimer ||
-      !details ||
-      !isCrashReportReason(details.reason) ||
-      windowClosing ||
-      opts?.getIsQuitting?.() ||
-      opts?.shouldRecoverRenderer?.(details, rendererWebContentsId) === false ||
-      mainWindow.isDestroyed()
+      (!cause.loadFailure && !(cause.details && isCrashReportReason(cause.details.reason))) ||
+      !recoveryStillWanted(cause)
     ) {
       return
     }
     rendererRecoveryTimer = setTimeout(() => {
       rendererRecoveryTimer = null
-      if (
-        windowClosing ||
-        opts?.getIsQuitting?.() ||
-        opts?.shouldRecoverRenderer?.(details, rendererWebContentsId) === false ||
-        mainWindow.isDestroyed()
-      ) {
+      if (!recoveryStillWanted(cause)) {
         return
       }
       const recovery = rendererRecoveryCircuitBreaker.registerRecoveryAttempt(Date.now())
@@ -633,7 +648,8 @@ export function createMainWindow(
         // Why: too many reloads in the window means reloading again will just
         // crash again. Stop the loop and let the host surface a recovery prompt.
         opts?.onRendererRecoveryExhausted?.({
-          details,
+          details: cause.details,
+          ...(cause.loadFailure ? { loadFailure: cause.loadFailure } : {}),
           webContentsId: rendererWebContentsId,
           recentRecoveryCount: recovery.recentRecoveryCount
         })
@@ -665,8 +681,18 @@ export function createMainWindow(
     if (!windowClosing) {
       console.error('[window] Renderer process gone; close confirmation will be bypassed', details)
     }
-    scheduleRendererRecovery(details)
+    scheduleRendererRecovery({ details })
   })
+  mainWindow.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
+      if (!appPageLoadFailureNeedsReload(errorCode, isMainFrame)) {
+        return
+      }
+      console.error('[window] App page failed to load; reloading', { errorCode, errorDescription })
+      scheduleRendererRecovery({ details: null, loadFailure: { errorCode, errorDescription } })
+    }
+  )
   mainWindow.webContents.on('destroyed', () => {
     resetMarkdownEditorFocus()
     resetTerminalInputFocus()
