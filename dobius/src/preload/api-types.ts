@@ -2253,6 +2253,7 @@ export type PreloadApi = {
     copilotStatus: () => Promise<AgentHookInstallStatus>
     hermesStatus: () => Promise<AgentHookInstallStatus>
     devinStatus: () => Promise<AgentHookInstallStatus>
+    kimiStatus: () => Promise<AgentHookInstallStatus>
   }
   vertexTasks: {
     list: () => Promise<VertexTask[]>

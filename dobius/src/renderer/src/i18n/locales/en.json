@@ -8878,6 +8878,17 @@
         "agent-sandbox-copy": {
           "title": "Agent sandbox (recommended)",
           "description": "Commands run by Claude agents can only write to the agent's working folder, its git repository, temp folders and package caches, and cannot read other agents' memory or saved credentials. Turning this off lets agents write anywhere in your home folder. Hook, settings and shell startup files stay protected either way."
+        },
+        "AgentHookInstallStatusList": {
+          "eebabd6f45": "Hook status is not available in this window.",
+          "eb158c05a1": "Installed",
+          "17597647d9": "Partly installed",
+          "7d4147c2ea": "Not installed",
+          "80664f8df6": "Could not check",
+          "df34aa74f8": "Hook install status",
+          "f35aa93b4a": "Checking…",
+          "5c6d64246c": "Check again",
+          "7581ca3f93": "While the switch is on, Dobius+ installs these hooks each time it starts. To reinstall them now, turn the switch off and back on."
         }
       },
       "right": {

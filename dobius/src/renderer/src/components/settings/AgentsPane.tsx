@@ -16,6 +16,7 @@ import { BugAutoFixSetting } from './BugAutoFixSetting'
 import { AgentCacheTimerSection } from './AgentCacheTimerSection'
 import { AgentRuntimeSetting } from './AgentRuntimeSetting'
 import { AgentSandboxSetting } from './AgentSandboxSetting'
+import { AgentHookInstallStatusList } from './AgentHookInstallStatusList'
 import {
   getAgentGeneratedTabTitlesDescription,
   getAgentGeneratedTabTitlesTitle
@@ -998,6 +999,9 @@ export function AgentStatusHooksSetting({
         }
         ariaLabel={getAgentStatusHooksTitle()}
       />
+      {/* Why: the store adopts the new value only after main has installed or
+          removed the hooks (ipc/settings.ts), so a flip here means disk changed. */}
+      <AgentHookInstallStatusList reloadKey={enabled ? 1 : 0} />
     </section>
   )
 }
