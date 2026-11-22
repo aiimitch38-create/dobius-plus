@@ -9,6 +9,12 @@ import type { TaskProviderIdentity as SharedTaskProviderIdentity } from '../../.
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import { defineMethod, type RpcMethod } from '../core'
 import {
+  LoopCreateFields,
+  LoopUpdateFields,
+  createLoopAutomation,
+  editedLoop
+} from './automation-loop-params'
+import {
   OptionalBoolean,
   OptionalPlainString,
   OptionalPositiveInt,
@@ -116,7 +122,9 @@ const AutomationCreate = z.object({
   rrule: AutomationSchedule,
   dtstart: requiredNumber('Missing trigger start time'),
   enabled: OptionalBoolean,
-  missedRunGraceMinutes: OptionalPositiveInt
+  missedRunGraceMinutes: OptionalPositiveInt,
+  // `dobius automations create --loop`: a goal loop on one workspace's Board.
+  loop: LoopCreateFields.optional()
 })
 
 const AutomationUpdateFields = z.object({
@@ -137,7 +145,9 @@ const AutomationUpdateFields = z.object({
   rrule: AutomationSchedule.optional(),
   dtstart: requiredNumber('Missing trigger start time').optional(),
   enabled: OptionalBoolean,
-  missedRunGraceMinutes: OptionalPositiveInt
+  missedRunGraceMinutes: OptionalPositiveInt,
+  // Edits an existing goal loop's goal, run cap, stop command or target card.
+  loop: LoopUpdateFields.optional()
 })
 
 const AutomationUpdate = z.object({
@@ -159,16 +169,27 @@ export const AUTOMATION_METHODS: RpcMethod[] = [
   defineMethod({
     name: 'automation.create',
     params: AutomationCreate,
-    handler: async (params, { runtime }) => ({
-      automation: await runtime.createAutomation(params)
-    })
+    handler: async (params, { runtime }) => {
+      const { loop, ...input } = params
+      return {
+        automation: loop
+          ? await createLoopAutomation(runtime, input, loop)
+          : await runtime.createAutomation(input)
+      }
+    }
   }),
   defineMethod({
     name: 'automation.update',
     params: AutomationUpdate,
-    handler: async (params, { runtime }) => ({
-      automation: await runtime.updateAutomation(params.id, params.updates)
-    })
+    handler: async (params, { runtime }) => {
+      const { loop, ...updates } = params.updates
+      return {
+        automation: await runtime.updateAutomation(
+          params.id,
+          loop ? { ...updates, loop: editedLoop(runtime, runtime.showAutomation(params.id), loop) } : updates
+        )
+      }
+    }
   }),
   defineMethod({
     name: 'automation.delete',

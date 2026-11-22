@@ -13,6 +13,13 @@ const AUTOMATION_TARGET_FLAGS = [
 ]
 const AUTOMATION_SCHEDULE_FLAGS = ['trigger', 'schedule', 'time', 'day', 'timezone']
 const AUTOMATION_PRECHECK_FLAGS = ['precheck', 'precheck-timeout']
+const AUTOMATION_LOOP_FLAGS = ['goal', 'max-iterations', 'stop-when', 'card']
+const LOOP_NOTES = [
+  'Loops (--loop): instead of a schedule, the automation keeps telling Board consoles to work toward --goal until each says the goal is met, or --max-iterations runs have gone by. --max-iterations is required and at most 50 (every iteration is a paid agent run); more is refused with loop_iteration_cap.',
+  'A loop runs on one workspace Board (--workspace, or the worktree you are in). --card <id-or-title> sends it to one console or to the consoles wired to an orchestrator card; without --card it goes to every console on the Board. --provider, --name, --prompt and --trigger are optional for loops.',
+  '--stop-when <command> is one plain check command (for example "pnpm test") run in the workspace after each iteration; when it passes the loop stops. No quotes, pipes or file-changing commands.',
+  'Loop runs honor Pause crew: nothing is sent while the crew is paused.'
+]
 const AUTOMATION_STATE_FLAGS = [
   'enabled',
   'disabled',
@@ -41,12 +48,14 @@ export const AUTOMATION_COMMAND_SPECS: CommandSpec[] = [
     path: ['automations', 'create'],
     summary: 'Create a scheduled Dobius automation',
     usage:
-      'dobius automations create --name <name> --trigger <preset|cron|rrule> --prompt <text> --provider <agent> [--precheck <command>] [--repo <selector>|--workspace <selector>|--project <id> [--host <id>]|--project-host-setup <id>] [--json]',
+      'dobius automations create --name <name> --trigger <preset|cron|rrule> --prompt <text> --provider <agent> [--precheck <command>] [--repo <selector>|--workspace <selector>|--project <id> [--host <id>]|--project-host-setup <id>] [--json]\n       dobius automations create --loop --goal <text> --max-iterations <n> [--stop-when <command>] [--card <id-or-title>] [--workspace <selector>] [--name <name>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'name',
       'prompt',
       'provider',
+      'loop',
+      ...AUTOMATION_LOOP_FLAGS,
       ...AUTOMATION_PRECHECK_FLAGS,
       ...AUTOMATION_TARGET_FLAGS,
       ...AUTOMATION_SCHEDULE_FLAGS,
@@ -59,9 +68,11 @@ export const AUTOMATION_COMMAND_SPECS: CommandSpec[] = [
       'Use --source-context with a JSON TaskSourceContext when task/provider data should come from a specific host/account; pass null on edit to clear it.',
       'Use --workspace to run in an existing worktree; otherwise the automation creates a new worktree per run.',
       'Use --precheck to run a bounded command before scheduled runs; exit code 0 continues, anything else records a skipped run.',
-      'Use --reuse-session only with existing-workspace automations to submit later runs to the previous live automation session when it is still available. Use --fresh-session to disable reuse.'
+      'Use --reuse-session only with existing-workspace automations to submit later runs to the previous live automation session when it is still available. Use --fresh-session to disable reuse.',
+      ...LOOP_NOTES
     ],
     examples: [
+      'dobius automations create --loop --goal "All tests pass" --max-iterations 5 --stop-when "pnpm test" --card "Builder 1" --json',
       'dobius automations create --name "Daily review" --trigger daily --prompt "Review open changes" --provider codex',
       'dobius automations create --name "Weekday triage" --trigger "0 9 * * 1-5" --prompt "Triage issues" --provider claude --repo my-repo',
       'dobius automations create --name "PR review" --trigger hourly --precheck "gh pr list --json number -q .[0].number" --prompt "Review requested PRs" --provider codex'
@@ -70,13 +81,18 @@ export const AUTOMATION_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['automations', 'edit'],
     summary: 'Edit an Dobius automation',
-    usage: 'dobius automations edit <id> [--name <name>] [--trigger <preset|cron|rrule>] [--json]',
+    usage:
+      'dobius automations edit <id> [--name <name>] [--trigger <preset|cron|rrule>] [--goal <text>] [--max-iterations <n>] [--stop-when <command>] [--card <id-or-title>] [--json]',
+    notes: [
+      '--goal, --max-iterations (at most 50), --stop-when and --card change an existing goal loop (see `dobius automations create --help`). Pass --stop-when "" to remove the stop command.'
+    ],
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'id',
       'name',
       'prompt',
       'provider',
+      ...AUTOMATION_LOOP_FLAGS,
       ...AUTOMATION_PRECHECK_FLAGS,
       ...AUTOMATION_TARGET_FLAGS,
       ...AUTOMATION_SCHEDULE_FLAGS,

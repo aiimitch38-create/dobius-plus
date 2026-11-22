@@ -35,6 +35,10 @@ import {
   getRequiredStringFlag
 } from '../flags'
 import { RuntimeClientError } from '../runtime-client'
+import { safeText } from '../safe-text'
+import { getLoopCreateFlags, getLoopUpdateFlags, isLoopCreate } from './automation-loop-flags'
+import type { LoopUpdateFlags } from './automation-loop-flags'
+import { LOOP_PLACEHOLDER_RRULE } from '../../shared/automation-loops'
 import { getOptionalWorktreeSelector, resolveCurrentWorktreeSelector } from '../selectors'
 import {
   assertWorkspaceTargetFlagsCompatible,
@@ -48,9 +52,10 @@ type AutomationCreateParams = Omit<AutomationCreateInput, 'projectId' | 'timezon
   workspace?: string
 }
 
-type AutomationUpdateParams = AutomationUpdateInput & {
+type AutomationUpdateParams = Omit<AutomationUpdateInput, 'loop'> & {
   repo?: string
   workspace?: string
+  loop?: LoopUpdateFlags
 }
 
 const PRESET_TRIGGERS = new Set<AutomationSchedulePreset>(['hourly', 'daily', 'weekdays', 'weekly'])
@@ -433,6 +438,28 @@ export const AUTOMATION_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, formatAutomationShow)
   },
   'automations create': async ({ flags, client, cwd, json }) => {
+    if (isLoopCreate(flags)) {
+      const loop = getLoopCreateFlags(flags)
+      const target = await resolveDefaultTarget(flags, cwd, client)
+      const name = getOptionalStringFlag(flags, 'name') ?? `Loop: ${loop.goal.slice(0, 60)}`
+      const result = await client.call<{ automation: Automation }>('automation.create', {
+        name,
+        // Why the goal as prompt: a goal loop sends the goal itself; the
+        // prompt field is required by every automation, so it carries it too.
+        prompt: getOptionalStringFlag(flags, 'prompt') ?? loop.goal,
+        agentId: getOptionalProviderFlag(flags) ?? 'claude',
+        workspace: target.workspace,
+        workspaceMode: 'existing',
+        timezone: getOptionalStringFlag(flags, 'timezone'),
+        enabled: getEnabledFlag(flags),
+        // Placeholder: a loop never fires on a schedule.
+        rrule: LOOP_PLACEHOLDER_RRULE,
+        dtstart: Date.now(),
+        loop
+      })
+      printResult(result, json, (value) => safeText(formatAutomationShow(value)))
+      return
+    }
     const schedule = getScheduleFlag(flags, true)
     if (!schedule) {
       throw new RuntimeClientError('invalid_argument', 'Missing required --trigger')
@@ -464,9 +491,11 @@ export const AUTOMATION_HANDLERS: Record<string, CommandHandler> = {
     const target = await getExplicitTarget(flags, cwd, client)
     const schedule = getScheduleFlag(flags, false)
     const sourceContext = getSourceContextFlag(flags)
+    const loop = getLoopUpdateFlags(flags)
     const result = await client.call<{ automation: Automation }>('automation.update', {
       id: getRequiredStringFlag(flags, 'id'),
       updates: {
+        ...(loop ? { loop } : {}),
         name: getOptionalStringFlag(flags, 'name'),
         prompt: getOptionalStringFlag(flags, 'prompt'),
         precheck: getPrecheckFlag(flags),

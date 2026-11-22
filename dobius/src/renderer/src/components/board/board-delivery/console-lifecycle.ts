@@ -1,5 +1,6 @@
 import { toast } from 'sonner'
 import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
+import type { CloseTerminalTabOptions } from '@/components/terminal/terminal-tab-actions'
 import { translate } from '@/i18n/i18n'
 import { getAgentLabel } from '@/lib/agent-catalog'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
@@ -122,7 +123,7 @@ export function restartConsole(
   // the Settings default args (which skip permissions) or another agent.
   const restricted = restrictedLaunchFor(worktreeId)
   if (restricted) {
-    return relaunchInNewTab(worktreeId, card, 'claude', restricted.command, restricted.args, undefined)
+    return relaunchInNewTab(worktreeId, card, 'claude', restricted.command, restricted.args, undefined) !== null
   }
   const next = agent ?? agentOrDefault(card.agentKind)
   // Why: a plain restart of a pinned console must stay on its account; falling
@@ -146,7 +147,50 @@ export function restartConsole(
     return true
   }
   const accountId = launch?.agentCommandOverride ? (launch.accountId ?? undefined) : undefined
-  return relaunchInNewTab(worktreeId, card, next, launch?.agentCommandOverride, undefined, accountId)
+  return relaunchInNewTab(worktreeId, card, next, launch?.agentCommandOverride, undefined, accountId) !== null
+}
+
+export type RestartAndWaitOptions = {
+  /** Passed to the old tab's close (force: skip the pinned-tab dialog). */
+  closeOldTab?: CloseTerminalTabOptions
+  /** Checked right before launching; false = the card changed, launch nothing. */
+  stillCurrent?: () => boolean
+}
+
+/**
+ * restartConsole for `dobius board restart`: the same launch choices (restricted
+ * bug-fix profile, pinned account), but it resolves only once the restart is
+ * finished (new tab saved, old tab closed), so the caller can hold its lock
+ * for the whole operation. False when nothing was launched.
+ */
+export async function restartConsoleAndWait(
+  worktreeId: string,
+  card: Console,
+  options: RestartAndWaitOptions = {}
+): Promise<boolean> {
+  const current = options.stillCurrent ?? (() => true)
+  const restricted = restrictedLaunchFor(worktreeId)
+  let launch: [TuiAgent, string | undefined, string | undefined, string | undefined]
+  if (restricted) {
+    launch = ['claude', restricted.command, restricted.args, undefined]
+  } else {
+    const next = agentOrDefault(card.agentKind)
+    if (card.accountId && next === card.agentKind) {
+      const pinned = await resolvePinnedAgentCommand(worktreeId, next, card.accountId)
+      launch = [next, pinned.command, undefined, card.accountId]
+    } else {
+      launch = [next, undefined, undefined, undefined]
+    }
+  }
+  if (!current()) {
+    return false
+  }
+  const done = relaunchInNewTab(worktreeId, card, ...launch, options.closeOldTab)
+  if (!done) {
+    return false
+  }
+  await done
+  return true
 }
 
 function relaunchInNewTab(
@@ -155,8 +199,9 @@ function relaunchInNewTab(
   next: TuiAgent,
   agentCommandOverride: string | undefined,
   agentArgs: string | undefined,
-  accountId: string | undefined
-): boolean {
+  accountId: string | undefined,
+  closeOldTab?: CloseTerminalTabOptions
+): Promise<void> | null {
   const launched = launchAgentInNewTab({
     agent: next,
     worktreeId,
@@ -167,7 +212,7 @@ function relaunchInNewTab(
     ...(agentArgs !== undefined ? { agentArgs } : {})
   })
   if (!launched?.tabId) {
-    return false
+    return null
   }
   const oldTab = card.tabId
   markConsolePaused(oldTab, false)
@@ -178,9 +223,9 @@ function relaunchInNewTab(
   // first, then close the old one, so a CLI send in between never lands in the
   // terminal being closed (it reads "not running" until the new one starts).
   // If main refused the save it still points at the old tab, so that tab stays.
-  void flushBoardPersistence().then(
-    () => closeTerminalTab(oldTab),
-    (error: unknown) =>
+  return flushBoardPersistence().then(
+    () => (closeOldTab ? closeTerminalTab(oldTab, closeOldTab) : closeTerminalTab(oldTab)),
+    (error: unknown) => {
       toast.error(
         translate(
           'board.console.restartSaveFailed',
@@ -188,8 +233,8 @@ function relaunchInNewTab(
           { name: card.title, reason: error instanceof Error ? error.message : String(error) }
         )
       )
+    }
   )
-  return true
 }
 
 /** True when the console has ended: tab gone or back at a bare shell. */

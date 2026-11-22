@@ -1,3 +1,5 @@
+import type { BoardCardActionReply, BoardCardActionRequest } from '../shared/board-card-actions'
+import type { TabSnoozeCliReply, TabSnoozeCliRequest } from '../shared/tab-snooze-cli'
 import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
 import type {
   RuntimeBoardOpenWebTileEvent,
@@ -3655,6 +3657,24 @@ const api = {
       error?: string
     }): void => {
       ipcRenderer.send('board:openWebTileReply', reply)
+    },
+    onBoardCardAction: (callback: (event: BoardCardActionRequest) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: BoardCardActionRequest) =>
+        callback(data)
+      ipcRenderer.on('ui:boardCardAction', listener)
+      return () => ipcRenderer.removeListener('ui:boardCardAction', listener)
+    },
+    replyBoardCardAction: (reply: BoardCardActionReply): void => {
+      ipcRenderer.send('board:cardActionReply', reply)
+    },
+    onTabSnoozeRequest: (callback: (event: TabSnoozeCliRequest) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: TabSnoozeCliRequest) =>
+        callback(data)
+      ipcRenderer.on('ui:tabSnoozeRequest', listener)
+      return () => ipcRenderer.removeListener('ui:tabSnoozeRequest', listener)
+    },
+    replyTabSnoozeRequest: (reply: TabSnoozeCliReply): void => {
+      ipcRenderer.send('tabSnooze:cliReply', reply)
     },
     onAgentCursor: (callback: (event: AgentCursorEvent) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: AgentCursorEvent) => callback(data)

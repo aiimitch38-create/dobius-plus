@@ -14,6 +14,7 @@ export type SnoozeTabOutcome =
   | 'needs-confirm'
   | 'missing'
   | 'tab-gone'
+  | 'in-progress'
   | 'split-panes'
   | 'unavailable'
   | Extract<SnoozeTabResult, { ok: false }>['reason']
@@ -55,11 +56,33 @@ function findTerminalTab(state: SnoozeState, tabId: string) {
  * alive, and a tab that went away while main was saving does not keep its
  * entry (it was closed for real, not snoozed).
  */
+// Why one lock for the menu and `dobius tabs snooze`: two snoozes of one tab
+// would both save it, and the second, finding the tab closed, would discard
+// the entry (and conversation) the first just saved.
+const snoozingTabs = new Set<string>()
+
 export async function runTabSnooze(
   deps: SnoozeTabDeps,
   tabId: string,
   until: number | null,
   options: { confirmed?: boolean } = {}
+): Promise<SnoozeTabOutcome> {
+  if (snoozingTabs.has(tabId)) {
+    return 'in-progress'
+  }
+  snoozingTabs.add(tabId)
+  try {
+    return await snoozeTabOnce(deps, tabId, until, options)
+  } finally {
+    snoozingTabs.delete(tabId)
+  }
+}
+
+async function snoozeTabOnce(
+  deps: SnoozeTabDeps,
+  tabId: string,
+  until: number | null,
+  options: { confirmed?: boolean }
 ): Promise<SnoozeTabOutcome> {
   const done = (outcome: SnoozeTabOutcome): SnoozeTabOutcome => {
     deps.notify(outcome)
@@ -106,6 +129,12 @@ export async function runTabSnooze(
 
 function notifySnoozeOutcome(outcome: SnoozeTabOutcome): void {
   switch (outcome) {
+    // Nothing to show: the confirm dialog, or the missing tab, says it all.
+    case 'needs-confirm':
+    case 'missing':
+    case 'tab-gone':
+    case 'in-progress':
+      return
     case 'snoozed':
       toast.success(translate('lib.tabSnooze.snoozed', 'Tab snoozed. It waits in the sidebar.'))
       return
@@ -136,11 +165,29 @@ function notifySnoozeOutcome(outcome: SnoozeTabOutcome): void {
     case 'invalid':
     case 'unavailable':
       toast.error(translate('lib.tabSnooze.failed', 'This tab could not be snoozed.'))
-      return
-    case 'needs-confirm':
-    case 'missing':
-    case 'tab-gone':
-      return
+  }
+}
+
+/** The app's own snooze wiring; `dobius tabs snooze` reuses it (snooze-tab-cli-event.ts). */
+export function snoozeTerminalTabDeps(): SnoozeTabDeps {
+  return {
+    getState: () => useAppStore.getState(),
+    captureOutput: (id) => {
+      try {
+        shutdownBufferCaptures.get(id)?.({ includeLocalBuffers: true })
+      } catch (err) {
+        // Why not fatal: the tab still snoozes, with whatever output the session last saved.
+        console.warn('[tab-snooze] output capture failed:', err)
+      }
+    },
+    collectAgentSessions: (worktreeId) =>
+      collectSleepingAgentSessionRecordsForWorktree(useAppStore.getState(), worktreeId, {
+        captureMode: 'manual-worktree-sleep'
+      }),
+    api: window.api.tabSnooze,
+    // Why force: a pinned tab keeps its pin in the entry and comes back pinned.
+    closeTab: (id) => closeTerminalTab(id, { force: true }),
+    notify: notifySnoozeOutcome
   }
 }
 
@@ -149,28 +196,5 @@ export function snoozeTerminalTab(
   until: number | null,
   options: { confirmed?: boolean } = {}
 ): Promise<SnoozeTabOutcome> {
-  return runTabSnooze(
-    {
-      getState: () => useAppStore.getState(),
-      captureOutput: (id) => {
-        try {
-          shutdownBufferCaptures.get(id)?.({ includeLocalBuffers: true })
-        } catch (err) {
-          // Why not fatal: the tab still snoozes, with whatever output the session last saved.
-          console.warn('[tab-snooze] output capture failed:', err)
-        }
-      },
-      collectAgentSessions: (worktreeId) =>
-        collectSleepingAgentSessionRecordsForWorktree(useAppStore.getState(), worktreeId, {
-          captureMode: 'manual-worktree-sleep'
-        }),
-      api: window.api.tabSnooze,
-      // Why force: a pinned tab keeps its pin in the entry and comes back pinned.
-      closeTab: (id) => closeTerminalTab(id, { force: true }),
-      notify: notifySnoozeOutcome
-    },
-    tabId,
-    until,
-    options
-  )
+  return runTabSnooze(snoozeTerminalTabDeps(), tabId, until, options)
 }

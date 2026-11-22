@@ -50,3 +50,8 @@ export function releaseSnoozedTabReturn(owner: AgentResumeOwner): boolean {
 export function discardSnoozedTabsForWorktree(worktreeId: string): void {
   activeService?.discardWorktree(worktreeId)
 }
+
+/** For `dobius tabs snoozed|unsnooze` (main/runtime/rpc/methods/tab-snooze.ts). */
+export function getActiveTabSnoozeService(): TabSnoozeService | null {
+  return activeService
+}
