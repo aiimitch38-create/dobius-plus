@@ -77,6 +77,7 @@ export class RpcDispatcher {
       signal?: AbortSignal
       authenticatedLocal?: true
       authenticatedLocalSocket?: true
+      agentKey?: true
       adamPeerEvidence?: object
       localPreviewConnection?: LocalCatalogPreviewConnection
     }
@@ -123,6 +124,7 @@ export class RpcDispatcher {
         dataCatalog: this.dataCatalog,
         authenticatedLocal: options?.authenticatedLocal,
         authenticatedLocalSocket: options?.authenticatedLocalSocket,
+        agentKey: options?.agentKey,
         catalogPreviewPrincipal: options?.localPreviewConnection
           ? localWebContentsPreviewPrincipal(this.runtime, options.localPreviewConnection)
           : undefined,

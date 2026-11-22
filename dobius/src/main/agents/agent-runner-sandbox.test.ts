@@ -55,7 +55,7 @@ vi.mock('./agent-hard-rails', () => ({ buildAgentHardRailHooks: vi.fn(() => ({})
 vi.mock('./agent-notification-store', () => ({ appendAgentRunNotification: vi.fn() }))
 vi.mock('./agent-run-progress-log', () => ({ appendRunProgress: vi.fn() }))
 vi.mock('./agent-runner-environment', () => ({
-  buildRunEnv: vi.fn(() => ({})),
+  buildRunEnv: vi.fn(() => ({ DOBIUS_RUNTIME_SCOPE: 'agent' })),
   currentGitBranch: vi.fn(() => 'main'),
   resolveAgentRunCwd: (cwd: string) => cwd
 }))
@@ -69,6 +69,7 @@ import { buildAgentHardRailHooks } from './agent-hard-rails'
 import { setAgentSandboxEnabledReader } from './agent-sandbox-context'
 
 type CapturedOptions = {
+  env?: Record<string, string | undefined>
   sandbox?: {
     enabled?: boolean
     allowUnsandboxedCommands?: boolean
@@ -158,6 +159,8 @@ describe('startAgentRun sandbox (SDK query arguments)', () => {
     const options = await launch(undefined)
     expect(options.permissionMode).toBe('bypassPermissions')
     expectConfined(options)
+    // Still kernel-sandboxed, so it keeps the limited agent-key marker.
+    expect(options.env?.DOBIUS_RUNTIME_SCOPE).toBe('agent')
   })
 
   it('does not start the run when the sandbox policy cannot be built', async () => {
@@ -181,6 +184,8 @@ describe('startAgentRun sandbox (SDK query arguments)', () => {
     try {
       const options = await launch(undefined)
       expect(options.sandbox).toBeUndefined()
+      // Fully trusted: no agent-key marker.
+      expect(options.env?.DOBIUS_RUNTIME_SCOPE).toBeUndefined()
       expect(options.disallowedTools).toContain('Read(~/.dobius/agents/nova/**)')
       expect(options.disallowedTools).toContain('Bash(security find-generic-password:*)')
       expect(vi.mocked(buildAgentHardRailHooks)).toHaveBeenLastCalledWith(

@@ -36,7 +36,8 @@ describe('runtime RPC auth token checks (#22)', () => {
       expect(result.error?.error?.code).toBe('unauthorized')
     }
     expect(constantTimeEqual).toHaveBeenCalledWith('a', authToken)
-    expect(constantTimeEqual).toHaveBeenCalledTimes(3)
+    // Each guess is compared against both the full key and the agent key.
+    expect(constantTimeEqual).toHaveBeenCalledTimes(6)
 
     const ok = parseAndAuth(JSON.stringify({ id: '2', method: 'status.get', authToken }))
     expect(ok.error).toBeUndefined()

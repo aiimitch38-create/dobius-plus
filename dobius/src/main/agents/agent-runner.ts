@@ -20,6 +20,7 @@ import {
 } from './agent-decision-queue'
 import { buildAgentHardRailHooks } from './agent-hard-rails'
 import { resolveAgentRunSandboxPolicy } from './agent-sandbox-context'
+import { DOBIUS_RUNTIME_SCOPE_ENV } from '../../shared/runtime-bootstrap'
 import {
   createHeadlessCanUseTool,
   forgetPermissionDenials,
@@ -458,6 +459,12 @@ export async function startAgentRun(args: {
       claudeConfigDir: preparation.configDir,
       claudeExecutable: options.pathToClaudeCodeExecutable
     }))
+    // Why: with the kernel sandbox switched off (Settings > Agents) nothing
+    // stops the run's commands from reading the full runtime key, so the run
+    // is fully trusted and gets no pretend agent-key marker.
+    if (!options.sandbox && options.env) {
+      delete options.env[DOBIUS_RUNTIME_SCOPE_ENV]
+    }
     const source = args.options?.source ?? 'manual'
     // Only a person who pressed Run on the Agents page watches the decision
     // queue. Every other run (heartbeat, Asana, iMessage, workflows, RPC/CLI,

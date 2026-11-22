@@ -1251,6 +1251,12 @@ describe('registerPtyHandlers', () => {
       expect(env.LANG).toBe('fr_FR.UTF-8')
     })
 
+    it('keeps interactive terminals on the full runtime key (no agent scope marker)', async () => {
+      const env = await spawnAndGetEnv()
+      expect(env.DOBIUS_RUNTIME_SCOPE).toBeUndefined()
+      expect(Object.keys(env).filter((key) => /AUTH_?TOKEN|RUNTIME_TOKEN/i.test(key))).toEqual([])
+    })
+
     it('always sets TERM and COLORTERM regardless of env', async () => {
       const env = await spawnAndGetEnv()
       expect(env.TERM).toBe('xterm-256color')
