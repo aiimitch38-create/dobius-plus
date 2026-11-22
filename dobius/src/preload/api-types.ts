@@ -403,6 +403,7 @@ import type {
 import type {
   ElevenLabsKeyStatus,
   AdamTurnEvent,
+  AdamLookingAt,
   AdamTurnSource,
   JarvisAskResult,
   JarvisSpeakOutcome,
@@ -3327,8 +3328,8 @@ export type PreloadApi = {
   jarvis: {
     /** Toggles system-wide ⌘T Jarvis mode; persists voice.jarvisEnabled on success. */
     setMode: (on: boolean) => Promise<{ ok: boolean }>
-    /** `threadId` is the Board thread (repo id) on screen, so the turn is written there. */
-    ask: (utterance: string, threadId?: string | null) => Promise<JarvisAskResult>
+    /** `lookingAt` is the project on screen when the capture started. */
+    ask: (utterance: string, lookingAt?: AdamLookingAt | null) => Promise<JarvisAskResult>
     speak: (text: string) => Promise<JarvisSpeakOutcome>
     openOrb: () => Promise<{ ok: boolean; windowId?: number }>
     /** Fires the same pressed/released broadcast the global ⌘T shortcut fires,
@@ -3379,11 +3380,7 @@ export type PreloadApi = {
     liveSessionConnect: (offerSdp: string) => Promise<OpenAiLiveSessionResult>
     /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
     cancelAsk: () => Promise<{ ok: true }>
-    askAdamText: (
-      utterance: string,
-      source?: AdamTurnSource,
-      threadId?: string | null
-    ) => Promise<JarvisAskResult>
+    askAdamText: (utterance: string, source?: AdamTurnSource) => Promise<JarvisAskResult>
     /** Every accepted ADAM turn, voice or typed: the words asked, then the reply. */
     onAdamTurn: (callback: (event: AdamTurnEvent) => void) => () => void
     onState: (callback: (event: JarvisStateEvent) => void) => () => void

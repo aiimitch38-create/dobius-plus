@@ -48,16 +48,14 @@ const OLD_ERROR = /planner is not answering/i
 let root: Root
 let container: HTMLDivElement
 let rows: Row[]
-let rowsByRepo: Record<string, Row[]>
 let thinking: string[]
-let thinkingRepos: (string | null)[]
 let repoId: string
 let run: (text: string) => Promise<void>
 let busy: boolean
 const conductorCommand = vi.fn()
 const conductorReply = vi.fn()
 const askAdamText =
-  vi.fn<(utterance: string, source?: string, threadId?: string | null) => Promise<JarvisAskResult>>()
+  vi.fn<(utterance: string, source?: string) => Promise<JarvisAskResult>>()
 
 function Harness({ earlier }: { earlier: BoardThreadMessage[] }): null {
   const conductor = {
@@ -65,13 +63,8 @@ function Harness({ earlier }: { earlier: BoardThreadMessage[] }): null {
     append: (message: Row) => rows.push(message),
     appendReport: vi.fn(),
     clearThread: vi.fn(),
-    appendTo: (target: string | null, message: Row) => {
-      rows.push(message)
-      ;(rowsByRepo[String(target)] ??= []).push(message)
-    },
-    showThinkingIn: (target: string | null, text: string) => {
+    showThinking: (text: string) => {
       thinking.push(text)
-      thinkingRepos.push(target)
       return () => thinking.splice(thinking.indexOf(text), 1)
     }
   } satisfies BoardConductor
@@ -92,9 +85,7 @@ function mount(earlier: BoardThreadMessage[] = []): void {
 
 beforeEach(() => {
   rows = []
-  rowsByRepo = {}
   thinking = []
-  thinkingRepos = []
   repoId = 'repo-1'
   conductorCommand.mockReset()
   conductorReply.mockReset()
@@ -122,7 +113,7 @@ describe('useBoardPlanner: talk goes to Hermes ADAM', () => {
     expect(askAdamText).toHaveBeenCalledTimes(1)
     // The Voice Conductor is no longer part of the Board.
     expect(conductorCommand).not.toHaveBeenCalled()
-    expect(askAdamText.mock.calls[0].slice(1)).toEqual(['thread', 'repo-1'])
+    expect(askAdamText.mock.calls[0].slice(1)).toEqual(['thread'])
     const sent = askAdamText.mock.calls[0][0]
     const block = (tag: string) => JSON.parse(sent.split(`<${tag}>\n`)[1].split(`\n</${tag}>`)[0])
     const context = block('untrusted_context')
@@ -195,8 +186,8 @@ describe('useBoardPlanner: talk goes to Hermes ADAM', () => {
   })
 })
 
-describe('useBoardPlanner: one message at a time, in the thread it came from', () => {
-  it('puts the reply and the thinking row in the thread the message was sent from', async () => {
+describe('useBoardPlanner: one message at a time', () => {
+  it('tells ADAM the project that was on screen at submit, and keeps the reply after a project switch', async () => {
     let answer: (result: JarvisAskResult) => void = () => {}
     askAdamText.mockReturnValue(new Promise((resolve) => (answer = resolve)))
     mount()
@@ -212,9 +203,15 @@ describe('useBoardPlanner: one message at a time, in the thread it came from', (
       answer({ kind: 'answer', text: 'Hi.' })
       await pending
     })
-    expect(thinkingRepos).toEqual(['repo-1'])
-    expect(rowsByRepo['repo-1'].map((row) => row.text)).toEqual(['hello from dobius', 'Hi.'])
-    expect(rowsByRepo['repo-2']).toBeUndefined()
+    expect(rows.map((row) => row.text)).toEqual(['hello from dobius', 'Hi.'])
+    const sent = askAdamText.mock.calls[0][0]
+    const context = JSON.parse(
+      sent.split('<untrusted_context>\n')[1].split('\n</untrusted_context>')[0]
+    )
+    expect(context.carson_is_looking_at).toMatchObject({
+      project: 'dobius-plus',
+      folder: '/Users/c/code/dobius-plus'
+    })
   })
 
   it('is busy from submit until ADAM is done, and refuses a second message in the same tick', async () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { BoardThreadMessage } from '../board-command-bar/BoardThread'
 import {
   BOARD_THREAD_HISTORY_CAP,
-  boardThreadStorageKey,
+  ADAM_THREAD_STORAGE_KEY,
   deserializeBoardThread,
   serializeBoardThread
 } from './board-thread-persistence'
@@ -11,9 +11,9 @@ function message(id: string, extra: Partial<BoardThreadMessage> = {}): BoardThre
   return { id, role: 'user', text: `text-${id}`, ...extra }
 }
 
-describe('boardThreadStorageKey', () => {
-  it('namespaces by repo id', () => {
-    expect(boardThreadStorageKey('repo-1')).toBe('dobius.board.thread.v1.repo-1')
+describe('ADAM_THREAD_STORAGE_KEY', () => {
+  it('is one key for every project, apart from the old per-project keys', () => {
+    expect(ADAM_THREAD_STORAGE_KEY).toBe('dobius.adam.thread.v1')
   })
 })
 

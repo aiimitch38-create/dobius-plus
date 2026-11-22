@@ -35,8 +35,7 @@ function Harness(): null {
     append: (message) => rows.push(message),
     appendReport: vi.fn(),
     clearThread: vi.fn(),
-    appendTo: vi.fn(),
-    showThinkingIn: () => () => {}
+    showThinking: () => () => {}
   } satisfies BoardConductor
   onCommand = useBoardCommand(data, conductor, planner)
   return null

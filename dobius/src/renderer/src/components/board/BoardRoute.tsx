@@ -93,7 +93,7 @@ export default function BoardRoute(): React.JSX.Element {
     (s) => s.dictationState === 'listening' || s.dictationState === 'starting'
   )
 
-  const conductor = useBoardConductor(data.repoId)
+  const conductor = useBoardConductor()
   const selection = useBoardSelection(worktreeId, board.tool)
   const pen = useBoardPen(worktreeId, board.viewport)
   // Why: `board` above ignores card geometry (board-shape.ts) so a drag never

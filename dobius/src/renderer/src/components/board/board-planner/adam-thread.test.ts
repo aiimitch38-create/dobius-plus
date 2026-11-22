@@ -115,6 +115,11 @@ describe('buildAdamThreadMessage', () => {
     expect(header).toContain('dobius board send --card')
     expect(header).toContain('dobius board spawn-console --help')
     expect(header).toContain('approval box')
+    // Relaying is his job, across every project, and he reports back in his one thread.
+    expect(header).toContain('Passing work on is your job')
+    expect(header).toContain('dobius terminal read --help')
+    expect(header).toContain('what you sent to which console in which project')
+    expect(header).toContain('the same in every project')
   })
 
   it('includes every open project board, with consoles and state', () => {

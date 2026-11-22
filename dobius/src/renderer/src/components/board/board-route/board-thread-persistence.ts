@@ -1,13 +1,12 @@
 import type { BoardThreadMessage } from '../board-command-bar/BoardThread'
 
-// Why: per-repo thread history persists across tab switches within that repo
-// (DEEP-BEHAVIOR-SPEC §4) but must never grow unbounded, carry closures
+// Why: ADAM's thread persists across projects and restarts but must never grow unbounded, carry closures
 // (`action.onClick`), or resurrect a "thinking" placeholder on reload.
 export const BOARD_THREAD_HISTORY_CAP = 200
 
-export function boardThreadStorageKey(repoId: string): string {
-  return `dobius.board.thread.v1.${repoId}`
-}
+// ADAM has one thread for every project. The older per-project threads
+// (`dobius.board.thread.v1.<repoId>`) are left in storage untouched and are no longer shown.
+export const ADAM_THREAD_STORAGE_KEY = 'dobius.adam.thread.v1'
 
 /** Only the fields that can round-trip through JSON; drops action callbacks and transient rows. */
 export type PersistedBoardThreadMessage = Pick<

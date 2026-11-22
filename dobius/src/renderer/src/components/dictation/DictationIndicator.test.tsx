@@ -94,7 +94,9 @@ beforeEach(() => {
     getInputLevel: vi.fn(() => 0.6),
     getOutputLevel: vi.fn(() => 0.8)
   }
-  window.api = { jarvis: { onPttPressed: vi.fn(() => vi.fn()) } } as unknown as typeof window.api
+  window.api = {
+    jarvis: { onPttPressed: vi.fn(() => vi.fn()), onAdamTurn: vi.fn(() => vi.fn()) }
+  } as unknown as typeof window.api
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)

@@ -8,7 +8,8 @@ import {
   type JarvisCaptureControls
 } from './jarvis-capture-controls'
 import { createStoppedSessionTracker } from './jarvis-stopped-sessions-tracker'
-import { activeBoardThreadId } from '../board/board-route/adam-voice-thread'
+import { currentlyLookingAt } from '../board/board-route/adam-voice-thread'
+import type { AdamLookingAt } from '../../../../shared/speech-types'
 import { useJarvisVoiceSettings } from './use-jarvis-voice-settings'
 import { useJarvisSpeechEvents } from './use-jarvis-speech-events'
 import { startJarvisTurnSession } from './start-jarvis-turn-session'
@@ -74,6 +75,8 @@ export function useJarvisTurn(): JarvisTurn {
   const ambientHandleRef = useRef<JarvisAmbientSessionHandle | null>(null)
   const armedTimerRef = useRef<number | null>(null)
   const errorTimerRef = useRef<number | null>(null)
+  // The project on screen when this capture started; Carson may switch before the words are transcribed.
+  const lookingAtRef = useRef<AdamLookingAt | null>(null)
   // Why bumped: after a manual turn ends, the ambient session may need to be
   // restarted (it was deferred while the turn owned the mic).
   const [sessionEpoch, setSessionEpoch] = useState(0)
@@ -139,7 +142,7 @@ export function useJarvisTurn(): JarvisTurn {
     async (utterance: string): Promise<void> => {
       setPhase('thinking')
       try {
-        const result = await window.api.jarvis.ask(utterance, activeBoardThreadId())
+        const result = await window.api.jarvis.ask(utterance, lookingAtRef.current)
         if (result.kind === 'cancelled') {
           return
         }
@@ -269,9 +272,11 @@ export function useJarvisTurn(): JarvisTurn {
       // Ambient capture already feeds the STT worker — mark the next final as
       // ours rather than starting a competing session.
       registry.grabActive.current = !registry.grabActive.current
+      lookingAtRef.current = currentlyLookingAt()
       setPhase(registry.grabActive.current ? 'listening' : 'idle')
       return
     }
+    lookingAtRef.current = currentlyLookingAt()
     startTurn()
   }, [registry, setPhase, startTurn, stopSessionCleanly])
 

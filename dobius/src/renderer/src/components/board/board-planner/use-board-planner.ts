@@ -4,7 +4,6 @@ import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { consoleDeliveryState } from '../board-delivery/board-delivery'
 import { onMissionEvent } from '../board-delivery/mission-tracker'
-import type { BoardThreadMessage } from '../board-command-bar/BoardThread'
 import type { BoardConductor } from '../board-route/use-board-conductor'
 import type { BoardRouteData } from '../board-route/use-board-route-data'
 import {
@@ -44,7 +43,7 @@ export function useBoardPlanner(input: {
   projectName: string
 }): BoardPlannerRun {
   const { data, conductor, context, projectName } = input
-  const { append, appendReport, appendTo, showThinkingIn } = conductor
+  const { append, appendReport, showThinking } = conductor
   // Why a ref and a state: the ref refuses a second run in the same tick; the state greys the composer.
   const running = useRef(false)
   const [busy, setBusy] = useState(false)
@@ -94,11 +93,11 @@ export function useBoardPlanner(input: {
   )
 
   const handle = useCallback(
-    async (text: string, repoId: string | null, say: (message: NewMessage) => void) => {
+    async (text: string) => {
       const worktreeId = data.worktreeId
-      say({ role: 'user', text })
+      append({ role: 'user', text })
       if (!worktreeId) {
-        say({
+        append({
           role: 'system',
           tone: 'error',
           text: translate('board.spawn.noWorkspace', 'Open a workspace before spawning consoles.')
@@ -118,12 +117,12 @@ export function useBoardPlanner(input: {
       )
       const askAdam = (): Promise<void> =>
         talkToAdam({
-          transport: hermesAdamTransport(repoId),
+          transport: hermesAdamTransport,
           context: adamContext(projectName, board.workspace, worktreeId),
           turns,
           utterance: text,
-          append: say,
-          showThinking: (label) => showThinkingIn(repoId, label)
+          append,
+          showThinking
         })
       const outcome = builtInCommand(text, board)
       // Why: ADAM is the only brain. The app runs its own short commands; every
@@ -147,12 +146,12 @@ export function useBoardPlanner(input: {
           confirmLabel: translate('board.plan.didYouMeanAction', 'Use {{name}}', { name: to })
         })
         if (!ok) {
-          say({ role: 'system', text: translate('board.plan.notSent', 'Nothing was sent.') })
+          append({ role: 'system', text: translate('board.plan.notSent', 'Nothing was sent.') })
           return
         }
         const fixed = validatePlan(withPlanTarget(outcome.raw, outcome.suggestion), board)
         if (!fixed.ok) {
-          say({
+          append({
             role: 'system',
             tone: 'error',
             text: translate('board.plan.rejected', 'I could not make a valid plan: {{reason}}', {
@@ -176,7 +175,7 @@ export function useBoardPlanner(input: {
           confirmVariant: concerns.some((c) => c.kind === 'destructive') ? 'destructive' : 'default'
         })
         if (!ok) {
-          say({ role: 'system', text: translate('board.plan.notSent', 'Nothing was sent.') })
+          append({ role: 'system', text: translate('board.plan.notSent', 'Nothing was sent.') })
           return
         }
       }
@@ -185,10 +184,11 @@ export function useBoardPlanner(input: {
         ...terminalEffects(worktreeId, confirm)
       })
       for (const r of results) {
-        say({ role: 'system', ...(r.ok ? {} : { tone: 'error' as const }), text: r.text })
+        append({ role: 'system', ...(r.ok ? {} : { tone: 'error' as const }), text: r.text })
       }
     },
     [
+      append,
       confirm,
       conductor.messages,
       context,
@@ -196,20 +196,16 @@ export function useBoardPlanner(input: {
       data.workspaces,
       data.worktreeId,
       projectName,
-      showThinkingIn
+      showThinking
     ]
   )
 
   const run = useCallback(
     async (text: string) => {
-      // Why captured here: the reply belongs to the thread it was sent from, even if Carson
-      // has switched projects by the time it lands.
-      const repoId = data.repoId
-      const say = (message: NewMessage): void => appendTo(repoId, message)
       // Why checked before any await: two submits in one tick must not both reach ADAM,
       // who runs one Hermes turn at a time.
       if (running.current) {
-        say({
+        append({
           role: 'system',
           text: translate(
             'board.adam.stillThinking',
@@ -221,19 +217,17 @@ export function useBoardPlanner(input: {
       running.current = true
       setBusy(true)
       try {
-        await handle(text, repoId, say)
+        await handle(text)
       } finally {
         running.current = false
         setBusy(false)
       }
     },
-    [appendTo, data.repoId, handle]
+    [append, handle]
   )
 
   return { run, busy }
 }
-
-type NewMessage = Omit<BoardThreadMessage, 'id'>
 
 /** What ADAM is told: the board on screen, plus every other open board across projects. */
 function adamContext(projectName: string, workspace: string, worktreeId: string): AdamThreadContext {

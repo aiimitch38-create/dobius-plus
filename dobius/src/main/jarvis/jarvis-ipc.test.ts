@@ -187,9 +187,28 @@ describe('Adam Hermes voice routing', () => {
   it('uses one Hermes client for direct Jarvis turns and live-agent text tools', async () => {
     const { store } = fakeStore(true)
     const main = fakeWindow()
+    // An IPC event as the main window's top frame sends it.
+    const frame = { name: 'main' }
+    Object.assign(main.webContents, { mainFrame: frame, isDestroyed: () => false })
+    const top = { sender: main.webContents, senderFrame: frame }
     await register(store, main)
     main.webContents.send.mockClear()
-    await expect(electron.handlers.get('jarvis:ask')?.({}, 'hello Adam')).resolves.toEqual({
+    // Only the main window's top frame may start a turn with ADAM.
+    for (const untrusted of [
+      {},
+      { sender: main.webContents, senderFrame: { name: 'web tile' } },
+      { sender: fakeWindow().webContents, senderFrame: frame }
+    ]) {
+      for (const channel of ['jarvis:ask', 'jarvis:askAdamText']) {
+        expect(await electron.handlers.get(channel)?.(untrusted, 'hello Adam')).toEqual({
+          kind: 'error',
+          text: 'ADAM only takes messages from the main Dobius+ window.'
+        })
+      }
+    }
+    expect(adam.ask).not.toHaveBeenCalled()
+    expect(main.webContents.send).not.toHaveBeenCalled()
+    await expect(electron.handlers.get('jarvis:ask')?.(top, 'hello Adam')).resolves.toEqual({
       kind: 'answer',
       text: 'Adam Hermes reply'
     })
@@ -200,9 +219,19 @@ describe('Adam Hermes voice routing', () => {
         .filter(([channel]) => channel === 'jarvis:state')
         .map(([, data]) => data.state)
     ).toEqual(['thinking', 'speaking', 'idle'])
-    await electron.handlers.get('jarvis:askAdamText')?.({}, 'live tool question')
+    await electron.handlers.get('jarvis:askAdamText')?.(top, 'live tool question')
     expect(adam.ask).toHaveBeenLastCalledWith('live tool question')
-    await electron.handlers.get('jarvis:askAdamText')?.({}, 'typed question', 'thread', 'repo-a')
+    await electron.handlers.get('jarvis:askAdamText')?.(top, 'typed question', 'thread')
+    // A spoken turn carries the project that was on screen; the thread still shows only the words.
+    await electron.handlers
+      .get('jarvis:ask')
+      ?.(top, 'run the tests here', { project: 'pc', workspace: 'main', folder: '/code/pc' })
+    expect(String((adam.ask.mock.lastCall as unknown[] | undefined)?.[0])).toContain('"carson_is_looking_at":{"project":"pc"')
+    expect(
+      main.webContents.send.mock.calls.findLast(
+        ([channel, data]) => channel === 'jarvis:adam-turn' && data.phase === 'asked'
+      )?.[1].text
+    ).toBe('run the tests here')
     // Voice and the thread go through one entry point to the one ADAM session.
     expect(adam.created).toHaveBeenCalledTimes(1)
     expect(
@@ -215,14 +244,11 @@ describe('Adam Hermes voice routing', () => {
       'voice:asked',
       'voice:answered',
       'thread:asked',
-      'thread:answered'
+      'thread:answered',
+      'voice:asked',
+      'voice:answered'
     ])
-    expect(
-      main.webContents.send.mock.calls
-        .filter(([channel]) => channel === 'jarvis:adam-turn')
-        .map(([, data]) => data.threadId)
-    ).toEqual([null, null, null, null, 'repo-a', 'repo-a'])
-    expect(adam.speak).toHaveBeenCalledTimes(1)
+    expect(adam.speak).toHaveBeenCalledTimes(2)
     expect(adam.created).toHaveBeenCalledTimes(1)
     expect(adam.created).toHaveBeenCalledWith(
       expect.objectContaining({

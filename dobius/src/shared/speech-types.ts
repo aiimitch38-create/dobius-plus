@@ -168,6 +168,9 @@ export type JarvisAskResult =
   | { kind: 'job'; text: string; jobId?: string }
   | { kind: 'error'; text: string }
 
+/** The project on Carson's screen when he started talking or typing; tells ADAM what "this project" means. */
+export type AdamLookingAt = { project: string; workspace: string; folder: string | null }
+
 /** Which way in a turn with ADAM came from. Both share one Hermes session. */
 export type AdamTurnSource = 'voice' | 'thread'
 
@@ -175,8 +178,6 @@ export type AdamTurnSource = 'voice' | 'thread'
 export type AdamTurnEvent = {
   turnId: string
   source: AdamTurnSource
-  /** The Board thread (repo id) the turn was started from; null when the caller did not know. */
-  threadId: string | null
   at: number
 } & (
   | { phase: 'asked'; text: string }

@@ -1,11 +1,17 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { getDefaultVoiceSettings } from '../../shared/constants'
-import type { VoiceSettings } from '../../shared/speech-types'
+import type { JarvisAskResult, VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { adamProjectDirectory } from '../adam-connection'
-import { ADAM_TURN_CHANNEL, AdamConversation, type AdamAskOptions } from './adam-conversation'
+import {
+  ADAM_TURN_CHANNEL,
+  AdamConversation,
+  lookingAtOf,
+  voiceMessage,
+  type AdamAskOptions
+} from './adam-conversation'
 import { AdamHermesVoice } from './adam-hermes-voice'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
 import { SelfEditStore, selfEditRoots } from './self-edit'
@@ -111,7 +117,11 @@ function createJarvisDeps(store: Store): JarvisServiceDeps {
     store,
     broadcast: createBroadcastPort(),
     shortcut: createGlobalShortcutPort(),
-    askAgent: (utterance, threadId) => askAdam(utterance, { source: 'voice', threadId }),
+    askAgent: (utterance, lookingAt) =>
+      askAdam(lookingAt ? voiceMessage(utterance, lookingAt) : utterance, {
+        source: 'voice',
+        said: utterance
+      }),
     cancelAgent: () => adamVoice?.cancel()
   }
 }
@@ -285,9 +295,11 @@ function registerLiveSessionHandlers(store: Store): void {
   ipcMain.removeHandler('jarvis:liveSessionTest')
 }
 
-/** The Board thread a turn came from, as the window reported it; anything odd is "unknown". */
-function threadIdOf(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 && value.length <= 512 ? value : null
+// Why: a turn with ADAM can run commands and is written into Carson's thread,
+// so only the main window's top frame may start one (never a web tile or embedded page).
+const ADAM_UNTRUSTED_SENDER: JarvisAskResult = {
+  kind: 'error',
+  text: 'ADAM only takes messages from the main Dobius+ window.'
 }
 
 function registerHandlers(store: Store, service: JarvisService): void {
@@ -304,8 +316,8 @@ function registerHandlers(store: Store, service: JarvisService): void {
   })
 
   ipcMain.removeHandler('jarvis:ask')
-  ipcMain.handle('jarvis:ask', (_event, utterance: string, threadId?: unknown) =>
-    service.ask(utterance, threadIdOf(threadId))
+  ipcMain.handle('jarvis:ask', (event, utterance: string, lookingAt?: unknown) =>
+    trustedLiveSender(event) ? service.ask(utterance, lookingAtOf(lookingAt)) : ADAM_UNTRUSTED_SENDER
   )
 
   ipcMain.removeHandler('jarvis:cancelAsk')
@@ -431,12 +443,13 @@ function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.removeHandler('jarvis:askAdamText')
   ipcMain.handle(
     'jarvis:askAdamText',
-    (_event, utterance: string, source?: unknown, threadId?: unknown) =>
-      // Why voice by default: the only caller without a source is the live voice agent's tool.
-      askAdam(typeof utterance === 'string' ? utterance : '', {
-        source: source === 'thread' ? 'thread' : 'voice',
-        threadId: threadIdOf(threadId)
-      })
+    (event, utterance: string, source?: unknown) =>
+      trustedLiveSender(event)
+        ? // Why voice by default: the only caller without a source is the live voice agent's tool.
+          askAdam(typeof utterance === 'string' ? utterance : '', {
+            source: source === 'thread' ? 'thread' : 'voice'
+          })
+        : ADAM_UNTRUSTED_SENDER
   )
 }
 
