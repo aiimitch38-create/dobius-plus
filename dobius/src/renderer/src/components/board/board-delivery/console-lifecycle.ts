@@ -140,7 +140,18 @@ export function restartConsole(
   // Why: `card:<id>` is resolved in main from its saved board. Save the new tab
   // first, then close the old one, so a CLI send in between never lands in the
   // terminal being closed (it reads "not running" until the new one starts).
-  void flushBoardPersistence().then(() => closeTerminalTab(oldTab))
+  // If main refused the save it still points at the old tab, so that tab stays.
+  void flushBoardPersistence().then(
+    () => closeTerminalTab(oldTab),
+    (error: unknown) =>
+      toast.error(
+        translate(
+          'board.console.restartSaveFailed',
+          'Restarted {{name}}, but the Board could not be saved, so its old terminal was left open: {{reason}}',
+          { name: card.title, reason: error instanceof Error ? error.message : String(error) }
+        )
+      )
+  )
   return true
 }
 

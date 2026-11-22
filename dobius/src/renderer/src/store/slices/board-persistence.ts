@@ -19,12 +19,15 @@ const pendingPersistedJsons = new Set<string>()
 const dirtyWorktrees = new Set<string>()
 // Set by the live persistence so flushBoardPersistence() can reach it.
 let flushPending: (() => Promise<void>) | null = null
+// True after a write main refused; the next flush writes again even with no timer.
+let lastWriteFailed = false
 
 /**
  * Writes a pending board change to main now instead of after the debounce.
  * Why: main resolves `card:<id>` from its saved copy of the board, so a change
  * that re-points a card (console restart) must land there before the old
- * terminal is closed. Resolves once main has the write; never rejects.
+ * terminal is closed. Resolves once main has the write; rejects when main
+ * refused it (the change stays dirty and the next flush retries it).
  */
 export function flushBoardPersistence(): Promise<void> {
   return flushPending ? flushPending() : Promise.resolve()
@@ -37,6 +40,7 @@ export function resetBoardPersistenceForTest(): void {
   persistTimer = null
   persistDueAt = 0
   flushPending = null
+  lastWriteFailed = false
   pendingPersistedJsons.clear()
   dirtyWorktrees.clear()
 }
@@ -75,12 +79,22 @@ export function createBoardPersistence(
       return
     }
     const payload = toPersistedBoards(boardsByWorktree)
+    const json = JSON.stringify(payload)
+    const written = [...dirtyWorktrees]
     dirtyWorktrees.clear()
-    pendingPersistedJsons.add(JSON.stringify(payload))
+    pendingPersistedJsons.add(json)
     try {
       await window.api.ui.set({ boardsByWorktree: payload })
+      lastWriteFailed = false
     } catch (error) {
-      console.error(error)
+      // Why: main does not have these changes, so a broadcast must still not
+      // overwrite them, and the next flush must write them again.
+      for (const id of written) {
+        dirtyWorktrees.add(id)
+      }
+      pendingPersistedJsons.delete(json)
+      lastWriteFailed = true
+      throw error
     }
   }
 
@@ -93,14 +107,19 @@ export function createBoardPersistence(
       clearTimeout(persistTimer)
     }
     persistDueAt = dueAt
-    persistTimer = setTimeout(() => void write(), Math.max(0, dueAt - Date.now()))
+    persistTimer = setTimeout(
+      () => void write().catch(console.error),
+      Math.max(0, dueAt - Date.now())
+    )
   }
 
   flushPending = async () => {
-    if (!persistTimer) {
+    if (!persistTimer && !lastWriteFailed) {
       return
     }
-    clearTimeout(persistTimer)
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+    }
     await write()
   }
 

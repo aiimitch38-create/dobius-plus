@@ -128,4 +128,12 @@ describe('restartConsole keeps the card address correct (9.7)', () => {
     landed()
     await vi.waitFor(() => expect(closeTerminalTab).toHaveBeenCalledWith('old-tab'))
   })
+
+  it('leaves the old terminal open and says so when main refused the save', async () => {
+    flushBoardPersistence.mockRejectedValueOnce(new Error('ipc down'))
+    expect(restartConsole('wt', card())).toBe(true)
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalled())
+    expect(String(toastError.mock.calls[0][0])).toContain('old terminal was left open: ipc down')
+    expect(closeTerminalTab).not.toHaveBeenCalled()
+  })
 })
