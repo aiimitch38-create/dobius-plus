@@ -850,6 +850,8 @@ function openMainWindow(): BrowserWindow {
         reason: details.reason,
         expectedTeardown: getExpectedTeardownScope(webContentsId)
       }),
+    shouldRecoverFailedLoad: (webContentsId) =>
+      !isQuittingForUpdate() && getExpectedTeardownScope(webContentsId) !== 'app-shutdown',
     onRendererRecoveryExhausted: ({ details, loadFailure, recentRecoveryCount }) => {
       recordCrashBreadcrumb('renderer_recovery_circuit_breaker_open', {
         reason: details?.reason ?? 'did-fail-load',

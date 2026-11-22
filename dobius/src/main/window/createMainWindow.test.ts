@@ -2926,6 +2926,60 @@ describe('createMainWindow', () => {
     consoleError.mockRestore()
   })
 
+  it('does not reload a failed page load when the host says recovery is off (update quit)', () => {
+    vi.useFakeTimers()
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { browserWindowInstance, windowHandlers } = createRendererRecoveryWindowHarness()
+
+    createMainWindow(null, { shouldRecoverFailedLoad: () => false })
+
+    windowHandlers['did-fail-load']?.({} as never, -6, 'ERR_FILE_NOT_FOUND', 'x', true)
+    vi.advanceTimersByTime(250)
+    expect(browserWindowInstance.loadFile).toHaveBeenCalledTimes(1)
+
+    consoleError.mockRestore()
+  })
+
+  it('lets a window whose page failed to load close without asking the missing page', () => {
+    vi.useFakeTimers()
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { browserWindowInstance, windowHandlers } = createRendererRecoveryWindowHarness()
+
+    createMainWindow(null, { shouldRecoverFailedLoad: () => false })
+
+    windowHandlers['did-fail-load']?.({} as never, -6, 'ERR_FILE_NOT_FOUND', 'x', true)
+    const preventDefault = vi.fn()
+    windowHandlers.close({ preventDefault } as never)
+
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(browserWindowInstance.webContents.send).not.toHaveBeenCalledWith(
+      'window:close-requested',
+      expect.anything()
+    )
+
+    consoleError.mockRestore()
+  })
+
+  it('asks the page to confirm close again once a page has loaded', () => {
+    vi.useFakeTimers()
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { windowHandlers } = createRendererRecoveryWindowHarness()
+
+    createMainWindow(null, { shouldRecoverFailedLoad: () => false })
+
+    windowHandlers['did-fail-load']?.({} as never, -6, 'ERR_FILE_NOT_FOUND', 'x', true)
+    windowHandlers['did-finish-load']?.()
+    const preventDefault = vi.fn()
+    windowHandlers.close({ preventDefault } as never)
+
+    expect(preventDefault).toHaveBeenCalled()
+
+    consoleError.mockRestore()
+  })
+
   it('caps failed-load reloads with the same breaker and reports the load failure', () => {
     vi.useFakeTimers()
 

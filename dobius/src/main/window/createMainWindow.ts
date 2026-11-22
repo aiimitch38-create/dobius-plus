@@ -122,6 +122,9 @@ type CreateMainWindowOptions = {
     details: Electron.RenderProcessGoneDetails,
     webContentsId: number
   ) => boolean
+  /** Returns false when a failed app-page load must not be reloaded (update
+   *  relaunch or app shutdown already under way). */
+  shouldRecoverFailedLoad?: (webContentsId: number) => boolean
   /** Called when consecutive auto-recoveries hit the circuit-breaker limit, so
    *  the host can record diagnostics and surface a recovery prompt instead of
    *  letting Dobius crash-loop. */
@@ -604,6 +607,10 @@ export function createMainWindow(
     shortcutRecorderFocused = false
   }
   let rendererProcessGone = false
+  // Why: a failed app-page load leaves no app renderer to answer
+  // window:close-requested, so close/quit must bypass confirmation like a
+  // gone renderer until a page loads again.
+  let appPageLoadFailed = false
   let rendererRecoveryTimer: ReturnType<typeof setTimeout> | null = null
   // Why: stop a deterministic per-load renderer fault (bad GPU driver, corrupt
   // chunk, AV interference) from auto-reloading every ~0.25-1.3s forever
@@ -629,6 +636,7 @@ export function createMainWindow(
     !windowClosing &&
     !opts?.getIsQuitting?.() &&
     !(cause.details && opts?.shouldRecoverRenderer?.(cause.details, rendererWebContentsId) === false) &&
+    !(cause.loadFailure && opts?.shouldRecoverFailedLoad?.(rendererWebContentsId) === false) &&
     !mainWindow.isDestroyed()
   const scheduleRendererRecovery = (cause: RecoveryCause): void => {
     if (
@@ -689,6 +697,7 @@ export function createMainWindow(
       if (!appPageLoadFailureNeedsReload(errorCode, isMainFrame)) {
         return
       }
+      appPageLoadFailed = true
       console.error('[window] App page failed to load; reloading', { errorCode, errorDescription })
       scheduleRendererRecovery({ details: null, loadFailure: { errorCode, errorDescription } })
     }
@@ -709,6 +718,7 @@ export function createMainWindow(
   })
   mainWindow.webContents.on('did-finish-load', () => {
     rendererProcessGone = false
+    appPageLoadFailed = false
     clearRendererRecoveryTimer()
   })
 
@@ -1010,6 +1020,7 @@ export function createMainWindow(
     if (
       process.platform !== 'win32' ||
       rendererProcessGone ||
+      appPageLoadFailed ||
       isRendererCrashed ||
       opts?.getIsQuitting?.() === true ||
       store?.getSettings().minimizeToTrayOnClose !== true
@@ -1050,7 +1061,7 @@ export function createMainWindow(
     // it. Routing this through the pure decision locks that invariant (#5787).
     const closeAction = resolveWindowCloseAction({
       windowCloseConfirmed,
-      rendererProcessGone,
+      rendererProcessGone: rendererProcessGone || appPageLoadFailed,
       isRendererCrashed
     })
     if (closeAction !== 'request-confirmation') {
