@@ -50,6 +50,37 @@ function formatHistory(page: TelegramHistoryPage): string {
   return `${page.groupTitle} (${page.count} messages, oldest first)\n\n${page.text}${more}`
 }
 
+type TelegramSnapshot = {
+  phase: string
+  connected: boolean
+  paused: boolean
+  lastError: string | null
+  groups: { id: string; title: string }[]
+  drafts: { id: string; group: string; state: string }[]
+  replyHandling: { bridge: string; listening: boolean } | null
+  manualReviewCount: number
+}
+
+const REPLY_DONE = {
+  start: 'Auto-replies started.',
+  stop: 'Auto-replies stopped.',
+  pause: 'Telegram account paused.',
+  resume: 'Telegram account reconnected.'
+} as const
+
+export function formatSnapshot(snapshot: TelegramSnapshot): string {
+  const lines = [
+    `Account: ${snapshot.phase}${snapshot.connected ? ', connected' : ''}${snapshot.paused ? ', paused' : ''}`,
+    `Auto-replies: ${snapshot.replyHandling?.listening ? 'on' : 'off'} (bridge ${snapshot.replyHandling?.bridge ?? 'unavailable'})`,
+    `Groups: ${snapshot.groups.map((group) => group.title).join(', ') || 'none selected'}`,
+    `Drafts: ${snapshot.drafts.length}, waiting for manual review: ${snapshot.manualReviewCount}`
+  ]
+  if (snapshot.lastError) {
+    lines.push(`Last problem: ${snapshot.lastError}`)
+  }
+  return lines.join('\n')
+}
+
 export const TELEGRAM_HANDLERS: Record<string, CommandHandler> = {
   'telegram status': async ({ client, json }) => {
     printResult(await client.call<TelegramStatus>('telegram.status'), json, formatStatus)
@@ -67,5 +98,20 @@ export const TELEGRAM_HANDLERS: Record<string, CommandHandler> = {
       before: getOptionalNonNegativeIntegerFlag(flags, 'before')
     })
     printResult(result, json, formatHistory)
-  }
+  },
+  'telegram snapshot': async ({ client, json }) => {
+    printResult(await client.call<TelegramSnapshot>('telegram.snapshot'), json, formatSnapshot)
+  },
+  ...Object.fromEntries(
+    (['start', 'stop', 'pause', 'resume'] as const).map((action) => [
+      `telegram replies ${action}`,
+      (async ({ client, json }) => {
+        if ((action === 'start' || action === 'resume') && !json) {
+          process.stderr.write('Waiting up to 25 seconds for you to confirm in the Dobius+ app...\n')
+        }
+        const result = await client.call<TelegramSnapshot>('telegram.replies', { action })
+        printResult(result, json, (value) => `${REPLY_DONE[action]}\n${formatSnapshot(value)}`)
+      }) satisfies CommandHandler
+    ])
+  )
 }

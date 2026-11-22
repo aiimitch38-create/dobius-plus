@@ -37,6 +37,10 @@ import { SYSTEM_HANDLERS } from './handlers/system'
 import { CREW_HANDLERS } from './handlers/crew'
 import { GIT_HANDLERS } from './handlers/git'
 import { PR_HANDLERS } from './handlers/pr'
+import { ACCOUNT_HANDLERS } from './handlers/accounts'
+import { APP_UI_HANDLERS } from './handlers/app-ui'
+import { APP_SERVICE_HANDLERS } from './handlers/app-services'
+import { ADAM_HANDLERS } from './handlers/adam'
 
 export type HandlerContext = {
   flags: Map<string, string | boolean>
@@ -87,7 +91,11 @@ function buildHandlers(): Map<string, CommandHandler> {
     SYSTEM_HANDLERS,
     CREW_HANDLERS,
     GIT_HANDLERS,
-    PR_HANDLERS
+    PR_HANDLERS,
+    ADAM_HANDLERS,
+    APP_SERVICE_HANDLERS,
+    APP_UI_HANDLERS,
+    ACCOUNT_HANDLERS
   ]
   for (const group of groups) {
     for (const [key, handler] of Object.entries(group)) {

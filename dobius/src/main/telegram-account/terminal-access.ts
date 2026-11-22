@@ -9,6 +9,17 @@ export type TelegramTerminalAccess = {
   history: (group: string, beforeId: number, limit: number) => Promise<TelegramHistoryPage>
   /** Sends only after Carson confirms the exact draft in a Dobius+ dialog. */
   send: (draftId: string) => Promise<TelegramTerminalSendResult>
+  /**
+   * Reply handling, the same calls as the Settings buttons (telegramAccount:
+   * startReplies, stopReplies, pause, resume). The RPC layer gates start and
+   * resume with an in-app confirmation; these do not ask again.
+   */
+  replies: {
+    start: () => Promise<void>
+    stop: () => Promise<void>
+    pause: () => Promise<void>
+    resume: () => Promise<void>
+  }
 }
 
 // The terminal CLI reads the same live account the Settings page owns; it never creates a second one.

@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- Why: this file is the central main-window IPC wiring point; splitting it during the mobile release compatibility rebase would increase release risk. */
+import { setUpdateStatusReader } from '../updater-status-access'
 import { randomUUID } from 'node:crypto'
 
 import { app, ipcMain } from 'electron'
@@ -579,6 +580,7 @@ export function registerUpdaterHandlers(store: Store): void {
   // Why here: the What's new popup is part of the update flow, and this is the
   // one updater entry point that already receives the store.
   registerWhatsNewHandlers(store)
+  setUpdateStatusReader(getUpdateStatus)
   ipcMain.removeHandler('updater:getStatus')
   ipcMain.removeHandler('updater:getVersion')
   ipcMain.removeHandler('updater:check')

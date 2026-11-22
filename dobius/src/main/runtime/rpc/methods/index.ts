@@ -54,6 +54,10 @@ import { BOARD_WEB_TILE_METHODS } from './board-web-tiles'
 import { AGENT_CONTROL_METHODS } from './agent-control'
 import { CREW_METHODS } from './crew'
 import { LEAD_METHODS } from './leads'
+import { ADAM_METHODS } from './adam'
+import { APP_SERVICE_METHODS } from './app-services'
+import { APP_UI_METHODS } from './app-ui'
+import { TELEGRAM_REPLY_METHODS } from './telegram-replies'
 // Communications-specific method groups. Not part of ALL_RPC_METHODS by
 // default until this pass — each backs a family of vendor/buzz-desktop
 // dispatch cases in dobiusCommunications.ts (see COMMUNICATIONS_RUNTIME_METHODS
@@ -132,6 +136,10 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...AGENT_CONTROL_METHODS,
   ...CREW_METHODS,
   ...LEAD_METHODS,
+  ...ADAM_METHODS,
+  ...APP_SERVICE_METHODS,
+  ...APP_UI_METHODS,
+  ...TELEGRAM_REPLY_METHODS,
   ...COMMUNICATIONS_AGENT_METHODS,
   ...IDENTITY_RPC_METHODS,
   ...HUDDLE_METHODS,

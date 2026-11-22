@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { setUsageStoreForRuntime } from './usage-access'
 import type { OpenCodeUsageStore } from '../opencode-usage/store'
 import type {
   OpenCodeUsageBreakdownKind,
@@ -7,6 +8,7 @@ import type {
 } from '../../shared/opencode-usage-types'
 
 export function registerOpenCodeUsageHandlers(openCodeUsage: OpenCodeUsageStore): void {
+  setUsageStoreForRuntime('opencode', openCodeUsage)
   ipcMain.handle('openCodeUsage:getScanState', () => openCodeUsage.getScanState())
   ipcMain.handle('openCodeUsage:setEnabled', (_event, args: { enabled: boolean }) =>
     openCodeUsage.setEnabled(args.enabled)

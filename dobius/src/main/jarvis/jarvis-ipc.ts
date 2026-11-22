@@ -42,6 +42,7 @@ import type {
   JarvisShortcutPort
 } from './jarvis-service'
 import { getUserDataRoot } from '../storage/user-data-root'
+import { setAdamRuntimeAccess, type JarvisVoiceStatus } from './adam-runtime-access'
 
 function createGlobalShortcutPort(): JarvisShortcutPort {
   return {
@@ -140,13 +141,42 @@ export function askAdam(text: string, options: AdamAskOptions): ReturnType<AdamC
   return adamConversation.ask(text, options)
 }
 
+/** True while ADAM is answering any turn (voice, live call, Board or CLI). */
+export function isAdamBusy(): boolean {
+  return adamConversation?.isBusy() ?? false
+}
+
+/** What the window's voice indicator reads (`jarvis:status`). */
+function jarvisStatusOf(service: JarvisService): JarvisVoiceStatus {
+  return { shortcutActive: service.isShortcutActive(), phase: service.getPhase() }
+}
+
+/** Turns voice mode on or off and keeps the setting only when that worked (`jarvis:setMode`). */
+function applyJarvisMode(store: Store, service: JarvisService, active: boolean): { ok: boolean } {
+  const ok = service.toggle(active)
+  // Why only-on-success: persisting jarvisEnabled=true when the shortcut was
+  // refused would retry a broken grab on every relaunch.
+  if (ok) {
+    persistVoicePatch(store, { jarvisEnabled: active })
+  }
+  return { ok }
+}
+
+/** Hands the runtime RPC (`dobius adam ...`) the very same ADAM and voice service. */
+function publishAdamRuntimeAccess(store: Store, service: JarvisService): void {
+  setAdamRuntimeAccess({
+    ask: askAdam,
+    isBusy: isAdamBusy,
+    voice: {
+      status: () => jarvisStatusOf(service),
+      setMode: (active) => applyJarvisMode(store, service, active),
+      speak: (text) => service.speak(text)
+    }
+  })
+}
+
 // Conversation first: a turn still saving its asked row has no brain call yet.
 const cancelAdamTurn = (): void => void (adamConversation?.cancel(), adamVoice?.cancel())
-
-/** True while ADAM is answering any turn (voice, live call or Board). */
-function isAdamBusy(): boolean {
-  return adamConversation?.busy ?? false
-}
 
 function createJarvisDeps(store: Store): JarvisServiceDeps {
   return {
@@ -174,6 +204,7 @@ export function registerJarvisIpcHandlers(store: Store, mainWindow: BrowserWindo
   // any handler reads it. Failure leaves it in settings, so it still works.
   migrateElevenLabsKeyOutOfSettings(store)
   const service = getJarvisService(createJarvisDeps(store))
+  publishAdamRuntimeAccess(store, service)
   registerHandlers(store, service)
   registerElevenLabsKeyHandlers(store, (event) => trustedLiveSender(event) !== null)
   registerLiveVoiceIpc(store, {
@@ -223,16 +254,9 @@ const ADAM_UNTRUSTED_SENDER: JarvisAskResult = {
 
 function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.removeHandler('jarvis:setMode')
-  ipcMain.handle('jarvis:setMode', (_event, active: unknown) => {
-    const on = active === true
-    const ok = service.toggle(on)
-    // Why only-on-success: persisting jarvisEnabled=true when the shortcut was
-    // refused would retry a broken grab on every relaunch.
-    if (ok) {
-      persistVoicePatch(store, { jarvisEnabled: on })
-    }
-    return { ok }
-  })
+  ipcMain.handle('jarvis:setMode', (_event, active: unknown) =>
+    applyJarvisMode(store, service, active === true)
+  )
 
   ipcMain.removeHandler('jarvis:ask')
   ipcMain.handle('jarvis:ask', (event, utterance: string, lookingAt?: unknown) =>
@@ -330,10 +354,7 @@ function registerHandlers(store: Store, service: JarvisService): void {
   )
 
   ipcMain.removeHandler('jarvis:status')
-  ipcMain.handle('jarvis:status', () => ({
-    shortcutActive: service.isShortcutActive(),
-    phase: service.getPhase()
-  }))
+  ipcMain.handle('jarvis:status', () => jarvisStatusOf(service))
 
   ipcMain.removeHandler('jarvis:agentSignedUrl')
   ipcMain.handle('jarvis:agentSignedUrl', () => {

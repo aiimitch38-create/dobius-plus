@@ -108,7 +108,8 @@ describe('fetchKimiRateLimits', () => {
 
     const result = await fetchKimiRateLimits()
     expect(result.status).toBe('error')
-    expect(result.error).toMatch(/json/i)
+    // A fixed message: JSON.parse errors quote the file's text (a token).
+    expect(result.error).toBe('Unable to read Kimi credentials')
     expect(netFetchMock).not.toHaveBeenCalled()
   })
 
@@ -118,7 +119,7 @@ describe('fetchKimiRateLimits', () => {
 
     const result = await fetchKimiRateLimits()
     expect(result.status).toBe('error')
-    expect(result.error).toMatch(/EACCES/)
+    expect(result.error).toBe('Unable to read Kimi credentials')
     expect(netFetchMock).not.toHaveBeenCalled()
   })
 
