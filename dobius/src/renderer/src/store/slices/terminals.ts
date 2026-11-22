@@ -59,8 +59,12 @@ import { parseRemoteRuntimePtyId } from '@/runtime/runtime-terminal-stream'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { shouldPersistWorkspaceSession } from '@/lib/workspace-session'
-import { buildWorkspaceSessionPatch } from '@/lib/workspace-session-patch'
-import { patchWorkspaceSessionByHost } from '@/lib/workspace-session-host-persistence'
+import {
+  buildHostIdByWorktreeId,
+  patchWorkspaceSessionByHost
+} from '@/lib/workspace-session-host-persistence'
+import { getForegroundTerminalTabIds } from '@/lib/foreground-terminal-tabs'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { getFolderWorkspaceConnectionId } from '@/lib/folder-workspace-connection'
 import { hasWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
 import { sanitizeTerminalLayoutPaneTitles } from '@/lib/terminal-pane-title-sanitization'
@@ -283,6 +287,17 @@ function resolveTerminalStopRuntimeEnvironmentId(
   worktreeId: string
 ): string | null {
   return getRuntimeEnvironmentIdForWorktree(state, worktreeId)
+}
+
+// Why: sends the map itself rather than buildWorkspaceSessionPatch's value —
+// that helper turns an empty map into `undefined`, which the host split drops,
+// so removing the last record would never reach main.
+function persistSleepingAgentSessionsToMain(state: AppState): Promise<void> {
+  return patchWorkspaceSessionByHost(
+    window.api.session,
+    { sleepingAgentSessionsByPaneKey: state.sleepingAgentSessionsByPaneKey },
+    state
+  )
 }
 
 function sortedUniquePtyIds(ptyIds: readonly string[] | undefined): string[] {
@@ -1943,6 +1958,21 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       // resumeOwner, so a record lacking one strands the pane just the same.
       throw new Error('agent_hibernation_capture_unresumable')
     }
+    // ponytail: refuse, the pane stays awake. Main validates a wake's resume
+    // claim against the LOCAL session partition, but a runtime:* repo's record
+    // is stored in that host's partition, so the claim can never succeed.
+    // Upgrade path: have pty:claimAgentResume read the owning host's partition
+    // and await that partition's write here.
+    if (buildHostIdByWorktreeId(state)(worktreeId) !== LOCAL_EXECUTION_HOST_ID) {
+      throw new Error('agent_hibernation_runtime_host_unsupported')
+    }
+    // ponytail: refuse, the pane stays awake. Killing an SSH PTY with a tracked
+    // lease clears main's layout binding, which the resume claim requires to
+    // still equal resumeOwner.ptyId. Upgrade path: keep a validated hibernation
+    // ownership marker in main that survives lease termination.
+    if (sleepingAgentSessionRecords[opts.paneKey].resumeOwner?.authority.kind !== 'local') {
+      throw new Error('agent_hibernation_ssh_unsupported')
+    }
 
     const capture = shutdownBufferCaptures.get(opts.tabId)
     if (capture) {
@@ -1966,7 +1996,8 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       }
     }
 
-    const rollbackTargetShutdownState = (): void => {
+    let mainMayHoldSleepingRecords = false
+    const rollbackTargetShutdownState = async (): Promise<void> => {
       set((s) => {
         const next = { ...s.suppressedPtyExitIds }
         for (const ptyId of shutdownPtyIds) {
@@ -1974,6 +2005,12 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         }
         const nextSleeping = { ...s.sleepingAgentSessionsByPaneKey }
         for (const key of sleepingRecordKeys) {
+          // Why: a replacement PTY can publish its own recovery record for
+          // this pane while a hibernation await is in flight; only undo the
+          // record this attempt installed.
+          if (nextSleeping[key] !== sleepingAgentSessionRecords[key]) {
+            continue
+          }
           const replaced = replacedSleepingRecords[key]
           if (replaced) {
             nextSleeping[key] = replaced
@@ -1983,6 +2020,16 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         }
         return { suppressedPtyExitIds: next, sleepingAgentSessionsByPaneKey: nextSleeping }
       })
+      if (!mainMayHoldSleepingRecords) {
+        return
+      }
+      // Why: main already accepted the record of a hibernation that did not
+      // happen; tell it now instead of leaving the aborted record behind.
+      try {
+        await persistSleepingAgentSessionsToMain(get())
+      } catch (err) {
+        console.warn('[agent-hibernation] failed to clear aborted sleeping record:', err)
+      }
     }
 
     set((s) => ({
@@ -2007,25 +2054,35 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       if (!shouldPersistWorkspaceSession(recorded)) {
         throw new Error('agent_hibernation_session_not_persistable')
       }
-      await patchWorkspaceSessionByHost(
-        window.api.session,
-        buildWorkspaceSessionPatch(recorded, ['sleepingAgentSessionsByPaneKey']),
-        recorded
-      )
-      // Why: the acknowledgement is an await the kill did not have before; the
-      // pane may have been rebound to another PTY while it was in flight.
-      if (get().terminalLayoutsByTabId[opts.tabId]?.ptyIdsByLeafId?.[opts.leafId] !== opts.ptyId) {
-        throw new Error('agent_hibernation_pane_binding_mismatch')
+      mainMayHoldSleepingRecords = true
+      await persistSleepingAgentSessionsToMain(recorded)
+      // Why: the acknowledgement is an await the kill did not have before.
+      // The coordinator proved eligibility against the state this call started
+      // from; anything it checked may have changed while the patch was in
+      // flight (the user revealed the pane, typed a draft, started a turn, or
+      // the pane was rebound), and killing then would lose that work.
+      const acked = get()
+      if (
+        acked.terminalLayoutsByTabId[opts.tabId]?.ptyIdsByLeafId?.[opts.leafId] !== opts.ptyId ||
+        acked.sleepingAgentSessionsByPaneKey[opts.paneKey] !==
+          sleepingAgentSessionRecords[opts.paneKey] ||
+        acked.agentStatusByPaneKey[opts.paneKey] !== state.agentStatusByPaneKey[opts.paneKey] ||
+        acked.lastTerminalInputAtByPaneKey[opts.paneKey] !==
+          state.lastTerminalInputAtByPaneKey[opts.paneKey] ||
+        acked.activeWorktreeId === worktreeId ||
+        getForegroundTerminalTabIds().includes(opts.tabId)
+      ) {
+        throw new Error('agent_hibernation_eligibility_changed')
       }
     } catch (err) {
-      rollbackTargetShutdownState()
+      await rollbackTargetShutdownState()
       throw err
     }
 
     if (expectedRuntimePtyIds.length > 0) {
       const runtimeEnvironmentId = resolveTerminalStopRuntimeEnvironmentId(get(), worktreeId)
       if (!runtimeEnvironmentId) {
-        rollbackTargetShutdownState()
+        await rollbackTargetShutdownState()
         throw new Error('missing_runtime_for_exact_terminal_stop')
       }
       let stopResult: {
@@ -2052,18 +2109,18 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
           { timeoutMs: 15_000 }
         )
       } catch (err) {
-        rollbackTargetShutdownState()
+        await rollbackTargetShutdownState()
         throw err
       }
       const stoppedPtyIds = sortedUniquePtyIds(stopResult.stoppedPtyIds)
       const livePtyIds = sortedUniquePtyIds(stopResult.livePtyIds)
       const targetWasLive = expectedRuntimePtyIds.every((ptyId) => livePtyIds.includes(ptyId))
       if (!equalStringSets(stoppedPtyIds, expectedRuntimePtyIds) || !targetWasLive) {
-        rollbackTargetShutdownState()
+        await rollbackTargetShutdownState()
         throw new Error('exact_terminal_stop_mismatch')
       }
       if (stopResult.postStopVerified !== true) {
-        rollbackTargetShutdownState()
+        await rollbackTargetShutdownState()
         throw new Error(stopResult.postStopFailure ?? 'exact_terminal_stop_unverified')
       }
       unregisterPtyDataHandlers(shutdownPtyIds)
@@ -2075,7 +2132,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         await window.api.pty.kill(opts.ptyId, { keepHistory: true })
       } catch (err) {
         restorePtyDataHandlersAfterFailedShutdown(handlerSnapshots)
-        rollbackTargetShutdownState()
+        await rollbackTargetShutdownState()
         throw err
       }
     }
