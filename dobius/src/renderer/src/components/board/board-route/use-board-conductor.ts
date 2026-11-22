@@ -22,8 +22,10 @@ export type BoardConductor = {
   appendReport: (report: BoardThreadReport) => void
   /** Empties the active repo's thread, local to this repo only. */
   clearThread: () => void
-  /** Shows a waiting row (never saved); call the returned function to take it away. */
-  showThinking: (text: string) => () => void
+  /** Appends to one repo's thread, whether or not it is the thread on screen. */
+  appendTo: (repoId: string | null, message: NewMessage) => void
+  /** Shows a waiting row (never saved) in one repo's thread; call the returned function to take it away. */
+  showThinkingIn: (repoId: string | null, text: string) => () => void
 }
 
 /** Best-effort: a storage failure (private window, quota, hardened context) must never break the thread. */
@@ -59,6 +61,7 @@ export function useBoardConductor(
   const openSettingsRef = useRef(onOpenSettings)
   openSettingsRef.current = onOpenSettings
   const loadedRepoId = useRef(repoId)
+  const waiting = useRef(new Map<string, { repoId: string | null; row: BoardThreadMessage }>())
 
   useEffect(() => {
     const active = timers.current
@@ -75,7 +78,11 @@ export function useBoardConductor(
       return
     }
     loadedRepoId.current = repoId
-    setMessages(readStoredThread(repoId))
+    // Waiting rows are never stored, so a reply still in flight for this repo is put back.
+    const stillWaiting = [...waiting.current.values()].flatMap((w) =>
+      w.repoId === repoId ? [w.row] : []
+    )
+    setMessages([...readStoredThread(repoId), ...stillWaiting])
   }, [repoId])
 
   useEffect(() => {
@@ -99,10 +106,31 @@ export function useBoardConductor(
     setMessages([])
   }, [])
 
-  const showThinking = useCallback((text: string) => {
-    const id = crypto.randomUUID()
-    setMessages((prev) => [...prev, { id, role: 'assistant', text, transient: true }])
-    return () => setMessages((prev) => prev.filter((message) => message.id !== id))
+  const appendTo = useCallback((target: string | null, message: NewMessage) => {
+    const row = { ...message, id: crypto.randomUUID() }
+    if (loadedRepoId.current === target) {
+      setMessages((prev) => [...prev, row])
+      return
+    }
+    // Why storage: that repo's thread is not mounted; it reads this back when Carson returns.
+    writeStoredThread(target, [...readStoredThread(target), row])
+  }, [])
+
+  const showThinkingIn = useCallback((target: string | null, text: string) => {
+    const row: BoardThreadMessage = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      text,
+      transient: true
+    }
+    waiting.current.set(row.id, { repoId: target, row })
+    if (loadedRepoId.current === target) {
+      setMessages((prev) => [...prev, row])
+    }
+    return () => {
+      waiting.current.delete(row.id)
+      setMessages((prev) => prev.filter((message) => message.id !== row.id))
+    }
   }, [])
 
   const poll = useCallback(
@@ -170,5 +198,5 @@ export function useBoardConductor(
     [append, poll]
   )
 
-  return { messages, busy, append, ask, appendReport, clearThread, showThinking }
+  return { messages, busy, append, ask, appendReport, clearThread, appendTo, showThinkingIn }
 }

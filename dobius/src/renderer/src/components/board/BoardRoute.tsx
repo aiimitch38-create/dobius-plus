@@ -129,7 +129,10 @@ export default function BoardRoute(): React.JSX.Element {
     context: plannerContext,
     projectName: topBar.projectName
   })
-  const onCommand = useBoardCommand(data, conductor, planner)
+  const onCommand = useBoardCommand(data, conductor, planner.run)
+  const threadBusy = conductor.busy || planner.busy
+  const threadBusyRef = useRef(threadBusy)
+  threadBusyRef.current = threadBusy
   // Why: leaving the Board must never leave a paused agent frozen in the background.
   useEffect(
     () => () => {
@@ -161,7 +164,8 @@ export default function BoardRoute(): React.JSX.Element {
   })
   const ptt = useBoardPushToTalk(inputRef, () => {
     const text = draftRef.current.trim()
-    if (text) {
+    // Why: a spoken message waits in the box while ADAM is busy, as a typed one does.
+    if (text && !(threadBusyRef.current && !text.startsWith('@'))) {
       onCommand(text)
       setDraft('')
     }
@@ -354,7 +358,7 @@ export default function BoardRoute(): React.JSX.Element {
             inputRef.current?.focus()
             dispatchDictationControl('toggle')
           },
-          busy: conductor.busy
+          busy: threadBusy
         }}
         overlay={
           <>

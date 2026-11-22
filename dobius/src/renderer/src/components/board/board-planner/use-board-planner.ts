@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useConfirmationDialog } from '@/components/confirmation-dialog'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { consoleDeliveryState } from '../board-delivery/board-delivery'
 import { onMissionEvent } from '../board-delivery/mission-tracker'
+import type { BoardThreadMessage } from '../board-command-bar/BoardThread'
 import type { BoardConductor } from '../board-route/use-board-conductor'
 import type { BoardRouteData } from '../board-route/use-board-route-data'
-import { hermesAdamTransport, talkToAdam } from './adam-thread'
+import {
+  collectAdamBoards,
+  hermesAdamTransport,
+  talkToAdam,
+  type AdamThreadContext
+} from './adam-thread'
 import { missionReport } from './mission-report'
 import { concernText } from './plan-concern-text'
 import { boardEffects, type BoardEffectsContext } from './plan-effects-board'
@@ -26,16 +32,24 @@ import { validatePlan } from './plan-validate'
  * in the thread. Anything that is not a board order (no plan steps, or no
  * planner to ask) is conversation, and goes to ADAM's Hermes agent.
  */
+export type BoardPlannerRun = {
+  run: (text: string) => Promise<void>
+  /** True from submit until the planner and ADAM are both done with that message. */
+  busy: boolean
+}
+
 export function useBoardPlanner(input: {
   data: BoardRouteData
   conductor: BoardConductor
   context: Omit<BoardEffectsContext, 'worktreeId' | 'workspaces' | 'confirm'>
-  /** Shown in the thread header; tells ADAM which project he is in. */
+  /** Shown in the thread header; tells ADAM which project Carson is looking at. */
   projectName: string
-}): (text: string) => Promise<void> {
+}): BoardPlannerRun {
   const { data, conductor, context, projectName } = input
-  const { append, appendReport, showThinking } = conductor
-  const adamBusy = useRef(false)
+  const { append, appendReport, appendTo, showThinkingIn } = conductor
+  // Why a ref and a state: the ref refuses a second run in the same tick; the state greys the composer.
+  const running = useRef(false)
+  const [busy, setBusy] = useState(false)
   // Read at event time so the mission subscription isn't rebuilt on every card change.
   const consolesRef = useRef(data.consoles)
   consolesRef.current = data.consoles
@@ -82,12 +96,12 @@ export function useBoardPlanner(input: {
     [append, appendReport, worktreeId]
   )
 
-  return useCallback(
-    async (text: string) => {
+  const handle = useCallback(
+    async (text: string, repoId: string | null, say: (message: NewMessage) => void) => {
       const worktreeId = data.worktreeId
-      append({ role: 'user', text })
+      say({ role: 'user', text })
       if (!worktreeId) {
-        append({
+        say({
           role: 'system',
           tone: 'error',
           text: translate('board.spawn.noWorkspace', 'Open a workspace before spawning consoles.')
@@ -108,16 +122,11 @@ export function useBoardPlanner(input: {
       const askAdam = (): Promise<void> =>
         talkToAdam({
           transport: hermesAdamTransport(),
-          context: {
-            projectName,
-            folder: useAppStore.getState().getKnownWorktreeById(worktreeId)?.path ?? null,
-            board
-          },
+          context: adamContext(projectName, board.workspace, worktreeId),
           turns,
           utterance: text,
-          busy: adamBusy,
-          append,
-          showThinking
+          append: say,
+          showThinking: (label) => showThinkingIn(repoId, label)
         })
       const outcome = await runPlanner({
         transport: conductorPlannerTransport(),
@@ -134,7 +143,7 @@ export function useBoardPlanner(input: {
         return
       }
       if (outcome.kind === 'rejected') {
-        append({
+        say({
           role: 'system',
           tone: 'error',
           text: translate('board.plan.rejected', 'I could not make a valid plan: {{reason}}', {
@@ -158,12 +167,12 @@ export function useBoardPlanner(input: {
           confirmLabel: translate('board.plan.didYouMeanAction', 'Use {{name}}', { name: to })
         })
         if (!ok) {
-          append({ role: 'system', text: translate('board.plan.notSent', 'Nothing was sent.') })
+          say({ role: 'system', text: translate('board.plan.notSent', 'Nothing was sent.') })
           return
         }
         const fixed = validatePlan(withPlanTarget(outcome.raw, outcome.suggestion), board)
         if (!fixed.ok) {
-          append({
+          say({
             role: 'system',
             tone: 'error',
             text: translate('board.plan.rejected', 'I could not make a valid plan: {{reason}}', {
@@ -179,7 +188,7 @@ export function useBoardPlanner(input: {
         return
       }
       if (plan.unsafe) {
-        append({
+        say({
           role: 'system',
           tone: 'error',
           text: translate(
@@ -195,10 +204,10 @@ export function useBoardPlanner(input: {
         return
       }
       if (plan.say) {
-        append({ role: 'assistant', text: plan.say })
+        say({ role: 'assistant', text: plan.say })
       }
       if (plan.detail) {
-        append({ role: 'assistant', text: plan.detail })
+        say({ role: 'assistant', text: plan.detail })
       }
       const concerns = screenPlan(plan, said, board)
       if (concerns.length > 0) {
@@ -209,7 +218,7 @@ export function useBoardPlanner(input: {
           confirmVariant: concerns.some((c) => c.kind === 'destructive') ? 'destructive' : 'default'
         })
         if (!ok) {
-          append({ role: 'system', text: translate('board.plan.notSent', 'Nothing was sent.') })
+          say({ role: 'system', text: translate('board.plan.notSent', 'Nothing was sent.') })
           return
         }
       }
@@ -218,11 +227,10 @@ export function useBoardPlanner(input: {
         ...terminalEffects(worktreeId, confirm)
       })
       for (const r of results) {
-        append({ role: 'system', ...(r.ok ? {} : { tone: 'error' as const }), text: r.text })
+        say({ role: 'system', ...(r.ok ? {} : { tone: 'error' as const }), text: r.text })
       }
     },
     [
-      append,
       confirm,
       conductor.messages,
       context,
@@ -230,7 +238,71 @@ export function useBoardPlanner(input: {
       data.workspaces,
       data.worktreeId,
       projectName,
-      showThinking
+      showThinkingIn
     ]
   )
+
+  const run = useCallback(
+    async (text: string) => {
+      // Why captured here: the reply belongs to the thread it was sent from, even if Carson
+      // has switched projects by the time it lands.
+      const repoId = data.repoId
+      const say = (message: NewMessage): void => appendTo(repoId, message)
+      // Why checked before any await: two submits in one tick must not both reach ADAM,
+      // who runs one Hermes turn at a time.
+      if (running.current) {
+        say({
+          role: 'system',
+          text: translate(
+            'board.adam.stillThinking',
+            'ADAM is still working on your last message. Wait for his reply, then send this again.'
+          )
+        })
+        return
+      }
+      running.current = true
+      setBusy(true)
+      try {
+        await handle(text, repoId, say)
+      } finally {
+        running.current = false
+        setBusy(false)
+      }
+    },
+    [appendTo, data.repoId, handle]
+  )
+
+  return { run, busy }
+}
+
+type NewMessage = Omit<BoardThreadMessage, 'id'>
+
+/** What ADAM is told: the board on screen, plus every other open board across projects. */
+function adamContext(projectName: string, workspace: string, worktreeId: string): AdamThreadContext {
+  const state = useAppStore.getState()
+  return {
+    lookingAt: {
+      project: projectName,
+      workspace,
+      folder: state.getKnownWorktreeById(worktreeId)?.path ?? null
+    },
+    boards: collectAdamBoards({
+      boardsByWorktree: state.boardsByWorktree ?? {},
+      currentWorktreeId: worktreeId,
+      stateOf: consoleDeliveryState,
+      worktreeOf: (id) => {
+        const worktree = state.getKnownWorktreeById(id)
+        if (!worktree) {
+          return null
+        }
+        return {
+          project: state.repos?.find((r) => r.id === worktree.repoId)?.displayName ?? '',
+          workspace:
+            id === worktreeId
+              ? workspace
+              : worktree.displayName.trim() || worktree.branch.replace(/^refs\/heads\//, '')
+        }
+      }
+    })
+  }
 }

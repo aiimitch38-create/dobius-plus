@@ -17,7 +17,20 @@ vi.mock('@/components/confirmation-dialog', () => ({
 }))
 vi.mock('@/store', () => ({
   useAppStore: {
-    getState: () => ({ getKnownWorktreeById: () => ({ path: '/Users/c/code/dobius-plus' }) })
+    getState: () => ({
+      repos: [
+        { id: 'repo-1', displayName: 'dobius-plus' },
+        { id: 'repo-2', displayName: 'pocket-cologne' }
+      ],
+      boardsByWorktree: {
+        'wt-1': { cards: [{ kind: 'console', title: 'Claude 1', tabId: 't1', agentKind: 'claude' }] },
+        'wt-9': { cards: [{ kind: 'console', title: 'Codex 7', tabId: 't9', agentKind: 'codex' }] }
+      },
+      getKnownWorktreeById: (id: string) =>
+        id === 'wt-1'
+          ? { repoId: 'repo-1', displayName: 'main', branch: 'main', path: '/Users/c/code/dobius-plus' }
+          : { repoId: 'repo-2', displayName: 'checkout-fix', branch: 'x', path: '/Users/c/code/pc' }
+    })
   }
 }))
 vi.mock('../board-delivery/board-delivery', () => ({ consoleDeliveryState: () => 'idle' }))
@@ -35,8 +48,12 @@ const OLD_ERROR = /planner is not answering/i
 let root: Root
 let container: HTMLDivElement
 let rows: Row[]
+let rowsByRepo: Record<string, Row[]>
 let thinking: string[]
+let thinkingRepos: (string | null)[]
+let repoId: string
 let run: (text: string) => Promise<void>
+let busy: boolean
 const conductorCommand = vi.fn()
 const conductorReply = vi.fn()
 const askAdamText = vi.fn<(utterance: string) => Promise<JarvisAskResult>>()
@@ -49,17 +66,24 @@ function Harness({ earlier }: { earlier: BoardThreadMessage[] }): null {
     appendReport: vi.fn(),
     ask: vi.fn(),
     clearThread: vi.fn(),
-    showThinking: (text: string) => {
+    appendTo: (target: string | null, message: Row) => {
+      rows.push(message)
+      ;(rowsByRepo[String(target)] ??= []).push(message)
+    },
+    showThinkingIn: (target: string | null, text: string) => {
       thinking.push(text)
+      thinkingRepos.push(target)
       return () => thinking.splice(thinking.indexOf(text), 1)
     }
   } satisfies BoardConductor
-  run = useBoardPlanner({
-    data: { worktreeId: 'wt-1', board: {}, workspaces: [] } as unknown as BoardRouteData,
+  const planner = useBoardPlanner({
+    data: { worktreeId: 'wt-1', repoId, board: {}, workspaces: [] } as unknown as BoardRouteData,
     conductor,
     context: {} as Parameters<typeof useBoardPlanner>[0]['context'],
     projectName: 'dobius-plus'
   })
+  run = planner.run
+  busy = planner.busy
   return null
 }
 
@@ -69,7 +93,10 @@ function mount(earlier: BoardThreadMessage[] = []): void {
 
 beforeEach(() => {
   rows = []
+  rowsByRepo = {}
   thinking = []
+  thinkingRepos = []
+  repoId = 'repo-1'
   conductorCommand.mockReset()
   conductorReply.mockReset()
   askAdamText.mockReset()
@@ -97,10 +124,23 @@ describe('useBoardPlanner: talk goes to Hermes ADAM', () => {
     await act(() => run('your TypeScript app'))
     expect(askAdamText).toHaveBeenCalledTimes(1)
     const sent = askAdamText.mock.calls[0][0]
-    expect(sent).toContain('Project: dobius-plus')
-    expect(sent).toContain('Workspace: main (folder: /Users/c/code/dobius-plus)')
-    expect(sent).toContain('Carson: i cant heear him speak')
-    expect(sent.endsWith('Carson: your TypeScript app')).toBe(true)
+    const block = (tag: string) => JSON.parse(sent.split(`<${tag}>\n`)[1].split(`\n</${tag}>`)[0])
+    const context = block('untrusted_context')
+    expect(context.carson_is_looking_at).toEqual({
+      project: 'dobius-plus',
+      workspace: 'main',
+      folder: '/Users/c/code/dobius-plus'
+    })
+    // Every open project's board, not only the one on screen.
+    expect(context.open_boards.map((b: { project: string }) => b.project)).toEqual([
+      'dobius-plus',
+      'pocket-cologne'
+    ])
+    expect(context.open_boards[1].consoles).toEqual([
+      { name: 'Codex 7', agent: 'codex', state: 'idle' }
+    ])
+    expect(context.earlier_thread_rows).toEqual([{ from: 'carson', text: 'i cant heear him speak' }])
+    expect(block('carson_message')).toBe('your TypeScript app')
     expect(rows).toEqual([
       { role: 'user', text: 'your TypeScript app' },
       { role: 'assistant', text: 'I can hear you. What is wrong?' }
@@ -145,6 +185,57 @@ describe('useBoardPlanner: talk goes to Hermes ADAM', () => {
     mount()
     await act(() => run('how are you'))
     expect(rows.map((row) => row.text)).toEqual(['how are you', 'ADAM talking.'])
+  })
+})
+
+describe('useBoardPlanner: one message at a time, in the thread it came from', () => {
+  it('puts the reply and the thinking row in the thread the message was sent from', async () => {
+    let answer: (result: JarvisAskResult) => void = () => {}
+    askAdamText.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+    mount()
+    let pending: Promise<void> = Promise.resolve()
+    await act(async () => {
+      pending = run('hello from dobius')
+      await vi.waitFor(() => expect(thinking).toHaveLength(1))
+    })
+    // Carson switches to another project before ADAM answers.
+    repoId = 'repo-2'
+    mount()
+    await act(async () => {
+      answer({ kind: 'answer', text: 'Hi.' })
+      await pending
+    })
+    expect(thinkingRepos).toEqual(['repo-1'])
+    expect(rowsByRepo['repo-1'].map((row) => row.text)).toEqual(['hello from dobius', 'Hi.'])
+    expect(rowsByRepo['repo-2']).toBeUndefined()
+  })
+
+  it('is busy from submit until ADAM is done, and refuses a second message in the same tick', async () => {
+    let answer: (result: JarvisAskResult) => void = () => {}
+    askAdamText.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+    mount()
+    expect(busy).toBe(false)
+    let first: Promise<void> = Promise.resolve()
+    let second: Promise<void> = Promise.resolve()
+    await act(async () => {
+      first = run('one')
+      second = run('two')
+      await second
+    })
+    expect(busy).toBe(true)
+    expect(rows.map((row) => row.text)).toEqual([
+      'one',
+      'ADAM is still working on your last message. Wait for his reply, then send this again.'
+    ])
+    await act(async () => {
+      await vi.waitFor(() => expect(askAdamText).toHaveBeenCalledTimes(1))
+      answer({ kind: 'answer', text: 'Done.' })
+      await first
+    })
+    expect(busy).toBe(false)
+    expect(conductorCommand).toHaveBeenCalledTimes(1)
+    expect(askAdamText).toHaveBeenCalledTimes(1)
+    expect(rows.at(-1)).toEqual({ role: 'assistant', text: 'Done.' })
   })
 })
 
