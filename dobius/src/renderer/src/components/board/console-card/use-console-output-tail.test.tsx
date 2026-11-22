@@ -23,7 +23,8 @@ vi.mock('@/components/terminal-pane/pty-data-sidecar-subscriptions', () => ({
     }
     set.add(watcher)
     return () => set?.delete(watcher)
-  }
+  },
+  subscribeToPtyExit: () => () => {}
 }))
 
 // A stand-in xterm: write() just remembers the text; the parse step below
