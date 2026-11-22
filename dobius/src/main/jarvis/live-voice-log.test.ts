@@ -7,3 +7,11 @@ describe('cleanLiveVoiceLogText', () => {
     expect(cleanLiveVoiceLogText('x'.repeat(900))).toHaveLength(500)
   })
 })
+
+describe('cleanLiveVoiceLogText secrets', () => {
+  it('hides ephemeral keys and SDP credentials', () => {
+    expect(cleanLiveVoiceLogText('ek_abcdef123 a=ice-pwd:s3cr3t a=ice-ufrag:u1')).toBe(
+      '[hidden] a=ice-pwd:[hidden] a=ice-ufrag:[hidden]'
+    )
+  })
+})
