@@ -4,6 +4,7 @@ import type { AutomationPrecheck, AutomationPrecheckResult } from '../../shared/
 import { MAX_AUTOMATION_PRECHECK_OUTPUT_CHARS } from '../../shared/automation-precheck'
 import { getSshConnectionManager } from '../ipc/ssh'
 import { shellEscape } from '../ssh/ssh-connection-utils'
+import { stopProcessGroup } from './precheck-process-group'
 
 type AutomationPrecheckExecutionTarget =
   | {
@@ -11,6 +12,11 @@ type AutomationPrecheckExecutionTarget =
       cwd: string
       /** Omitted = the app's own environment. */
       env?: NodeJS.ProcessEnv
+      /**
+       * When the command ends, force-kill anything left in its process group
+       * and wait for it to go; the result says if something survived.
+       */
+      requireGroupExit?: boolean
     }
   | {
       type: 'ssh'
@@ -131,7 +137,6 @@ function runLocalPrecheck(
     let timedOut = false
     let settled = false
     let timeout: ReturnType<typeof setTimeout> | null = null
-    let forceKillTimer: ReturnType<typeof setTimeout> | null = null
     let settleDeadline: ReturnType<typeof setTimeout> | null = null
 
     const child = spawn(precheck.command, {
@@ -151,22 +156,28 @@ function runLocalPrecheck(
         clearTimeout(timeout)
         timeout = null
       }
-      if (forceKillTimer) {
-        clearTimeout(forceKillTimer)
-        forceKillTimer = null
-      }
+      // Why forceKillTimer is NOT cleared: a descendant that ignores SIGTERM
+      // and closed its output lets `close` arrive early; the scheduled SIGKILL
+      // of the group must still fire.
       if (settleDeadline) {
         clearTimeout(settleDeadline)
         settleDeadline = null
       }
-      resolve(
-        createPrecheckResult({ precheck, startedAt, stdout, stderr, exitCode, timedOut, error })
-      )
+      const finish = (processGroupAlive: boolean): void =>
+        resolve({
+          ...createPrecheckResult({ precheck, startedAt, stdout, stderr, exitCode, timedOut, error }),
+          ...(processGroupAlive ? { processGroupAlive } : {})
+        })
+      if (target.requireGroupExit) {
+        void stopProcessGroup(child.pid).then(finish)
+      } else {
+        finish(false)
+      }
     }
 
     timeout = setTimeout(() => {
       timedOut = true
-      forceKillTimer = killLocalPrecheckProcessTree(child)
+      killLocalPrecheckProcessTree(child)
       // Why: `close` waits for stdout/stderr to end, and a descendant that left
       // the process group keeps them open after the kill. Stop waiting.
       settleDeadline = setTimeout(() => {
