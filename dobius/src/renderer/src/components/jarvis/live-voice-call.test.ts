@@ -559,3 +559,26 @@ describe('review round 2b', () => {
     expect(saved()).toContain('Hi.')
   })
 })
+
+it('a long answer Carson talks over stays out of the transcript past 15 seconds', async () => {
+  const call = makeCall()
+  await connected(call)
+  const emit = (type: 'input' | 'output', delta: string): void =>
+    peer().channel.emit({ type: `session.${type}_transcript.delta`, delta })
+  emit('input', 'Status')
+  peer().channel.emit({ type: 'session.delegation.created' })
+  await vi.advanceTimersByTimeAsync(600)
+  delegateReply.resolve({ ok: true, kind: 'answer', speak: 'Long answer.' })
+  await vi.advanceTimersByTimeAsync(0)
+  emit('output', 'Part one.')
+  emit('input', 'mm')
+  for (let i = 0; i < 40; i += 1) {
+    await vi.advanceTimersByTimeAsync(500)
+    emit('output', ' more')
+  }
+  emit('output', ' Part two.')
+  emit('input', 'ok')
+  await call.hangUp()
+  const saved = api.liveTranscript.mock.calls.map(([line]) => (line as { text: string }).text)
+  expect(saved.join(' ')).not.toContain('Part two')
+})

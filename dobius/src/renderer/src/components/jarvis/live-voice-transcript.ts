@@ -81,7 +81,11 @@ export class LiveTranscript {
     }
     this.lastSpeaker = 'assistant'
     // Bounded: an answer the voice never speaks stops hiding output after a while.
-    if (this.replyOwedAt !== null && this.now() - this.replyOwedAt > REPLY_START_MAX_MS) {
+    if (
+      this.replyOwedAt !== null &&
+      !this.replyStarted &&
+      this.now() - this.replyOwedAt > REPLY_START_MAX_MS
+    ) {
       this.replyOwedAt = null
     }
     if (this.replyOwedAt !== null) {
