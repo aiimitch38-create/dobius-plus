@@ -72,16 +72,30 @@ export function BoardCommandBar({
     if (collapsed) {
       return
     }
+    // Why two phases: Radix closes its menu or dialog on Esc during document
+    // capture, so by the bubble phase nothing is stacked here any more. The
+    // capture listener notes what was on top before that; the bubble one folds
+    // only if nothing was, and no other handler claimed the key meanwhile.
+    let covered = false
+    const onKeyCapture = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        covered =
+          document.querySelector(
+            '[data-radix-popper-content-wrapper], [role="dialog"], [role="alertdialog"]'
+          ) !== null
+      }
+    }
     const onKey = (event: KeyboardEvent): void => {
-      if (
-        event.key === 'Escape' &&
-        !document.querySelector('[data-radix-popper-content-wrapper], [role="dialog"]')
-      ) {
+      if (event.key === 'Escape' && !covered && !event.defaultPrevented) {
         setCollapsed(true)
       }
     }
+    window.addEventListener('keydown', onKeyCapture, { capture: true })
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKeyCapture, { capture: true })
+      window.removeEventListener('keydown', onKey)
+    }
   }, [collapsed])
   const isMac = navigator.userAgent.includes('Mac')
   const history = useMemo(() => boardCommandHistory(messages), [messages])

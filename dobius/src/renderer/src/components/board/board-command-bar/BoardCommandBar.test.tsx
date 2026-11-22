@@ -1,7 +1,14 @@
 // @vitest-environment happy-dom
-import { act, createRef, StrictMode } from 'react'
+import { act, createRef, StrictMode, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { BoardCommandBar, type BoardCommandBarProps } from './BoardCommandBar'
 import type { BoardThreadMessage } from './BoardThread'
@@ -50,16 +57,26 @@ afterEach(() => {
   container.remove()
 })
 
-function render(messages: BoardThreadMessage[]): void {
+function render(messages: BoardThreadMessage[], overlay?: React.ReactNode): void {
   act(() =>
     root.render(
       <StrictMode>
         <TooltipProvider>
           <BoardCommandBar {...props} messages={messages} />
+          {overlay}
         </TooltipProvider>
       </StrictMode>
     )
   )
+}
+
+// A real key press: it starts at the focused element and travels the whole document.
+function pressEscape(): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+  act(() => {
+    ;(document.activeElement ?? document.body).dispatchEvent(event)
+  })
+  return event
 }
 
 function toggle(label: 'Show thread' | 'Hide thread'): void {
@@ -117,6 +134,108 @@ describe('BoardCommandBar thread visibility', () => {
     menu.remove()
     act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
     expect(thread()).toBeNull()
+  })
+
+  // Why a stand-in: in the app React removes a dismissed Radix layer between
+  // the capture and bubble phases of the same key press. A dispatched test
+  // event never yields in between, so the removal is done by hand here.
+  it('leaves the thread open when the layer on top is gone before the key bubbles', () => {
+    render(saved)
+    toggle('Show thread')
+    const layer = document.createElement('div')
+    layer.setAttribute('role', 'dialog')
+    document.body.appendChild(layer)
+    const dismiss = (): void => layer.remove()
+    document.addEventListener('keydown', dismiss, { capture: true })
+    pressEscape()
+    document.removeEventListener('keydown', dismiss, { capture: true })
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(thread()).not.toBeNull()
+
+    pressEscape()
+    expect(thread()).toBeNull()
+  })
+
+  it('one Escape closes a real open menu and leaves the thread open', () => {
+    const onOpenChange = vi.fn()
+    render(
+      saved,
+      <DropdownMenu open modal={false} onOpenChange={onOpenChange}>
+        <DropdownMenuTrigger>Account</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem>Accounts</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+    toggle('Show thread')
+    expect(document.querySelector('[role="menu"]')).not.toBeNull()
+
+    pressEscape()
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(thread()).not.toBeNull()
+
+    // The menu is gone now, so the next Escape is the thread's.
+    render(saved)
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+    pressEscape()
+    expect(thread()).toBeNull()
+  })
+
+  it('one Escape closes a real open dialog and leaves the thread open', () => {
+    function Harness(): React.JSX.Element {
+      const [open, setOpen] = useState(true)
+      return (
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent aria-describedby={undefined}>
+            <DialogTitle>Browse code</DialogTitle>
+          </DialogContent>
+        </Dialog>
+      )
+    }
+    render(saved, <Harness />)
+    toggle('Show thread')
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+
+    pressEscape()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(thread()).not.toBeNull()
+
+    pressEscape()
+    expect(thread()).toBeNull()
+  })
+
+  it('leaves the thread open when something else already took the Escape', () => {
+    render(saved)
+    toggle('Show thread')
+    const claim = (event: KeyboardEvent): void => event.preventDefault()
+    document.addEventListener('keydown', claim)
+    const event = pressEscape()
+    document.removeEventListener('keydown', claim)
+    expect(event.defaultPrevented).toBe(true)
+    expect(thread()).not.toBeNull()
+  })
+
+  it('removes every key listener it added, with the same capture flag', () => {
+    const add = vi.spyOn(window, 'addEventListener')
+    const remove = vi.spyOn(window, 'removeEventListener')
+    const capture = (options: unknown): boolean =>
+      typeof options === 'boolean'
+        ? options
+        : Boolean((options as AddEventListenerOptions)?.capture)
+    render(saved)
+    toggle('Show thread')
+    toggle('Hide thread')
+    act(() => root.render(null))
+    const added = add.mock.calls.filter(([type]) => type === 'keydown')
+    const removed = remove.mock.calls.filter(([type]) => type === 'keydown')
+    expect(added.some(([, , options]) => capture(options))).toBe(true)
+    for (const [, listener, options] of added) {
+      expect(
+        removed.some(([, gone, opts]) => gone === listener && capture(opts) === capture(options))
+      ).toBe(true)
+    }
+    add.mockRestore()
+    remove.mockRestore()
   })
 
   it('stays collapsed when history is cleared and opens for the next message', () => {
