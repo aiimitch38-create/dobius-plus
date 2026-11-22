@@ -272,6 +272,52 @@ describe('terminal send RPC', () => {
     expect(runtime.sendTerminal).not.toHaveBeenCalled()
   })
 
+  it('reports how much of a long text was typed when the guard flips part-way', async () => {
+    const text = 'a'.repeat(16 * 1024 + 10)
+    const status = vi
+      .fn()
+      .mockResolvedValue({ handle: 'terminal-1', isRunningAgent: true, status: 'permission' })
+      // The check before the send, then the check before the first chunk.
+      .mockResolvedValueOnce({ handle: 'terminal-1', isRunningAgent: true, status: 'working' })
+      .mockResolvedValueOnce({ handle: 'terminal-1', isRunningAgent: true, status: 'working' })
+    const runtime = stubRuntime({
+      resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
+      getDriver: vi.fn().mockReturnValue({ kind: 'desktop' }),
+      getTerminalAgentStatus: status,
+      // As the real runtime does: the guard runs before every chunk.
+      sendTerminal: vi.fn(
+        async (
+          _handle: string,
+          _action: unknown,
+          options: { beforeWrite?: (ptyId: string) => Promise<void> }
+        ) => {
+          await options.beforeWrite?.('pty-1')
+          await options.beforeWrite?.('pty-1')
+          throw new Error('unreachable: the second chunk is refused')
+        }
+      )
+    })
+    const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('terminal.send', {
+        terminal: 'terminal-1',
+        text,
+        requireAgentStatus: 'sendable',
+        client: { id: 'desktop-1', type: 'desktop' }
+      })
+    )
+
+    expect(response.ok && response.result).toEqual({
+      send: {
+        handle: 'terminal-1',
+        accepted: false,
+        bytesWritten: 16 * 1024,
+        refusedReason: 'permission'
+      }
+    })
+  })
+
   it('allows guarded terminal sends when the agent is sendable', async () => {
     const runtime = stubRuntime({
       resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),

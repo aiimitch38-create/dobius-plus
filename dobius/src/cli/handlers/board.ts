@@ -52,6 +52,8 @@ export function formatConsoles(consoles: BoardConsole[]): string {
     .join('\n')
 }
 
+const PASTE_SETTLE_MS = 500
+
 export const BOARD_HANDLERS: Record<string, CommandHandler> = {
   'board spawn-console': async ({ client, flags, cwd, json }) => {
     const promptFileFlag = getOptionalStringFlag(flags, 'prompt-file')
@@ -109,7 +111,7 @@ export const BOARD_HANDLERS: Record<string, CommandHandler> = {
     // before Enter; it refuses a guarded call that carries both at once.
     const guardedSend = async (
       part: { text: string } | { enter: true },
-      refused: (reason: string) => string
+      refused: (reason: string, bytesTyped: number) => string
     ): Promise<{ send: RuntimeTerminalSend }> => {
       const sent = await client.call<{ send: RuntimeTerminalSend }>('terminal.send', {
         terminal: handle,
@@ -124,19 +126,29 @@ export const BOARD_HANDLERS: Record<string, CommandHandler> = {
             : sent.result.send.refusedReason === 'permission'
               ? 'its agent is waiting on a permission prompt'
               : 'it is not accepting input'
-        throw new RuntimeClientError('board_card_send_refused', refused(reason))
+        throw new RuntimeClientError(
+          'board_card_send_refused',
+          refused(reason, sent.result.send.bytesWritten)
+        )
       }
       return sent.result
     }
-    const typed = await guardedSend(
-      { text },
-      (reason) => `Console card "${title}" (${handle}) did not accept the text: ${reason}. Nothing was sent.`
+    const cardLabel = `Console card "${title}" (${handle})`
+    const clearFirst = `Read it with \`dobius terminal read --terminal ${handle}\` and clear its input line before sending again.`
+    const typed = await guardedSend({ text }, (reason, bytesTyped) =>
+      bytesTyped > 0
+        ? // A long text goes in chunks; the guard can flip between two of them.
+          `${cardLabel} stopped part-way: ${reason}. The first ${bytesTyped} bytes of the text are typed in and were not submitted. ${clearFirst}`
+        : `${cardLabel} did not accept the text: ${reason}. Nothing was sent.`
     )
     if (flags.get('enter') === true) {
+      // Why: an agent's input box needs a moment to take in pasted text; an Enter
+      // sent at once can be swallowed. Same pause the runtime uses for a combined send.
+      await new Promise((resolve) => setTimeout(resolve, PASTE_SETTLE_MS))
       await guardedSend(
         { enter: true },
         (reason) =>
-          `Console card "${title}" (${handle}) has the text typed in, but Enter was not pressed: ${reason}.`
+          `${cardLabel} has the text typed in, but Enter was not pressed: ${reason}. ${clearFirst}`
       )
     }
     const result = { ...resolved, result: typed }
