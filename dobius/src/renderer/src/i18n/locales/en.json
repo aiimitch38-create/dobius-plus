@@ -12439,6 +12439,43 @@
         "AgentsHubSubNav": {
           "subnav": "Agent surfaces"
         }
+      },
+      "kanban": {
+        "KanbanJobSubmitPanel": {
+          "411635dcd4": "Title",
+          "9a9ce55549": "Task ID",
+          "67078cdfc1": "Project ID",
+          "f47f51a032": "Workspace ID",
+          "da2a8e8345": "Target device ID",
+          "030cba8cb8": "Recipe ID",
+          "a71523bf4d": "Source commit (full SHA)",
+          "c37322d131": "Estimated size (bytes)",
+          "15450a2fec": "Check this field: {{field}}",
+          "20986e15c9": "Check the fields and try again.",
+          "fcf36b820b": "New job",
+          "4f8bf4a8e1": "Close",
+          "48d0d636e6": "Copied from the open job. Check every field before you submit.",
+          "862be3cd6b": "Submitting…",
+          "2bb961bcd6": "Submit job"
+        },
+        "KanbanJobDetailPanel": {
+          "76b0536916": "Retrying…",
+          "9c61963fa2": "Retry job",
+          "e8d63495b4": "Cancelling…",
+          "1dc9ab3828": "Cancel job"
+        },
+        "KanbanJobLanes": {
+          "f33e62a9fc": "The job request failed. Refresh to check its state.",
+          "3e9b5963fa": "Retry this job?",
+          "2156aa4f9d": "The job goes back in the queue and runs again on the job host. That can cost money.",
+          "b080c51ede": "Retry job",
+          "0d47e73c5f": "Submit this job?",
+          "696a494a64": "This starts work on the job host as soon as a worker is free. That can cost money.",
+          "62fbd4bdce": "Submit job",
+          "6b140ef6ba": "New job",
+          "4a16082b1c": "This job is already being submitted. Wait for it, then refresh.",
+          "5c06c9c3d1": "Too many submissions are still unconfirmed. Refresh the board and check them first."
+        }
       }
     },
     "i18n": {

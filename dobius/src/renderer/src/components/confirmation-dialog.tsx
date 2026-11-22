@@ -131,6 +131,11 @@ export function ConfirmationDialogProvider({
   )
 }
 
+/** Null outside a ConfirmationDialogProvider, so a surface can supply its own. */
+export function useOptionalConfirmationDialog(): ConfirmationDialogContextValue | null {
+  return useContext(ConfirmationDialogContext)
+}
+
 export function useConfirmationDialog(): ConfirmationDialogContextValue {
   const confirm = useContext(ConfirmationDialogContext)
   if (!confirm) {

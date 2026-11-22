@@ -12439,6 +12439,43 @@
         "AgentsHubSubNav": {
           "subnav": "Agent surfaces"
         }
+      },
+      "kanban": {
+        "KanbanJobSubmitPanel": {
+          "411635dcd4": "Título",
+          "9a9ce55549": "ID de la tarea",
+          "67078cdfc1": "ID del proyecto",
+          "f47f51a032": "ID del espacio de trabajo",
+          "da2a8e8345": "ID del dispositivo de destino",
+          "030cba8cb8": "ID de la receta",
+          "a71523bf4d": "Commit de origen (SHA completo)",
+          "c37322d131": "Tamaño estimado (bytes)",
+          "15450a2fec": "Revisa este campo: {{field}}",
+          "20986e15c9": "Revisa los campos e inténtalo de nuevo.",
+          "fcf36b820b": "Nuevo trabajo",
+          "4f8bf4a8e1": "Cerrar",
+          "48d0d636e6": "Copiado del trabajo abierto. Revisa cada campo antes de enviarlo.",
+          "862be3cd6b": "Enviando…",
+          "2bb961bcd6": "Enviar trabajo"
+        },
+        "KanbanJobDetailPanel": {
+          "76b0536916": "Reintentando…",
+          "9c61963fa2": "Reintentar trabajo",
+          "e8d63495b4": "Cancelando…",
+          "1dc9ab3828": "Cancelar trabajo"
+        },
+        "KanbanJobLanes": {
+          "f33e62a9fc": "La solicitud del trabajo falló. Actualiza para ver su estado.",
+          "3e9b5963fa": "¿Reintentar este trabajo?",
+          "2156aa4f9d": "El trabajo vuelve a la cola y se ejecuta de nuevo en el servidor de trabajos. Esto puede costar dinero.",
+          "b080c51ede": "Reintentar trabajo",
+          "0d47e73c5f": "¿Enviar este trabajo?",
+          "696a494a64": "Esto inicia el trabajo en el servidor de trabajos en cuanto haya un trabajador libre. Esto puede costar dinero.",
+          "62fbd4bdce": "Enviar trabajo",
+          "6b140ef6ba": "Nuevo trabajo",
+          "4a16082b1c": "Este trabajo ya se está enviando. Espera a que termine y luego actualiza.",
+          "5c06c9c3d1": "Hay demasiados envíos sin confirmar. Actualiza el tablero y revísalos primero."
+        }
       }
     },
     "i18n": {
