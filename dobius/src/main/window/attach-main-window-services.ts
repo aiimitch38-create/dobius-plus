@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { app, ipcMain } from 'electron'
+import { registerWhatsNewHandlers } from '../whats-new'
 import type { BrowserWindow } from 'electron'
 import type { Store } from '../persistence'
 import type {
@@ -514,7 +515,10 @@ function registerFileDropRelay(mainWindow: BrowserWindow): void {
   })
 }
 
-export function registerUpdaterHandlers(_store: Store): void {
+export function registerUpdaterHandlers(store: Store): void {
+  // Why here: the What's new popup is part of the update flow, and this is the
+  // one updater entry point that already receives the store.
+  registerWhatsNewHandlers(store)
   ipcMain.removeHandler('updater:getStatus')
   ipcMain.removeHandler('updater:getVersion')
   ipcMain.removeHandler('updater:check')

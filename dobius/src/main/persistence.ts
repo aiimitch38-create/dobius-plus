@@ -70,6 +70,7 @@ import type {
   WorkspaceSessionPatch,
   WorkspaceSessionState
 } from '../shared/types'
+import { normalizeWhatsNewState, raiseWhatsNewSeen, readWhatsNewSeen } from '../shared/whats-new'
 import {
   deriveGlobalWindowsRuntimeDefaultFromLegacySettings,
   normalizeProjectRuntimePreference
@@ -2725,6 +2726,7 @@ export class Store {
   private githubCacheDirty = false
   private gitUsernameCache = new Map<string, string>()
   private loadNeedsSave = false
+  private profileExistedOnLoad = false
   private backupRotationSuspended = false
   private settingsChangeListeners = new Set<
     (
@@ -3015,6 +3017,9 @@ export class Store {
       }
     }
 
+    // Why: the What's new popup must stay quiet on a first install; a profile
+    // recovered from a backup still counts as one that ran before.
+    this.profileExistedOnLoad = fileExistedOnLoad || recoveredFromBackup
     return this.finishLoad(result, fileExistedOnLoad, fileExistedOnLoad || recoveredFromBackup)
   }
 
@@ -3290,6 +3295,8 @@ export class Store {
           featureInteractionTelemetryBuckets: normalizeFeatureInteractionTelemetryBuckets(
             parsed.featureInteractionTelemetryBuckets
           ),
+          // Why: disk input is untrusted; a malformed record is dropped.
+          whatsNew: normalizeWhatsNewState(parsed.whatsNew),
           projectGroups: normalizedProjectGroups,
           folderWorkspaces: normalizeFolderWorkspaces(
             parsed.folderWorkspaces,
@@ -5697,6 +5704,26 @@ export class Store {
   }
 
   // ── Onboarding ────────────────────────────────────────────────────
+
+  /** True when the data file (or a usable backup) was there before this launch. */
+  hadProfileOnLoad(): boolean {
+    return this.profileExistedOnLoad
+  }
+
+  getWhatsNewSeen(): string | null {
+    return readWhatsNewSeen(this.state.whatsNew)
+  }
+
+  /** Records that `version`'s notes were shown. Never lowers the saved value. */
+  markWhatsNewSeen(version: string): void {
+    const current = this.getWhatsNewSeen()
+    const next = raiseWhatsNewSeen(current, version)
+    if (next === null || next === current) {
+      return
+    }
+    this.state.whatsNew = { seen: next }
+    this.scheduleSave()
+  }
 
   getOnboarding(): PersistedState['onboarding'] {
     const defaults = getDefaultOnboardingState()

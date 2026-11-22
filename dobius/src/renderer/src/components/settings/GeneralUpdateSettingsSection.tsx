@@ -8,6 +8,9 @@ import { SearchableSetting } from './SearchableSetting'
 import { SettingsSubsectionHeader } from './SettingsFormControls'
 import { translate } from '@/i18n/i18n'
 import { getUpdateCheckClickOptions, getUpdateCheckHint } from '@/lib/update-check-click-options'
+import { fetchCurrentWhatsNew } from '@/lib/whats-new-api'
+import { WhatsNewNotesList } from '../WhatsNewNotesList'
+import type { WhatsNewSection } from '../../../../shared/whats-new'
 
 export function GeneralUpdateSettingsSection(): React.JSX.Element {
   const updateStatus = useAppStore((s) => s.updateStatus)
@@ -47,6 +50,25 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
         setAppVersion(version)
       }
     })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Why: the one-time What's new popup is gone after Continue; keep the same
+  // notes readable here for the version that is running.
+  const [whatsNew, setWhatsNew] = useState<WhatsNewSection | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void fetchCurrentWhatsNew()
+      .then((section) => {
+        if (!cancelled) {
+          setWhatsNew(section)
+        }
+      })
+      .catch((error) => {
+        console.warn('[whats-new] could not load the notes:', error)
+      })
     return () => {
       cancelled = true
     }
@@ -245,6 +267,19 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
                   { value0: updateStatus.message }
                 ))}
         </p>
+
+        {whatsNew ? (
+          <div className="space-y-2 pt-1" data-testid="whats-new-settings">
+            <h4 className="text-sm font-medium">
+              {translate('whatsNew.settingsHeading', "What's new in version {{version}}", {
+                version: whatsNew.version
+              })}
+            </h4>
+            <div className="text-muted-foreground">
+              <WhatsNewNotesList sections={[whatsNew]} showVersions={false} />
+            </div>
+          </div>
+        ) : null}
       </SearchableSetting>
     </section>
   )

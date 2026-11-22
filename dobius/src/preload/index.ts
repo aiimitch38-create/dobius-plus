@@ -2928,6 +2928,12 @@ const api = {
     }
   } satisfies PreloadApi['updater'],
 
+  whatsNew: {
+    getPending: () => ipcRenderer.invoke('whatsNew:getPending'),
+    dismiss: () => ipcRenderer.invoke('whatsNew:dismiss'),
+    getCurrent: () => ipcRenderer.invoke('whatsNew:getCurrent')
+  } satisfies PreloadApi['whatsNew'],
+
   notebook: {
     runPythonCell: (args: {
       filePath: string
@@ -3614,20 +3620,21 @@ const api = {
       ipcRenderer.on('ui:boardWebTilePopup', listener)
       return () => ipcRenderer.removeListener('ui:boardWebTilePopup', listener)
     },
-    onBoardOpenWebTile: (
-      callback: (event: RuntimeBoardOpenWebTileEvent) => void
-    ): (() => void) => {
+    onBoardOpenWebTile: (callback: (event: RuntimeBoardOpenWebTileEvent) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: RuntimeBoardOpenWebTileEvent) =>
         callback(data)
       ipcRenderer.on('ui:boardOpenWebTile', listener)
       return () => ipcRenderer.removeListener('ui:boardOpenWebTile', listener)
     },
-    replyBoardOpenWebTile: (reply: { requestId: string; cardId?: string; error?: string }): void => {
+    replyBoardOpenWebTile: (reply: {
+      requestId: string
+      cardId?: string
+      error?: string
+    }): void => {
       ipcRenderer.send('board:openWebTileReply', reply)
     },
     onAgentCursor: (callback: (event: AgentCursorEvent) => void): (() => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, data: AgentCursorEvent) =>
-        callback(data)
+      const listener = (_event: Electron.IpcRendererEvent, data: AgentCursorEvent) => callback(data)
       ipcRenderer.on('ui:agentCursor', listener)
       return () => ipcRenderer.removeListener('ui:agentCursor', listener)
     },
