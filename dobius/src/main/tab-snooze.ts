@@ -43,8 +43,6 @@ export type TabSnoozeDeps = {
   onChange: () => void
   /** True when main itself can see this pane running this conversation. */
   verifyResumeOwner?: (owner: AgentResumeOwner) => boolean
-  /** A snoozed tab gave its conversation up, so its return may claim it again. */
-  onConversationSnoozed?: (owner: AgentResumeOwner) => void
   now?: () => number
 }
 
@@ -53,7 +51,23 @@ export type TabSnoozeService = ReturnType<typeof createTabSnoozeService>
 export function createTabSnoozeService(deps: TabSnoozeDeps) {
   const now = deps.now ?? Date.now
   let timer: ReturnType<typeof setTimeout> | null = null
+  // Which window (webContents id) is bringing each `returning` entry back.
+  // In memory only: after a relaunch no window holds one, and
+  // recoverInterruptedReturns() starts those returns over.
+  const reservedBy = new Map<string, number>()
   const read = (): SnoozedTabEntry[] => cleanSnoozedTabEntries(deps.load())
+  const find = (ref: SnoozedTabRef): { entries: SnoozedTabEntry[]; entry?: SnoozedTabEntry } => {
+    const entries = read()
+    return { entries, entry: entries.find((existing) => sameSnoozedTab(existing, ref)) }
+  }
+  /** True when `rendererId` may finish or undo this return (no id: main itself). */
+  const holds = (entry: SnoozedTabEntry | undefined, rendererId?: number): boolean =>
+    Boolean(entry?.returning) &&
+    (rendererId === undefined || reservedBy.get(snoozedTabKey(entry!)) === rendererId)
+  const ownsConversation = (entry: SnoozedTabEntry, owner: AgentResumeOwner): boolean =>
+    Boolean(entry.agentSession?.resumeOwner) &&
+    getAgentResumeOwnerFingerprint(entry.agentSession!.resumeOwner!) ===
+      getAgentResumeOwnerFingerprint(owner)
 
   function arm(): void {
     if (timer) {
@@ -93,6 +107,7 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
 
   function insert(entry: SnoozedTabEntry, scrollback: string | null | undefined): SnoozedTabEntry {
     const key = snoozedTabKey(entry)
+    reservedBy.delete(key)
     const kept = read().filter((existing) => {
       if (!sameSnoozedTab(existing, entry)) {
         return true
@@ -108,6 +123,41 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
     deps.save([...kept, stored])
     changed()
     return stored
+  }
+
+  /** Drops entries for good, with their saved output. */
+  function remove(entries: SnoozedTabEntry[], gone: SnoozedTabEntry[]): boolean {
+    if (gone.length === 0) {
+      return false
+    }
+    deps.save(entries.filter((existing) => !gone.includes(existing)))
+    for (const entry of gone) {
+      reservedBy.delete(snoozedTabKey(entry))
+      if (entry.scrollbackRef) {
+        deps.scrollback.remove(entry.scrollbackRef)
+      }
+    }
+    changed()
+    return true
+  }
+
+  /** Returns that did not finish: back on the shelf until the user brings them back. */
+  function shelve(entries: SnoozedTabEntry[], back: SnoozedTabEntry[]): boolean {
+    if (back.length === 0) {
+      return false
+    }
+    deps.save(
+      entries.map((existing) => {
+        if (!back.includes(existing)) {
+          return existing
+        }
+        reservedBy.delete(snoozedTabKey(existing))
+        const { returning: _returning, ...rest } = existing
+        return { ...rest, until: null, ready: false }
+      })
+    )
+    changed()
+    return true
   }
 
   return {
@@ -148,7 +198,6 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
         if (!owner || deps.verifyResumeOwner?.(owner) === false) {
           return { ok: false, reason: 'conversation-not-resumable' }
         }
-        deps.onConversationSnoozed?.(owner)
       }
       const scrollback = typeof request.scrollback === 'string' ? request.scrollback : null
       return { ok: true, entry: insert(entry, scrollback) }
@@ -164,22 +213,24 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
      */
     take(
       ref: SnoozedTabRef,
-      options: { onlyReady?: boolean; returnTabId?: string } = {}
+      options: { onlyReady?: boolean; returnTabId?: string; rendererId?: number } = {}
     ): TakenSnoozedTab | null {
-      const entries = read()
-      const entry = entries.find((existing) => sameSnoozedTab(existing, ref))
+      const { entries, entry } = find(ref)
       if (!entry || entry.returning || (options.onlyReady && !entry.ready)) {
         return null
       }
       const taken = cleanSnoozedTabEntry({
         ...entry,
         returning: true,
-        // Why the saved id first: a retry after a quit reuses the tab the
-        // first attempt already made.
+        // Why the saved id first: a retry after a quit reuses the id the first
+        // attempt chose, which is how its leftover tab is found and replaced.
         returnTabId: entry.returnTabId ?? options.returnTabId
       })
       if (!taken) {
         return null
+      }
+      if (options.rendererId !== undefined) {
+        reservedBy.set(snoozedTabKey(taken), options.rendererId)
       }
       deps.save(entries.map((existing) => (existing === entry ? taken : existing)))
       changed()
@@ -189,36 +240,41 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
       }
     },
 
-    /** The reopened tab's terminal started (or the user closed it): the entry is done. */
-    settle(ref: SnoozedTabRef): boolean {
-      const entries = read()
-      const entry = entries.find((existing) => sameSnoozedTab(existing, ref))
-      if (!entry?.returning) {
-        return false
-      }
-      deps.save(entries.filter((existing) => existing !== entry))
-      if (entry.scrollbackRef) {
-        deps.scrollback.remove(entry.scrollbackRef)
-      }
-      changed()
-      return true
+    /**
+     * The reopened plain tab's terminal started (or the user closed it). An
+     * entry with a conversation is never settled from here: "a terminal
+     * started" does not prove the conversation did, so only settleReturn does.
+     */
+    settle(ref: SnoozedTabRef, rendererId?: number): boolean {
+      const { entries, entry } = find(ref)
+      return entry && !entry.agentSession && holds(entry, rendererId)
+        ? remove(entries, [entry])
+        : false
     },
 
-    /** A return that failed: back on the shelf until the user brings it back. */
-    putBack(ref: SnoozedTabRef): boolean {
+    /** Main started this conversation's terminal for the returning tab: done. */
+    settleReturn(owner: AgentResumeOwner): boolean {
       const entries = read()
-      const entry = entries.find((existing) => sameSnoozedTab(existing, ref))
-      if (!entry?.returning) {
-        return false
-      }
-      const { returning: _returning, ...rest } = entry
-      deps.save(
-        entries.map((existing) =>
-          existing === entry ? { ...rest, until: null, ready: false } : existing
+      return remove(
+        entries,
+        entries.filter((entry) => entry.returning && ownsConversation(entry, owner))
+      )
+    },
+
+    putBack(ref: SnoozedTabRef, rendererId?: number): boolean {
+      const { entries, entry } = find(ref)
+      return entry && holds(entry, rendererId) ? shelve(entries, [entry]) : false
+    },
+
+    /** A window closed, crashed or reloaded: the returns it held go back on the shelf. */
+    releaseRenderer(rendererId: number): boolean {
+      const entries = read()
+      return shelve(
+        entries,
+        entries.filter(
+          (entry) => entry.returning && reservedBy.get(snoozedTabKey(entry)) === rendererId
         )
       )
-      changed()
-      return true
     },
 
     /**
@@ -261,31 +317,27 @@ export function createTabSnoozeService(deps: TabSnoozeDeps) {
     },
 
     discard(ref: SnoozedTabRef): boolean {
+      const { entries, entry } = find(ref)
+      return entry ? remove(entries, [entry]) : false
+    },
+
+    /** The worktree is gone for good: so are its snoozed tabs and their output. */
+    discardWorktree(worktreeId: string): boolean {
       const entries = read()
-      const entry = entries.find((existing) => sameSnoozedTab(existing, ref))
-      if (!entry) {
-        return false
-      }
-      deps.save(entries.filter((existing) => existing !== entry))
-      if (entry.scrollbackRef) {
-        deps.scrollback.remove(entry.scrollbackRef)
-      }
-      changed()
-      return true
+      return remove(
+        entries,
+        entries.filter((entry) => entry.worktreeId === worktreeId)
+      )
     },
 
     /**
-     * True when this owner belongs to a snoozed tab, on the shelf or on its
-     * way back. A snoozed tab's layout and sleeping record left the session
-     * when it closed, so this list is what vouches for its resume.
+     * True only while `rendererId` is bringing back the tab that owns this
+     * conversation. A snoozed tab's layout and sleeping record left the
+     * session when it closed, so this reservation is what vouches for its
+     * resume; an entry still on the shelf vouches for nothing.
      */
-    ownsResumeOwner(owner: AgentResumeOwner): boolean {
-      const fingerprint = getAgentResumeOwnerFingerprint(owner)
-      return read().some(
-        (entry) =>
-          entry.agentSession?.resumeOwner &&
-          getAgentResumeOwnerFingerprint(entry.agentSession.resumeOwner) === fingerprint
-      )
+    ownsReturn(owner: AgentResumeOwner, rendererId: number): boolean {
+      return read().some((entry) => holds(entry, rendererId) && ownsConversation(entry, owner))
     }
   }
 }
@@ -296,7 +348,26 @@ export function setActiveTabSnoozeService(service: TabSnoozeService | null): voi
   activeService = service
 }
 
-/** The claim gate's question (main/ipc/pty.ts): does a snoozed tab own this resume? */
-export function isSnoozedTabResumeOwner(owner: AgentResumeOwner): boolean {
-  return activeService?.ownsResumeOwner(owner) ?? false
+/** The claim gate's question (main/ipc/pty.ts): is this window returning the tab that owns this resume? */
+export function isSnoozedTabReturnOwner(owner: AgentResumeOwner, rendererId: number): boolean {
+  return activeService?.ownsReturn(owner, rendererId) ?? false
+}
+
+/** Main started the conversation's terminal (main/ipc/pty.ts): the return is done. */
+export function settleSnoozedTabReturn(owner: AgentResumeOwner): boolean {
+  try {
+    return activeService?.settleReturn(owner) ?? false
+  } catch (err) {
+    // Why: the caller has just started a terminal; bookkeeping here must not
+    // make that spawn look failed. The entry stays and is released later.
+    console.warn(
+      '[tab-snooze] could not settle a return:',
+      err instanceof Error ? err.message : err
+    )
+    return false
+  }
+}
+
+export function discardSnoozedTabsForWorktree(worktreeId: string): void {
+  activeService?.discardWorktree(worktreeId)
 }

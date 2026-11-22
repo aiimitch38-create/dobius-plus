@@ -82,7 +82,10 @@ function harness(
       ]
       return tab
     },
-    setActiveTab: log('setActiveTab'),
+    closeTab: (tabId: string) => {
+      ;(calls.closeTab ??= []).push([tabId])
+      state.tabsByWorktree['wt-1'] = state.tabsByWorktree['wt-1'].filter((tab) => tab.id !== tabId)
+    },
     setActiveTabType: log('setActiveTabType'),
     setTabCustomTitle: log('setTabCustomTitle'),
     setTabColor: log('setTabColor'),
@@ -106,7 +109,12 @@ function harness(
         }
       : null
   )
-  const api = { take, settle: vi.fn(async () => true), putBack: vi.fn(async () => true) }
+  const api = {
+    take,
+    settle: vi.fn(async () => true),
+    putBack: vi.fn(async () => true),
+    discard: vi.fn(async () => true)
+  }
   const claimAgentResume = vi.fn(async () =>
     options.claim === 'refused' ? null : { ok: true as const, token: 'token-1', target }
   )
@@ -207,7 +215,7 @@ describe('runBringBackSnoozedTab', () => {
       taken: { entry: entry({ returning: true, agentSession: record }), scrollback: null }
     })
     expect(await runBringBackSnoozedTab(h.deps, REF)).toBe('already-open')
-    expect(h.api.settle).toHaveBeenCalledWith(REF)
+    expect(h.api.discard).toHaveBeenCalledWith(REF)
     expect(h.claimAgentResume).not.toHaveBeenCalled()
     expect(h.calls.createTab).toBeUndefined()
   })
@@ -263,27 +271,22 @@ describe('runBringBackSnoozedTab', () => {
     expect(h.api.take).not.toHaveBeenCalled()
   })
 
-  it('a retry after a quit reuses the tab the first attempt made', async () => {
-    const started = harness({
-      tabs: [{ id: 'tab-made', ptyId: 'pty-live' }],
-      taken: {
-        entry: entry({ returning: true, returnTabId: 'tab-made', agentSession: record }),
-        scrollback: null
-      }
-    })
-    expect(await runBringBackSnoozedTab(started.deps, REF, { onlyReady: true })).toBe('returned')
-    expect(started.api.settle).toHaveBeenCalledWith(REF)
-    expect(started.claimAgentResume).not.toHaveBeenCalled()
-
-    const notStarted = harness({
-      tabs: [{ id: 'tab-made', ptyId: null }],
-      taken: {
-        entry: entry({ returning: true, returnTabId: 'tab-made', agentSession: record }),
-        scrollback: null
-      }
-    })
-    expect(await runBringBackSnoozedTab(notStarted.deps, REF, { onlyReady: true })).toBe('returned')
-    expect(notStarted.calls.createTab).toBeUndefined()
-    expect(notStarted.calls.queueTabStartupCommand[0][0]).toBe('tab-made')
+  it('a retry never trusts a leftover tab: it is replaced by one that resumes the conversation', async () => {
+    for (const ptyId of ['pty-plain-shell', null]) {
+      const h = harness({
+        tabs: [{ id: 'tab-made', ptyId }],
+        taken: {
+          entry: entry({ returning: true, returnTabId: 'tab-made', agentSession: record }),
+          scrollback: null
+        }
+      })
+      expect(await runBringBackSnoozedTab(h.deps, REF, { onlyReady: true })).toBe('returned')
+      // Some terminal in the old tab proves nothing about the conversation.
+      expect(h.api.settle).not.toHaveBeenCalled()
+      expect(h.claimAgentResume).toHaveBeenCalledWith(owner)
+      expect(h.calls.closeTab).toEqual([['tab-made']])
+      expect(h.calls.createTab[0][1]).toMatchObject({ id: 'tab-made' })
+      expect(h.calls.queueTabStartupCommand[0][0]).toBe('tab-made')
+    }
   })
 })

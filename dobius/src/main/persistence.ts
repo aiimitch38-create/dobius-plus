@@ -73,6 +73,7 @@ import type {
 import { normalizeWhatsNewState, raiseWhatsNewSeen, readWhatsNewSeen } from '../shared/whats-new'
 import type { SnoozedTabEntry } from '../shared/tab-snooze-types'
 import { cleanSnoozedTabEntries } from '../shared/tab-snooze-types'
+import { discardSnoozedTabsForWorktree } from './tab-snooze'
 import {
   deriveGlobalWindowsRuntimeDefaultFromLegacySettings,
   normalizeProjectRuntimePreference
@@ -5064,6 +5065,10 @@ export class Store {
   }
 
   removeWorktreeMeta(worktreeId: string): void {
+    // Why here: every definitive worktree removal (IPC and runtime) ends in
+    // this call, and tabs snoozed in a worktree that no longer exists could
+    // only resurface in a different one recreated at the same path.
+    discardSnoozedTabsForWorktree(worktreeId)
     delete this.state.worktreeMeta[worktreeId]
     delete this.state.worktreeLineageById[worktreeId]
     delete this.state.workspaceLineageByChildKey[worktreeWorkspaceKey(worktreeId)]

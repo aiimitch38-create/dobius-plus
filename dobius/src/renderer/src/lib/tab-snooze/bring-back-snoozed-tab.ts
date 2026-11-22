@@ -26,11 +26,10 @@ type BringBackState = Pick<
   | 'workspaceSessionReady'
   | 'activeWorktreeId'
   | 'tabsByWorktree'
-  | 'ptyIdsByTabId'
   | 'terminalLayoutsByTabId'
   | 'unifiedTabsByWorktree'
   | 'createTab'
-  | 'setActiveTab'
+  | 'closeTab'
   | 'setActiveTabType'
   | 'setTabCustomTitle'
   | 'setTabColor'
@@ -45,7 +44,7 @@ type BringBackState = Pick<
 
 export type BringBackDeps = {
   getState: () => BringBackState
-  api: Pick<PreloadApi['tabSnooze'], 'take' | 'settle' | 'putBack'>
+  api: Pick<PreloadApi['tabSnooze'], 'take' | 'putBack' | 'discard'>
   isKnownWorktree: (worktreeId: string) => boolean
   /** The existing session-claim gate (pty:claimAgentResume). */
   claimAgentResume: (
@@ -63,11 +62,6 @@ export type BringBackDeps = {
 export type BringBackOptions = {
   /** A timed return: only an entry that is still ready, and it arrives unread. */
   onlyReady?: boolean
-}
-
-function tabHasStarted(state: BringBackState, worktreeId: string, tabId: string): boolean {
-  const tab = (state.tabsByWorktree[worktreeId] ?? []).find((candidate) => candidate.id === tabId)
-  return Boolean(tab && (tab.ptyId || (state.ptyIdsByTabId[tabId]?.length ?? 0) > 0))
 }
 
 /**
@@ -112,19 +106,14 @@ export async function runBringBackSnoozedTab(
     return done('put-back')
   }
 
-  if (tabHasStarted(deps.getState(), ref.worktreeId, tabId)) {
-    // An earlier attempt already made this tab and its terminal is running.
-    await deps.api.settle(ref)
-    return 'returned'
-  }
-
   const record = entry.agentSession
   let claim: { token: string; owner: AgentResumeOwner; target: AgentResumeSpawnTarget } | null =
     null
   let plan: AgentStartupPlan | null = null
   if (record) {
     if (deps.conversationIsOpen(record)) {
-      await deps.api.settle(ref)
+      // The conversation is on screen already, so the snoozed copy is spare.
+      await deps.api.discard(ref)
       return done('already-open')
     }
     const owner = record.resumeOwner
@@ -146,24 +135,21 @@ export async function runBringBackSnoozedTab(
   try {
     const state = deps.getState()
     const activate = !options.onlyReady && state.activeWorktreeId === ref.worktreeId
-    const existing = (state.tabsByWorktree[ref.worktreeId] ?? []).find(
-      (candidate) => candidate.id === tabId
-    )
-    const tab =
-      existing ??
-      state.createTab(ref.worktreeId, undefined, entry.shellOverride, {
-        id: tabId,
-        activate,
-        ...((record?.agent ?? entry.launchAgent)
-          ? { launchAgent: (record?.agent ?? entry.launchAgent) as TuiAgent }
-          : {}),
-        ...(entry.viewMode ? { viewMode: entry.viewMode } : {}),
-        ...(entry.startupCwd ? { startupCwd: entry.startupCwd } : {})
-      })
+    if ((state.tabsByWorktree[ref.worktreeId] ?? []).some((candidate) => candidate.id === tabId)) {
+      // Why: a tab left by an earlier attempt has no claim behind it, so any
+      // terminal in it is a plain shell. It is replaced, never reused.
+      state.closeTab(tabId, { keepWorktreeActive: true })
+    }
+    const tab = state.createTab(ref.worktreeId, undefined, entry.shellOverride, {
+      id: tabId,
+      activate,
+      ...((record?.agent ?? entry.launchAgent)
+        ? { launchAgent: (record?.agent ?? entry.launchAgent) as TuiAgent }
+        : {}),
+      ...(entry.viewMode ? { viewMode: entry.viewMode } : {}),
+      ...(entry.startupCwd ? { startupCwd: entry.startupCwd } : {})
+    })
     if (activate) {
-      if (existing) {
-        state.setActiveTab(tab.id)
-      }
       // Why: the user may be looking at an editor or browser tab; the tab they
       // asked for has to be the one in front.
       state.setActiveTabType('terminal')

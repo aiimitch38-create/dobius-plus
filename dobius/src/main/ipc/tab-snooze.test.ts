@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   status: [] as Record<string, unknown>[],
   resumeListeners: [] as (() => void)[],
   files: new Map<string, string>(),
-  forgetStarted: vi.fn()
+  registered: new Set<unknown>()
 }))
 
 vi.mock('electron', () => ({
@@ -30,8 +30,8 @@ vi.mock('../agent-hooks/server', () => ({
   agentHookServer: { getStatusSnapshot: () => mocks.status }
 }))
 
-vi.mock('../pty/agent-resume-claims', () => ({
-  mainProcessAgentResumeClaims: { forgetStarted: mocks.forgetStarted }
+vi.mock('../window/renderer-window-registry', () => ({
+  isRegisteredRendererWebContents: (sender: unknown) => mocks.registered.has(sender)
 }))
 
 vi.mock('../terminal-scrollback-snapshots', () => ({
@@ -84,6 +84,8 @@ const liveStatus = {
   providerSession
 }
 
+type SavedRow = Record<string, unknown>
+
 async function setup(session: Record<string, unknown> = {}) {
   vi.resetModules()
   let saved: unknown = []
@@ -96,9 +98,27 @@ async function setup(session: Record<string, unknown> = {}) {
   }
   const mod = await import('./tab-snooze')
   mod.registerTabSnoozeHandlers(store as never)
+  const makeSender = (id: number) => {
+    const listeners = new Map<string, () => void>()
+    const sender = {
+      id,
+      isDestroyed: () => false,
+      once: (event: string, listener: () => void) => listeners.set(event, listener),
+      on: (event: string, listener: () => void) => listeners.set(event, listener)
+    }
+    mocks.registered.add(sender)
+    return { sender, listeners }
+  }
+  const main = makeSender(7)
+  const callFrom = (
+    sender: unknown,
+    channel: string,
+    args: unknown[],
+    senderFrame: unknown = { parent: null }
+  ): unknown => mocks.handlers.get(channel)?.({ sender, senderFrame }, ...args)
   const call = (channel: string, ...args: unknown[]): unknown =>
-    mocks.handlers.get(channel)?.({}, ...args)
-  return { mod, call, readSaved: () => saved as Record<string, unknown>[] }
+    callFrom(main.sender, channel, args)
+  return { mod, call, callFrom, main, makeSender, readSaved: () => saved as SavedRow[] }
 }
 
 beforeEach(() => {
@@ -107,7 +127,7 @@ beforeEach(() => {
   mocks.status.length = 0
   mocks.resumeListeners.length = 0
   mocks.files.clear()
-  mocks.forgetStarted.mockReset()
+  mocks.registered.clear()
 })
 
 describe('tab snooze IPC', () => {
@@ -148,25 +168,72 @@ describe('tab snooze IPC', () => {
     mocks.status.length = 0
     mocks.status.push(liveStatus)
     expect(call('tabSnooze:add', request)).toMatchObject({ ok: true })
-    // Its finished claim is released so the return can claim the session again.
-    expect(mocks.forgetStarted).toHaveBeenCalledWith(owner)
   })
 
-  it('the claim gate recognises a snoozed owner until its tab has started', async () => {
-    const { call } = await setup()
-    const { isSnoozedTabResumeOwner } = await import('../tab-snooze')
+  it('refuses every channel to anything but the top frame of an app window', async () => {
+    const { callFrom, main } = await setup()
+    const ref = { worktreeId: 'wt-1', tabId: 'tab-1' }
+    const guest = { id: 9, isDestroyed: () => false }
+    const channels = ['add', 'list', 'take', 'settle', 'putBack', 'setTime', 'discard']
+    for (const channel of channels) {
+      // A webview guest or any other unregistered sender.
+      expect(() => callFrom(guest, `tabSnooze:${channel}`, [ref])).toThrow(/forbidden/)
+      // A sub-frame of a real app window.
+      expect(() => callFrom(main.sender, `tabSnooze:${channel}`, [ref], { parent: {} })).toThrow(
+        /forbidden/
+      )
+      expect(() => callFrom(main.sender, `tabSnooze:${channel}`, [ref], null)).toThrow(/forbidden/)
+    }
+    expect(callFrom(main.sender, 'tabSnooze:list', [])).toEqual([])
+  })
+
+  it('the claim gate vouches only for the window returning the tab, until main settles it', async () => {
+    const { call, callFrom, makeSender } = await setup()
+    const { isSnoozedTabReturnOwner, settleSnoozedTabReturn } = await import('../tab-snooze')
     mocks.status.push(liveStatus)
     const ref = { worktreeId: 'wt-1', tabId: 'tab-1' }
-    expect(isSnoozedTabResumeOwner(owner)).toBe(false)
     call('tabSnooze:add', { ...ref, title: 'Fix', until: null, agentSession })
-    expect(isSnoozedTabResumeOwner(owner)).toBe(true)
+    // Snoozed but not taken: no one may claim the conversation.
+    expect(isSnoozedTabReturnOwner(owner, 7)).toBe(false)
     expect(call('tabSnooze:take', ref, { returnTabId: 'tab-new' })).toMatchObject({
       entry: { returning: true, returnTabId: 'tab-new' }
     })
     expect(call('tabSnooze:take', ref)).toBeNull()
-    expect(isSnoozedTabResumeOwner(owner)).toBe(true)
-    expect(call('tabSnooze:settle', ref)).toBe(true)
-    expect(isSnoozedTabResumeOwner(owner)).toBe(false)
+    expect(isSnoozedTabReturnOwner(owner, 7)).toBe(true)
+    expect(isSnoozedTabReturnOwner(owner, 8)).toBe(false)
+    // Another window can neither finish nor undo this return.
+    const other = makeSender(8)
+    expect(callFrom(other.sender, 'tabSnooze:settle', [ref])).toBe(false)
+    expect(callFrom(other.sender, 'tabSnooze:putBack', [ref])).toBe(false)
+    // "Some terminal started" from the renderer does not settle a conversation.
+    expect(call('tabSnooze:settle', ref)).toBe(false)
+    expect(call('tabSnooze:list')).toHaveLength(1)
+    expect(settleSnoozedTabReturn(owner)).toBe(true)
+    expect(call('tabSnooze:list')).toEqual([])
+    expect(isSnoozedTabReturnOwner(owner, 7)).toBe(false)
+  })
+
+  it('a window that closes, crashes or reloads mid-return gives the entry back', async () => {
+    for (const event of ['destroyed', 'render-process-gone', 'did-navigate']) {
+      const { call, main } = await setup()
+      const ref = { worktreeId: 'wt-1', tabId: 'tab-1' }
+      call('tabSnooze:add', { ...ref, title: 'Fix', until: null })
+      call('tabSnooze:take', ref)
+      expect(call('tabSnooze:list')).toMatchObject([{ returning: true }])
+      main.listeners.get(event)?.()
+      const [entry] = call('tabSnooze:list') as SavedRow[]
+      expect(entry.returning).toBeUndefined()
+      expect(call('tabSnooze:take', ref)).not.toBeNull()
+    }
+  })
+
+  it('removing a worktree discards its snoozed tabs', async () => {
+    const { call } = await setup()
+    const { discardSnoozedTabsForWorktree } = await import('../tab-snooze')
+    call('tabSnooze:add', { worktreeId: 'wt-1', tabId: 'tab-1', title: 'A', until: null })
+    call('tabSnooze:add', { worktreeId: 'wt-2', tabId: 'tab-2', title: 'B', until: null })
+    discardSnoozedTabsForWorktree('wt-1')
+    expect(call('tabSnooze:list')).toMatchObject([{ worktreeId: 'wt-2' }])
   })
 
   it('falls back to the output the session saved for a tab that is not on screen', async () => {

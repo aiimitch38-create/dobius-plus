@@ -1,10 +1,10 @@
 import { BrowserWindow, ipcMain, powerMonitor } from 'electron'
+import type { IpcMainInvokeEvent, WebContents } from 'electron'
 import type { AgentResumeOwner } from '../../shared/agent-resume-owner'
 import type { SnoozeTabRequest, SnoozeTabResult } from '../../shared/tab-snooze-types'
 import { parseSnoozedTabRef } from '../../shared/tab-snooze-types'
 import { agentHookServer } from '../agent-hooks/server'
 import type { Store } from '../persistence'
-import { mainProcessAgentResumeClaims } from '../pty/agent-resume-claims'
 import {
   deleteTerminalScrollbackSnapshotSync,
   readTerminalScrollbackSnapshotSync,
@@ -12,6 +12,7 @@ import {
 } from '../terminal-scrollback-snapshots'
 import type { TabSnoozeScrollbackStore, TabSnoozeService } from '../tab-snooze'
 import { createTabSnoozeService, setActiveTabSnoozeService } from '../tab-snooze'
+import { isRegisteredRendererWebContents } from '../window/renderer-window-registry'
 
 export const TAB_SNOOZE_CHANGED_CHANNEL = 'tabSnooze:changed'
 
@@ -80,6 +81,40 @@ function broadcastChanged(): void {
 
 let service: TabSnoozeService | null = null
 
+// Why: these channels close tabs' conversations out of the session and hand
+// them back, so, like runtime:call, only the top frame of a first-party app
+// window may use them; webview guests and sub-frames are rejected.
+function assertAppWindowSender(event: IpcMainInvokeEvent, channel: string): void {
+  const sender = event?.sender
+  if (
+    typeof sender?.isDestroyed !== 'function' ||
+    sender.isDestroyed() ||
+    !isRegisteredRendererWebContents(sender) ||
+    event.senderFrame == null ||
+    event.senderFrame.parent !== null
+  ) {
+    throw new Error(`forbidden: ${channel} is only available to Dobius app windows`)
+  }
+}
+
+const watchedRenderers = new WeakSet<WebContents>()
+
+/** A window that closes, crashes or reloads mid-return gives its entries back. */
+function watchRenderer(sender: WebContents): void {
+  if (watchedRenderers.has(sender)) {
+    return
+  }
+  watchedRenderers.add(sender)
+  const { id } = sender
+  const release = (): void => {
+    service?.releaseRenderer(id)
+  }
+  sender.once('destroyed', release)
+  sender.on('render-process-gone', release)
+  // Why: a reloaded page has forgotten which tabs it was bringing back.
+  sender.on('did-navigate', release)
+}
+
 export function registerTabSnoozeHandlers(store: Store): void {
   if (!service) {
     service = createTabSnoozeService({
@@ -87,10 +122,7 @@ export function registerTabSnoozeHandlers(store: Store): void {
       save: (entries) => store.setSnoozedTabs(entries),
       scrollback: snoozedTabScrollbackStore,
       onChange: broadcastChanged,
-      verifyResumeOwner: hookServerSeesResumeOwner,
-      onConversationSnoozed: (owner) => {
-        mainProcessAgentResumeClaims.forgetStarted(owner)
-      }
+      verifyResumeOwner: hookServerSeesResumeOwner
     })
     setActiveTabSnoozeService(service)
     service.recoverInterruptedReturns()
@@ -104,7 +136,17 @@ export function registerTabSnoozeHandlers(store: Store): void {
     ipcMain.removeHandler(channel)
   }
 
-  ipcMain.handle('tabSnooze:add', (_event, raw: unknown): SnoozeTabResult => {
+  const handle = <Args extends unknown[], Result>(
+    channel: (typeof CHANNELS)[number],
+    handler: (sender: WebContents, ...args: Args) => Result
+  ): void => {
+    ipcMain.handle(channel, (event, ...args) => {
+      assertAppWindowSender(event, channel)
+      return handler(event.sender, ...(args as Args))
+    })
+  }
+
+  handle('tabSnooze:add', (_sender, raw: unknown): SnoozeTabResult => {
     const ref = parseSnoozedTabRef(raw)
     if (!ref) {
       return { ok: false, reason: 'invalid' }
@@ -116,31 +158,33 @@ export function registerTabSnoozeHandlers(store: Store): void {
         : readSessionScrollback(store, ref.tabId)
     return snooze.add({ ...request, scrollback })
   })
-  ipcMain.handle('tabSnooze:list', () => snooze.list())
-  ipcMain.handle('tabSnooze:take', (_event, raw: unknown, options: unknown) => {
+  handle('tabSnooze:list', () => snooze.list())
+  handle('tabSnooze:take', (sender, raw: unknown, options: unknown) => {
     const ref = parseSnoozedTabRef(raw)
     if (!ref) {
       return null
     }
     const opts = (options && typeof options === 'object' ? options : {}) as Record<string, unknown>
+    watchRenderer(sender)
     return snooze.take(ref, {
       onlyReady: opts.onlyReady === true,
+      rendererId: sender.id,
       ...(typeof opts.returnTabId === 'string' ? { returnTabId: opts.returnTabId } : {})
     })
   })
-  ipcMain.handle('tabSnooze:settle', (_event, raw: unknown) => {
+  handle('tabSnooze:settle', (sender, raw: unknown) => {
     const ref = parseSnoozedTabRef(raw)
-    return ref ? snooze.settle(ref) : false
+    return ref ? snooze.settle(ref, sender.id) : false
   })
-  ipcMain.handle('tabSnooze:putBack', (_event, raw: unknown) => {
+  handle('tabSnooze:putBack', (sender, raw: unknown) => {
     const ref = parseSnoozedTabRef(raw)
-    return ref ? snooze.putBack(ref) : false
+    return ref ? snooze.putBack(ref, sender.id) : false
   })
-  ipcMain.handle('tabSnooze:setTime', (_event, raw: unknown, until: unknown) => {
+  handle('tabSnooze:setTime', (_sender, raw: unknown, until: unknown) => {
     const ref = parseSnoozedTabRef(raw)
     return ref ? snooze.setTime(ref, typeof until === 'number' ? until : null) : false
   })
-  ipcMain.handle('tabSnooze:discard', (_event, raw: unknown) => {
+  handle('tabSnooze:discard', (_sender, raw: unknown) => {
     const ref = parseSnoozedTabRef(raw)
     return ref ? snooze.discard(ref) : false
   })

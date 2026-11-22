@@ -140,12 +140,14 @@ describe('main-process agent resume claims', () => {
     expect(claims.forgetStarted(owner)).toBe(false)
     expect(claims.beginSpawn(first.token, owner, first.target)).toBe(true)
     expect(claims.forgetStarted(owner)).toBe(false)
-    expect(claims.finishSpawn(first.token, true)).toBe(true)
+    expect(claims.finishSpawn(first.token, true, 'pty-returned')).toBe(true)
 
     // Started: a second resume of the same session is refused...
     const returnedOwner = { ...owner, ptyId: 'pty-returned', launchToken: 'launch-returned' }
     expect(claims.claim(returnedOwner)).toEqual({ ok: false })
-    // ...until the tab that runs it is snoozed, which stops its terminal.
+    // ...and only the terminal that claim started can give it up.
+    expect(claims.forgetStarted({ ...returnedOwner, ptyId: 'pty-elsewhere' })).toBe(false)
+    expect(claims.forgetStarted({ ...returnedOwner, worktreeId: 'wt-other' })).toBe(false)
     expect(claims.forgetStarted(returnedOwner)).toBe(true)
     expect(claims.claim(returnedOwner).ok).toBe(true)
     // Still one consumer at a time.

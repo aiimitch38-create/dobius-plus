@@ -8515,6 +8515,21 @@ describe('Store', () => {
     expect(store.getWorktreeMeta('b')).toBeDefined()
   })
 
+  it('removeWorktreeMeta discards the tabs snoozed in that worktree', async () => {
+    const store = await createStore()
+    // Why after createStore: it resets modules, and the store must see this service.
+    const { setActiveTabSnoozeService } = await import('./tab-snooze')
+    const discardWorktree = vi.fn()
+    setActiveTabSnoozeService({ discardWorktree } as never)
+    try {
+      store.setWorktreeMeta('a', { displayName: 'A' })
+      store.removeWorktreeMeta('a')
+      expect(discardWorktree).toHaveBeenCalledWith('a')
+    } finally {
+      setActiveTabSnoozeService(null)
+    }
+  })
+
   it('stores and removes worktree lineage independently from metadata', async () => {
     const store = await createStore()
     const lineage = makeWorktreeLineage()

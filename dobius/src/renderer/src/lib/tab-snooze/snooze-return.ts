@@ -1,5 +1,5 @@
 import type { AgentResumeOwner } from '../../../../shared/agent-resume-owner'
-import type { SnoozedTabRef } from '../../../../shared/tab-snooze-types'
+import type { SnoozedTabEntry, SnoozedTabRef } from '../../../../shared/tab-snooze-types'
 import type { PreloadApi } from '../../../../preload/api-types'
 import type { AppState } from '@/store/types'
 import type { BringBackOptions } from './bring-back-snoozed-tab'
@@ -10,14 +10,15 @@ type SettleState = Pick<
 >
 
 /**
- * Finishes returns whose tab has really started: main drops the entry only
- * now, so a quit before this point starts the return over instead of losing
- * the conversation. A tab closed before it started is done too, and gives its
- * reserved session claim back.
+ * Finishes the returns this window started. A plain tab is done once its
+ * terminal has started (or the user closed it). A conversation is different:
+ * a started terminal is not proof the conversation started, so main drops
+ * that entry itself when it starts the conversation's terminal. Anything main
+ * did not confirm goes back on the shelf instead of being lost.
  */
 export function settleReturningSnoozedTabs(deps: {
   getState: () => SettleState
-  api: Pick<PreloadApi['tabSnooze'], 'settle'>
+  api: Pick<PreloadApi['tabSnooze'], 'settle' | 'putBack'>
   releaseAgentResume: (token: string, owner: AgentResumeOwner) => Promise<boolean>
 }): void {
   const state = deps.getState()
@@ -30,11 +31,45 @@ export function settleReturningSnoozedTabs(deps: {
       continue
     }
     state.untrackReturningSnoozedTab(tabId)
-    if (!tab && returning.claim) {
+    if (!returning.claim) {
+      void deps.api.settle(returning.ref)
+      continue
+    }
+    if (!tab) {
       void deps.releaseAgentResume(returning.claim.token, returning.claim.owner)
     }
-    void deps.api.settle(returning.ref)
+    // A no-op when main already confirmed the conversation and dropped the entry.
+    void deps.api.putBack(returning.ref)
   }
+}
+
+/**
+ * Run right after this window's saved tabs are restored, before any terminal
+ * mounts. An entry main still holds with a return tab id means that return
+ * never finished, so the tab it left has no conversation behind it and would
+ * mount as a plain shell. It is closed; the entry brings the real one back.
+ */
+export function closeInterruptedSnoozeReturnTabs(deps: {
+  entries: SnoozedTabEntry[]
+  getState: () => Pick<AppState, 'tabsByWorktree'>
+  closeTab: (tabId: string) => void
+}): string[] {
+  const closed: string[] = []
+  for (const entry of deps.entries) {
+    const tabId = entry.returnTabId
+    if (!tabId || entry.returning) {
+      continue
+    }
+    if (
+      Object.values(deps.getState().tabsByWorktree).some((tabs) =>
+        tabs.some((tab) => tab.id === tabId)
+      )
+    ) {
+      deps.closeTab(tabId)
+      closed.push(tabId)
+    }
+  }
+  return closed
 }
 
 type LookState = Pick<AppState, 'workspaceSessionReady' | 'snoozedTabs' | 'drainSnoozeBringBacks'>

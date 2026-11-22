@@ -49,7 +49,6 @@ function request(tabId: string, extra: Partial<SnoozeTabRequest> = {}): SnoozeTa
 function harness(options: { verifyResumeOwner?: (owner: AgentResumeOwner) => boolean } = {}) {
   const state = { saved: [] as unknown, clock: 1000, changes: 0 }
   const files = new Map<string, string>()
-  const freed: AgentResumeOwner[] = []
   const service = createTabSnoozeService({
     load: () => state.saved,
     save: (entries) => {
@@ -69,11 +68,10 @@ function harness(options: { verifyResumeOwner?: (owner: AgentResumeOwner) => boo
     onChange: () => {
       state.changes += 1
     },
-    onConversationSnoozed: (owner) => freed.push(owner),
     now: () => state.clock,
     ...options
   })
-  return { service, state, files, freed }
+  return { service, state, files }
 }
 
 describe('cleanSnoozedTabEntry', () => {
@@ -251,8 +249,6 @@ describe('tab snooze service', () => {
     const trusted = harness({ verifyResumeOwner: () => true })
     const session = agentSession('tab-1')
     expect(trusted.service.add(request('tab-1', { agentSession: session })).ok).toBe(true)
-    expect(trusted.service.ownsResumeOwner(session.resumeOwner as AgentResumeOwner)).toBe(true)
-    expect(trusted.freed).toHaveLength(1)
     trusted.service.stop()
 
     const untrusted = harness({ verifyResumeOwner: () => false })
@@ -269,17 +265,65 @@ describe('tab snooze service', () => {
     untrusted.service.stop()
   })
 
-  it('vouches for the owner until the reopened tab has started', () => {
+  it('vouches for the owner only for the window that took the entry, until it settles', () => {
     const h = harness({ verifyResumeOwner: () => true })
     const session = agentSession('tab-1')
     const owner = session.resumeOwner as AgentResumeOwner
     const ref = { worktreeId: 'wt-1', tabId: 'tab-1' }
     h.service.add(request('tab-1', { agentSession: session }))
-    h.service.take(ref)
-    expect(h.service.ownsResumeOwner(owner)).toBe(true)
-    expect(h.service.ownsResumeOwner({ ...owner, ptyId: 'pty-other' })).toBe(false)
-    h.service.settle(ref)
-    expect(h.service.ownsResumeOwner(owner)).toBe(false)
+    // On the shelf: nobody may claim the conversation.
+    expect(h.service.ownsReturn(owner, 7)).toBe(false)
+    h.service.take(ref, { rendererId: 7 })
+    expect(h.service.ownsReturn(owner, 7)).toBe(true)
+    expect(h.service.ownsReturn(owner, 8)).toBe(false)
+    expect(h.service.ownsReturn({ ...owner, ptyId: 'pty-other' }, 7)).toBe(false)
+    // A terminal starting is not enough: only the confirmed conversation settles it.
+    expect(h.service.settle(ref, 7)).toBe(false)
+    expect(h.service.settleReturn({ ...owner, ptyId: 'pty-other' })).toBe(false)
+    expect(h.service.list()).toHaveLength(1)
+    expect(h.service.settleReturn(owner)).toBe(true)
+    expect(h.service.list()).toEqual([])
+    expect(h.service.ownsReturn(owner, 7)).toBe(false)
+    h.service.stop()
+  })
+
+  it('only the window that took an entry can settle it or put it back', () => {
+    const h = harness()
+    const ref = { worktreeId: 'wt-1', tabId: 'tab-1' }
+    h.service.add(request('tab-1'))
+    h.service.take(ref, { rendererId: 7 })
+    expect(h.service.settle(ref, 8)).toBe(false)
+    expect(h.service.putBack(ref, 8)).toBe(false)
+    expect(h.service.settle(ref, 7)).toBe(true)
+    expect(h.service.list()).toEqual([])
+    h.service.stop()
+  })
+
+  it('a window that goes away mid-return gives its entries back to the shelf', () => {
+    const h = harness()
+    h.service.add(request('tab-1', { until: 500, scrollback: 'out' }))
+    h.service.add(request('tab-2'))
+    h.service.take({ worktreeId: 'wt-1', tabId: 'tab-1' }, { rendererId: 7 })
+    h.service.take({ worktreeId: 'wt-1', tabId: 'tab-2' }, { rendererId: 8 })
+    h.service.releaseRenderer(7)
+    const [first, second] = h.service.list()
+    expect(first).toMatchObject({ tabId: 'tab-1', until: null, ready: false })
+    expect(first.returning).toBeUndefined()
+    expect(second.returning).toBe(true)
+    expect(h.service.take({ worktreeId: 'wt-1', tabId: 'tab-1' })?.scrollback).toBe('out')
+    h.service.stop()
+  })
+
+  it('a removed worktree takes its entries and their output with it', () => {
+    const h = harness()
+    h.service.add(request('tab-1', { until: 5000, scrollback: 'gone' }))
+    h.service.add(request('tab-2', { worktreeId: 'wt-2', until: 9000, scrollback: 'kept' }))
+    const changes = h.state.changes
+    expect(h.service.discardWorktree('wt-1')).toBe(true)
+    expect(h.service.list().map((entry) => entry.worktreeId)).toEqual(['wt-2'])
+    expect([...h.files.values()]).toEqual(['kept'])
+    expect(h.state.changes).toBe(changes + 1)
+    expect(h.service.discardWorktree('wt-1')).toBe(false)
     h.service.stop()
   })
 

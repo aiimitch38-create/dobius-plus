@@ -28,7 +28,7 @@ import {
   type AgentResumeOwner
 } from '../../shared/agent-resume-owner'
 import { mainProcessAgentResumeClaims } from '../pty/agent-resume-claims'
-import { isSnoozedTabResumeOwner } from '../tab-snooze'
+import { isSnoozedTabReturnOwner, settleSnoozedTabReturn } from '../tab-snooze'
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
 import {
   isWslShellName,
@@ -1385,12 +1385,26 @@ export function registerPtyHandlers(
 
   const isPersistedAgentResumeOwner = (
     owner: AgentResumeOwner,
-    allowClaimedOwnerAfterRecordClear = false
+    allowClaimedOwnerAfterRecordClear = false,
+    senderId?: number
   ): boolean => {
     // Why: a snoozed tab's layout and sleeping record left the session when it
-    // closed; main's snooze list is the persisted owner for its return.
-    if (isSnoozedTabResumeOwner(owner)) {
-      return true
+    // closed, so the window bringing it back is vouched for by main's snooze
+    // reservation instead, and only once nothing still runs the conversation.
+    if (senderId !== undefined && isSnoozedTabReturnOwner(owner, senderId)) {
+      return (
+        !hasLivePty(owner.ptyId) &&
+        !agentHookServer
+          .getStatusSnapshot()
+          .some(
+            (entry) =>
+              entry.providerSession?.key === owner.providerSession.key &&
+              entry.providerSession?.id === owner.providerSession.id &&
+              entry.state !== 'done' &&
+              Boolean(entry.ptyId) &&
+              hasLivePty(entry.ptyId as string)
+          )
+      )
     }
     const session = store?.getWorkspaceSession()
     const saved = session?.sleepingAgentSessionsByPaneKey?.[owner.paneKey]
@@ -1428,20 +1442,30 @@ export function registerPtyHandlers(
     return true
   }
 
-  ipcMain.handle('pty:claimAgentResume', (_event, request: unknown) => {
+  ipcMain.handle('pty:claimAgentResume', (event, request: unknown) => {
     const owner = parseAgentResumeOwner(request)
-    if (!owner || !isPersistedAgentResumeOwner(owner)) {
+    const senderId: number | undefined = event.sender?.id
+    if (!owner || !isPersistedAgentResumeOwner(owner, false, senderId)) {
       return null
+    }
+    if (senderId !== undefined && isSnoozedTabReturnOwner(owner, senderId)) {
+      // Why here and not when the tab was snoozed: only now has main checked
+      // that the terminal which ran the conversation is gone.
+      mainProcessAgentResumeClaims.forgetStarted(owner)
     }
     return mainProcessAgentResumeClaims.claim(owner)
   })
-  ipcMain.handle('pty:releaseAgentResume', (_event, request: unknown) => {
+  ipcMain.handle('pty:releaseAgentResume', (event, request: unknown) => {
     if (typeof request !== 'object' || request === null) {
       return false
     }
     const { token, owner: rawOwner } = request as Record<string, unknown>
     const owner = parseAgentResumeOwner(rawOwner)
-    if (typeof token !== 'string' || !owner || !isPersistedAgentResumeOwner(owner)) {
+    if (
+      typeof token !== 'string' ||
+      !owner ||
+      !isPersistedAgentResumeOwner(owner, false, event.sender?.id)
+    ) {
       return false
     }
     return mainProcessAgentResumeClaims.release(token, owner)
@@ -2359,7 +2383,7 @@ export function registerPtyHandlers(
           }
           result = await provider.spawn(spawnOptions)
           if (resumeClaim) {
-            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, true)
+            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, true, result.id)
           }
         } catch (err) {
           if (resumeClaim) {
@@ -3145,13 +3169,16 @@ export function registerPtyHandlers(
                 resumeClaim.owner,
                 resumeClaim.target
               ) ||
-              !isPersistedAgentResumeOwner(resumeClaim.owner, true))
+              !isPersistedAgentResumeOwner(resumeClaim.owner, true, event.sender?.id))
           ) {
             throw new Error('Automatic agent-resume ownership changed before PTY spawn')
           }
           result = await provider.spawn(spawnOptions)
           if (resumeClaim) {
-            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, true)
+            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, true, result.id)
+            // Why: main itself just started the conversation, which is the
+            // only proof that a snoozed tab's return is complete.
+            settleSnoozedTabReturn(resumeClaim.owner)
           }
           spawnTiming.mark('provider_spawn')
         } catch (err) {

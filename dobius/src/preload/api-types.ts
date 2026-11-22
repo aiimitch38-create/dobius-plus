@@ -2509,7 +2509,7 @@ export type PreloadApi = {
       ref: SnoozedTabRef,
       options?: { onlyReady?: boolean; returnTabId?: string }
     ) => Promise<TakenSnoozedTab | null>
-    /** The reopened tab's terminal started: the entry is done. */
+    /** A plain reopened tab's terminal started; a conversation is settled by main alone. */
     settle: (ref: SnoozedTabRef) => Promise<boolean>
     /** The return failed: back on the shelf until brought back by hand. */
     putBack: (ref: SnoozedTabRef) => Promise<boolean>

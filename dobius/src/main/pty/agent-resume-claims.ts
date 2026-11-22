@@ -17,6 +17,8 @@ type ResumeClaim = {
   target: AgentResumeSpawnTarget
   state: ResumeClaimState
   token?: string
+  /** The terminal a finished claim started, when the spawn site reported it. */
+  ptyId?: string
 }
 
 export type AgentResumeClaimResult =
@@ -79,7 +81,7 @@ export function createAgentResumeClaims(createToken: () => string = randomUUID) 
       return true
     },
 
-    finishSpawn(token: string, spawned: boolean): boolean {
+    finishSpawn(token: string, spawned: boolean, ptyId?: string): boolean {
       const key = sessionByToken.get(token)
       if (!key) {
         return false
@@ -91,6 +93,9 @@ export function createAgentResumeClaims(createToken: () => string = randomUUID) 
       sessionByToken.delete(token)
       delete claim.token
       claim.state = spawned ? 'started' : 'retryable'
+      if (spawned && ptyId) {
+        claim.ptyId = ptyId
+      }
       return true
     },
 
@@ -119,9 +124,10 @@ export function createAgentResumeClaims(createToken: () => string = randomUUID) 
     },
 
     /**
-     * A snoozed tab gave its conversation up: its terminal is closing, so a
-     * finished claim for that session no longer describes anything running
-     * and the tab's return may claim it again. In-flight claims are untouched.
+     * A snoozed tab is coming back and the terminal that ran its conversation
+     * is gone, so the finished claim no longer describes anything running and
+     * the return may claim the session again. Only the owner of the terminal
+     * this claim started can give it up; in-flight claims are untouched.
      */
     forgetStarted(owner: AgentResumeOwner): boolean {
       const validatedOwner = parseAgentResumeOwner(owner)
@@ -129,7 +135,12 @@ export function createAgentResumeClaims(createToken: () => string = randomUUID) 
         return false
       }
       const key = getAgentResumeClaimKey(validatedOwner)
-      if (claimsBySession.get(key)?.state !== 'started') {
+      const claim = claimsBySession.get(key)
+      if (
+        claim?.state !== 'started' ||
+        claim.ptyId !== validatedOwner.ptyId ||
+        !sameAgentResumeSpawnTarget(claim.target, getAgentResumeSpawnTarget(validatedOwner))
+      ) {
         return false
       }
       return claimsBySession.delete(key)
