@@ -406,6 +406,11 @@ function isLongPollRequest(request: RpcRequest): boolean {
     const params = request.params as { wait?: unknown } | undefined
     return params?.wait === true
   }
+  // Why: `dobius adam ask --wait` holds the socket for ADAM's whole turn (minutes).
+  if (request.method === 'adam.ask') {
+    const params = request.params as { wait?: unknown } | undefined
+    return params?.wait === true
+  }
   return false
 }
 
@@ -444,7 +449,8 @@ const CONFIRMATION_GATED_METHODS = new Set([
   'crew.setPaused',
   'crew.draftApprove',
   'crew.decide',
-  'agentApprovals.grant'
+  'agentApprovals.grant',
+  'adam.ask'
 ])
 
 export class DobiusRuntimeRpcServer {

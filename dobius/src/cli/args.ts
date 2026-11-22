@@ -148,7 +148,8 @@ export function supportsBrowserPageFlag(commandPath: string[]): boolean {
       'diagnostics',
       'linear',
       'git',
-      'pr'
+      'pr',
+      'adam'
     ].includes(commandPath[0])
   ) {
     return false
@@ -195,7 +196,8 @@ export function isCommandGroup(commandPath: string[]): boolean {
         'lead',
         'crew',
         'git',
-        'pr'
+        'pr',
+        'adam'
       ].includes(commandPath[0])) ||
     (commandPath.length === 2 && commandPath[0] === 'agent' && commandPath[1] === 'hooks') ||
     (commandPath.length === 2 &&

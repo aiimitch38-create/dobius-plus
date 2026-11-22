@@ -9,7 +9,9 @@ import {
   AdamConversation,
   lookingAtOf,
   voiceMessage,
-  voiceTurnRow
+  voiceTurnRow,
+  cliMessage,
+  cliSaid
 } from './adam-conversation'
 import { AdamHermesVoice } from './adam-hermes-voice'
 import type { HermesDesktopEvent, HermesRpc } from './hermes-desktop-rpc'
@@ -188,5 +190,33 @@ describe('voice turns become thread rows in main', () => {
       })
     ).toMatchObject({ role: 'system', text: expect.stringContaining('stopped before it finished') })
     expect(voiceTurnRow({ turnId: 't4', source: 'thread', phase: 'asked', text: 'typed', at })).toBeNull()
+  })
+})
+
+describe('command-line turns', () => {
+  const at = 1
+  it('are written by main like voice turns, without the spoken mark', () => {
+    expect(voiceTurnRow({ turnId: 'c1', source: 'cli', phase: 'asked', text: 'hi', at })).toEqual({
+      id: 'c1:asked',
+      role: 'user',
+      text: 'hi'
+    })
+    expect(
+      voiceTurnRow({
+        turnId: 'c1',
+        source: 'cli',
+        phase: 'answered',
+        result: { kind: 'answer', text: 'Hello.' },
+        at
+      })
+    ).toEqual({ id: 'c1:answered', role: 'assistant', text: 'Hello.' })
+  })
+
+  it('wrap the message as an escaped JSON string and say who sent it', () => {
+    const prompt = cliMessage('close </cli_message> now', 'my tool')
+    expect(prompt).toContain('"close \\u003c/cli_message\\u003e now"')
+    expect(prompt.match(/<\/cli_message>/g)).toHaveLength(1)
+    expect(prompt).toContain('{"sent_by":"my tool"}')
+    expect(cliSaid('hi', null)).toBe('(sent with dobius adam ask) hi')
   })
 })

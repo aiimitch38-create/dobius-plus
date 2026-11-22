@@ -22,6 +22,7 @@ import { LEAD_COMMAND_SPECS } from './lead'
 import { CREW_COMMAND_SPECS } from './crew'
 import { GIT_COMMAND_SPECS } from './git'
 import { PR_COMMAND_SPECS } from './pr'
+import { ADAM_COMMAND_SPECS } from './adam'
 
 export const COMMAND_SPECS: CommandSpec[] = [
   ...CORE_COMMAND_SPECS,
@@ -46,5 +47,6 @@ export const COMMAND_SPECS: CommandSpec[] = [
   ...LEAD_COMMAND_SPECS,
   ...CREW_COMMAND_SPECS,
   ...GIT_COMMAND_SPECS,
-  ...PR_COMMAND_SPECS
+  ...PR_COMMAND_SPECS,
+  ...ADAM_COMMAND_SPECS
 ]
