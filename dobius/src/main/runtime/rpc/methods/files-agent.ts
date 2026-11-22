@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { SearchResult } from '../../../../shared/types'
 import {
+  AgentFileRefusedError,
   SECRET_SEARCH_EXCLUDE_GLOBS,
   assertAgentReadAllowed,
   assertAgentWriteAllowed,
@@ -30,6 +31,15 @@ const AgentFileWrite = AgentFilePath.extend({
     .pipe(z.string().max(MAX_WRITE_CHARS, 'File content is too large (5 MB max)'))
 })
 
+// Why: a trailing backslash escapes whatever the glob splitter sees next.
+const UserGlob = z
+  .string()
+  .max(1000)
+  .refine((value) => !value.trimEnd().endsWith('\\'), {
+    message: 'Search patterns may not end in a backslash'
+  })
+  .optional()
+
 const AgentFileSearch = z.object({
   worktree: requiredString('Missing worktree selector'),
   query: requiredString('Missing search query'),
@@ -37,26 +47,22 @@ const AgentFileSearch = z.object({
   wholeWord: z.boolean().optional(),
   // Why no useRegex: without ripgrep the fallback matches caller regexes in
   // Electron main, where a catastrophic-backtracking pattern freezes the app.
-  includePattern: z.string().max(1000).optional(),
-  excludePattern: z.string().max(1000).optional(),
+  includePattern: UserGlob,
+  excludePattern: UserGlob,
   maxResults: z.number().int().positive().max(MAX_SEARCH_RESULTS).optional()
 })
 
-export function excludeSecretsPattern(excludePattern: string | undefined): string {
-  const user = excludePattern?.trim()
-  return [...(user ? [user] : []), ...SECRET_SEARCH_EXCLUDE_GLOBS].join(',')
-}
-
-/** Belt and braces after the exclude globs (they are case-sensitive, the name
- *  rules fold case). Says nothing about what was dropped: a count would let a
- *  caller probe a secret's content one query at a time. */
-export function withoutSecretFiles(result: SearchResult): SearchResult {
+/** Belt and braces after the exclude globs (the name rules also fold
+ *  Unicode). Nothing about a dropped file reaches the caller: totals and
+ *  truncated are computed from the kept matches only, since a count would let
+ *  a caller probe a secret's content one query at a time. */
+export function withoutSecretFiles(result: SearchResult, maxResults: number): SearchResult {
   const files = result.files.filter((file) => !isSecretLookingPath(file.relativePath))
-  return {
-    files,
-    totalMatches: files.reduce((sum, file) => sum + (file.matchCount ?? file.matches.length), 0),
-    truncated: result.truncated
-  }
+  const totalMatches = files.reduce(
+    (sum, file) => sum + (file.matchCount ?? file.matches.length),
+    0
+  )
+  return { files, totalMatches, truncated: totalMatches >= maxResults }
 }
 
 export const AGENT_FILE_METHODS: RpcMethod[] = [
@@ -93,17 +99,27 @@ export const AGENT_FILE_METHODS: RpcMethod[] = [
   defineMethod({
     name: 'files.agentSearch',
     params: AgentFileSearch,
-    handler: async (params, { runtime }) =>
-      withoutSecretFiles(
-        await runtime.searchRuntimeFiles(params.worktree, {
-          query: params.query,
-          caseSensitive: params.caseSensitive,
-          wholeWord: params.wholeWord,
-          useRegex: false,
-          includePattern: params.includePattern,
-          excludePattern: excludeSecretsPattern(params.excludePattern),
-          maxResults: params.maxResults ?? 200
-        })
-      )
+    handler: async (params, { runtime }) => {
+      const { connectionId } = await runtime.resolveMobileWriteRoot(params.worktree)
+      // Why: the SSH relay may predate caseInsensitiveExcludeGlobs and would
+      // then search secret files; refuse rather than rely on the post-filter.
+      if (connectionId) {
+        throw new AgentFileRefusedError("file search isn't available for remote worktrees yet")
+      }
+      const maxResults = params.maxResults ?? 200
+      const result = await runtime.searchRuntimeFiles(params.worktree, {
+        query: params.query,
+        caseSensitive: params.caseSensitive,
+        wholeWord: params.wholeWord,
+        useRegex: false,
+        includePattern: params.includePattern,
+        excludePattern: params.excludePattern,
+        // Why separate: never merged into the user's comma string, so no
+        // escape or comma in excludePattern can unhook a secret exclude.
+        caseInsensitiveExcludeGlobs: SECRET_SEARCH_EXCLUDE_GLOBS,
+        maxResults
+      })
+      return withoutSecretFiles(result, maxResults)
+    }
   })
 ]

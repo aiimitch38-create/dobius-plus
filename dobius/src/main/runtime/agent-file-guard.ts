@@ -32,21 +32,15 @@ const SECRET_FILE_NAME_PATTERNS: readonly RegExp[] = [
 const SECRET_DIRECTORY_NAMES = new Set(['.ssh', '.aws', '.gnupg', '.docker', '.kube'])
 
 /** The same rules as globs, so a search never even opens a secret file (a
- *  post-filter alone would leak through match counts and truncation). */
+ *  post-filter alone would leak through match counts and truncation). Passed
+ *  as caseInsensitiveExcludeGlobs: rg --iglob, git grep :(exclude,icase,glob). */
 export const SECRET_SEARCH_EXCLUDE_GLOBS: readonly string[] = [
   '**/.env*',
   '**/*key*',
-  '**/*Key*',
-  '**/*KEY*',
   '**/*secret*',
-  '**/*Secret*',
-  '**/*SECRET*',
   '**/*credential*',
-  '**/*Credential*',
   '**/*token*',
-  '**/*Token*',
   '**/*password*',
-  '**/*Password*',
   '**/dobius-runtime*.json',
   '**/*.pem',
   '**/*.p12',

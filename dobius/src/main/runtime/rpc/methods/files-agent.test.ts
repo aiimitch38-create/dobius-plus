@@ -129,8 +129,37 @@ describe('files.agentSearch', () => {
         query: 'KEY',
         maxResults: 200,
         useRegex: false,
-        excludePattern: expect.stringMatching(/^dist\/\*\*,\*\*\/\.env\*,/)
+        excludePattern: 'dist/**',
+        caseInsensitiveExcludeGlobs: expect.arrayContaining(['**/*token*', '**/.env*'])
       }))
+  })
+
+  it('truncated comes only from kept matches, so a dropped file cannot show through', async () => {
+    const match = { line: 1, column: 1, matchLength: 1, lineContent: 'x' }
+    runtime.searchRuntimeFiles.mockResolvedValue({
+      files: [
+        { filePath: 'a', relativePath: 'Token.TXT', matches: [match, match] },
+        { filePath: 'b', relativePath: 'src/app.ts', matches: [match] }
+      ],
+      totalMatches: 3,
+      truncated: true
+    })
+    const response = await call('files.agentSearch', { worktree: 'id:wt', query: 'x', maxResults: 3 })
+    expect(response).toMatchObject({ ok: true, result: { totalMatches: 1, truncated: false } })
+  })
+
+  it('refuses a pattern ending in a backslash, and remote worktrees', async () => {
+    for (const params of [{ excludePattern: 'dist\\' }, { includePattern: 'src/\\ ' }]) {
+      const response = await call('files.agentSearch', { worktree: 'id:wt', query: 'x', ...params })
+      expect(response).toMatchObject({ ok: false, error: { message: expect.stringContaining('backslash') } })
+    }
+    runtime.resolveMobileWriteRoot.mockResolvedValue({ root: '/remote/wt', connectionId: 'ssh-1' })
+    const remote = await call('files.agentSearch', { worktree: 'id:wt', query: 'x' })
+    expect(remote).toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining("isn't available for remote worktrees yet") }
+    })
+    expect(runtime.searchRuntimeFiles).not.toHaveBeenCalled()
   })
 
   it('caps maxResults', async () => {
@@ -141,11 +170,14 @@ describe('files.agentSearch', () => {
 
   it('withoutSecretFiles uses matchCount when present', () => {
     expect(
-      withoutSecretFiles({
-        files: [{ filePath: 'a', relativePath: 'a.ts', matches: [], matchCount: 7 }],
-        totalMatches: 7,
-        truncated: true
-      })
+      withoutSecretFiles(
+        {
+          files: [{ filePath: 'a', relativePath: 'a.ts', matches: [], matchCount: 7 }],
+          totalMatches: 7,
+          truncated: true
+        },
+        7
+      )
     ).toEqual({
       files: [{ filePath: 'a', relativePath: 'a.ts', matches: [], matchCount: 7 }],
       totalMatches: 7,
