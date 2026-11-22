@@ -62,8 +62,11 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['worktree', 'list'],
     summary: 'List Dobius+-managed worktrees',
-    usage: 'dobius worktree list [--repo <selector>] [--limit <n>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'repo', 'limit']
+    usage: 'dobius worktree list [--repo <selector>] [--limit <n>] [--sleeping] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'repo', 'limit', 'sleeping'],
+    notes: [
+      '--sleeping lists only worktrees with no live terminal (asleep), skipping archived ones.'
+    ]
   },
   {
     path: ['worktree', 'show'],
@@ -163,6 +166,25 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
     usage: 'dobius worktree rm --worktree <selector> [--force] [--run-hooks] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'force', 'run-hooks'],
     notes: ['Repo-defined dobius.yaml archive hooks are skipped unless --run-hooks is passed.']
+  },
+  {
+    path: ['worktree', 'sleep'],
+    summary: 'Put a worktree to sleep: its terminals stop, agent sessions are saved for wake',
+    usage: 'dobius worktree sleep --worktree <selector> [--force] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'force'],
+    notes: [
+      'Stops every terminal in that worktree (agents included). Agent sessions are saved so wake can resume them.',
+      'Refuses the worktree the calling terminal runs in (it would stop itself mid-command) unless --force is passed.'
+    ],
+    examples: ['dobius worktree sleep --worktree branch:old-feature --json']
+  },
+  {
+    path: ['worktree', 'wake'],
+    summary: 'Wake a sleeping worktree (opens it in the app so its terminals start again)',
+    usage: 'dobius worktree wake --worktree <selector> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'worktree'],
+    notes: ['Waking switches the Dobius+ window to that worktree, the same as clicking it.'],
+    examples: ['dobius worktree wake --worktree branch:old-feature --json']
   },
   {
     path: ['worktree', 'ps'],
@@ -283,6 +305,17 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
       'dobius terminal rename --terminal term_abc123 --title "RUNNER"',
       'dobius terminal rename --terminal term_abc123 --json'
     ]
+  },
+  {
+    path: ['terminal', 'agent'],
+    summary: 'Show whether an agent runs in a terminal and what it is doing',
+    usage: 'dobius terminal agent [--terminal <handle|card:<id-or-title>|tab:<tabId>>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'terminal', 'worktree'],
+    notes: [
+      'status is working, permission (waiting for a yes/no), idle, or null when no agent is running.',
+      'Omit --terminal to check the active terminal. Read-only.'
+    ],
+    examples: ['dobius terminal agent --terminal term_abc123 --json']
   },
   {
     path: ['terminal', 'split'],
