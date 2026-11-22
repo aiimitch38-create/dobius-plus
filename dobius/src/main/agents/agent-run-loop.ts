@@ -68,7 +68,7 @@ export type RunLoopOptions = RunEndCallbacks & {
   spawnedBy?: string
 }
 
-type RunLoopStartArgs = { prompt: string; options?: RunLoopOptions }
+type RunLoopStartArgs = { prompt: string; cwd?: string; options?: RunLoopOptions }
 
 type HeldEnd =
   | { kind: 'result'; message: SDKResultMessage }
@@ -80,6 +80,16 @@ const loopRunCounts = new Map<string, number>()
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * Called by the runner once it knows which session the run will resume. A
+ * loop retry that would resume anything else (or nothing) must not start.
+ */
+export function assertLoopResume(loop: AgentRunLoopState | undefined, resume: string | undefined): void {
+  if (loop?.requiredSessionId && resume !== loop.requiredSessionId) {
+    throw new Error('the conversation of the failed attempt is no longer available')
+  }
 }
 
 export function attachRunLoop<A extends RunLoopStartArgs>(args: {
@@ -208,6 +218,13 @@ export function attachRunLoop<A extends RunLoopStartArgs>(args: {
       return false
     }
     const result: AutomationPrecheckResult = sandboxed.result
+    if (sandboxed.processesLeft) {
+      // Something the check started is still running in the folder: no retry
+      // on top of it, and its result is not trusted.
+      record({ postcheck: result })
+      finish('blocked', 'the check left processes running', loopCostUsd)
+      return false
+    }
     record({ postcheck: result })
     const passed = didAutomationPrecheckPass(result)
     // 'agents-page' runs skip the pause switch, so the loop asks for itself.
@@ -258,6 +275,9 @@ export function attachRunLoop<A extends RunLoopStartArgs>(args: {
       await args.restart({
         ...args.startArgs,
         prompt: buildRetryPrompt(result),
+        // The folder this attempt really ran in, even if the agent's own
+        // folder setting changed meanwhile.
+        cwd: args.cwd,
         options: {
           ...options,
           // Same thread in the journal for every attempt.
@@ -265,7 +285,7 @@ export function attachRunLoop<A extends RunLoopStartArgs>(args: {
           // The retry continues the session the failed attempt just left.
           resume: true,
           maxBudgetUsd: nextBudgetUsd,
-          loop: { ...loop, attempt: loop.attempt + 1, spentUsd }
+          loop: { ...loop, attempt: loop.attempt + 1, spentUsd, requiredSessionId: sessionId }
         }
       })
       return true
@@ -295,6 +315,7 @@ export function attachRunLoop<A extends RunLoopStartArgs>(args: {
 
   let settled = false
   return {
+    noFreshSessionFallback: loop.requiredSessionId !== undefined,
     onResult: (message) => {
       held ??= { kind: 'result', message }
     },

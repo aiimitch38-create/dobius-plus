@@ -30,7 +30,7 @@ import { assertExecutionAdmitted, type ExecutionOrigin } from './execution-gate'
 import { claimRunSession, currentRunSessionKey, releaseRunSession } from './agent-session-lease'
 import { appendAgentRunNotification } from './agent-notification-store'
 import { appendRunNotificationSafely, type GuardedRunEndCallbacks } from './agent-run-end-callbacks'
-import { attachRunLoop, type RunLoopOptions } from './agent-run-loop'
+import { assertLoopResume, attachRunLoop, type RunLoopOptions } from './agent-run-loop'
 import { appendRunProgress } from './agent-run-progress-log'
 import { buildRunEnv, currentGitBranch, resolveAgentRunCwd } from './agent-runner-environment'
 import { scheduleSessionWorkspaceBriefRefresh } from './session-workspace-brief'
@@ -243,7 +243,7 @@ async function consumeRun(
       onRunEnded('cancelled', 'stopped by user')
     }
   } catch (error) {
-    if (options.resume && !sawSystemInit && !resumeRetriedFresh) {
+    if (options.resume && !sawSystemInit && !resumeRetriedFresh && !callbacks.noFreshSessionFallback) {
       resumeRetriedFresh = true
       const retryOptions: Options = { ...options, resume: undefined }
       const retryQuery = query({ prompt, options: retryOptions })
@@ -393,6 +393,7 @@ export async function startAgentRun(args: {
       keyedSession.cwd === resolvedCwd
         ? keyedSession.sessionId
         : undefined
+    assertLoopResume(args.options?.loop, resume)
     const permissionMode =
       args.options?.permissionMode ?? (agent.bypassPermissions ? 'bypassPermissions' : 'default')
     const profile = resolveAgentRunProfile({

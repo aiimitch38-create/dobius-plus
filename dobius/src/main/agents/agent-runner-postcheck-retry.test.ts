@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   precheck: vi.fn(),
   sandboxFailure: null as string | null,
   storedSessionId: 'session-1',
+  storedSessionCwd: '/repo',
+  processesLeft: false,
   pinned: new Set<string>(),
   subscribe: vi.fn(),
   startCodexAgentProcess: vi.fn(),
@@ -25,7 +27,7 @@ vi.mock('./agent-run-postcheck-sandbox', () => ({
   runSandboxedPostcheck: async (args: unknown) =>
     mocks.sandboxFailure
       ? { ok: false, reason: mocks.sandboxFailure }
-      : { ok: true, result: await mocks.precheck(args) }
+      : { ok: true, result: await mocks.precheck(args), processesLeft: mocks.processesLeft }
 }))
 vi.mock('./agents-config-store', () => ({
   getAgentsControlState: () => ({
@@ -46,7 +48,7 @@ vi.mock('./agents-store', () => ({
     cwd: '/repo',
     bypassPermissions: false
   }),
-  getAgentSessionForKey: () => ({ sessionId: mocks.storedSessionId, cwd: '/repo' }),
+  getAgentSessionForKey: () => ({ sessionId: mocks.storedSessionId, cwd: mocks.storedSessionCwd }),
   updateAgentSession: vi.fn()
 }))
 vi.mock('./agent-runs-store', () => ({
@@ -179,6 +181,8 @@ beforeEach(() => {
   mocks.engine = 'claude'
   mocks.sandboxFailure = null
   mocks.storedSessionId = 'session-1'
+  mocks.storedSessionCwd = '/repo'
+  mocks.processesLeft = false
   mocks.pinned.clear()
   mocks.runs.clear()
   mocks.events.length = 0
@@ -459,6 +463,86 @@ describe('postcheck and retry', () => {
       releaseRunSession('other-run')
     }
     expect(mocks.query).toHaveBeenCalledTimes(1)
+    expect(storedRuns()[0].outcome).toBe('blocked')
+  })
+
+  it('does not start the retry when its session can no longer be resumed in the same folder', async () => {
+    mocks.precheck.mockImplementation(async () => {
+      // Same session id, but it now belongs to another folder: the runner would start fresh.
+      mocks.storedSessionCwd = '/elsewhere'
+      return checkResult(1)
+    })
+    const cb = callbacks()
+    await start({ postcheck, ...cb })
+
+    await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
+    expect(mocks.query).toHaveBeenCalledTimes(1)
+    expect(storedRuns()).toHaveLength(1)
+    expect(storedRuns()[0].outcome).toBe('blocked')
+    expect(loopNotes().at(-1)).toBe(
+      'loop: blocked, the retry could not start (the conversation of the failed attempt is no longer available)'
+    )
+  })
+
+  it('pins the retry to the failed attempt: same folder, same session, no fresh-session fallback', async () => {
+    mocks.precheck.mockResolvedValue(checkResult(1))
+    mocks.query
+      .mockImplementationOnce(() => streamOf())
+      // The resume fails before the session starts. An ordinary run would
+      // quietly start a fresh session here.
+      .mockImplementationOnce(() => ({
+        [Symbol.asyncIterator]: () => ({ next: () => Promise.reject(new Error('session not found')) }),
+        setPermissionMode: vi.fn(),
+        interrupt: vi.fn()
+      }))
+    const cb = callbacks()
+    await start({ postcheck, ...cb })
+
+    await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
+    expect(mocks.query).toHaveBeenCalledTimes(2)
+    const retry = mocks.query.mock.calls[1][0]
+    expect(retry.options.resume).toBe('session-1')
+    expect(retry.options.cwd).toBe('/repo')
+    expect(storedRuns()[1]).toMatchObject({ status: 'error', outcome: 'blocked' })
+    expect(cb.order).toEqual(['ended:error', 'settled'])
+  })
+
+  it('still falls back to a fresh session for an ordinary run whose resume fails', async () => {
+    mocks.query
+      .mockImplementationOnce(() => ({
+        [Symbol.asyncIterator]: () => ({ next: () => Promise.reject(new Error('session not found')) }),
+        setPermissionMode: vi.fn(),
+        interrupt: vi.fn()
+      }))
+      .mockImplementationOnce(() => streamOf())
+    const cb = callbacks()
+    await start({ onResult: cb.onResult, onSettled: cb.onSettled })
+
+    await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
+    expect(mocks.query).toHaveBeenCalledTimes(2)
+    expect(mocks.query.mock.calls[1][0].options.resume).toBeUndefined()
+    expect(cb.order).toEqual(['result', 'settled'])
+  })
+
+  it('blocks, with no retry, when the check left processes running', async () => {
+    mocks.processesLeft = true
+    mocks.precheck.mockResolvedValue(checkResult(1))
+    const cb = callbacks()
+    await start({ postcheck, ...cb })
+
+    await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
+    expect(mocks.query).toHaveBeenCalledTimes(1)
+    expect(storedRuns()[0].outcome).toBe('blocked')
+    expect(loopNotes().at(-1)).toBe('loop: blocked, the check left processes running')
+  })
+
+  it('does not call a check verified while its processes are still running', async () => {
+    mocks.processesLeft = true
+    mocks.precheck.mockResolvedValue(checkResult(0))
+    const cb = callbacks()
+    await start({ postcheck, ...cb })
+
+    await vi.waitFor(() => expect(cb.onSettled).toHaveBeenCalledTimes(1))
     expect(storedRuns()[0].outcome).toBe('blocked')
   })
 

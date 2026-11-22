@@ -30,6 +30,11 @@ export type AgentRunLoopState = {
   maxRuns: number
   budgetCeilingUsd: number
   spentUsd: number
+  /**
+   * Set on a retry: the session of the attempt that failed its check. The
+   * retry must resume exactly this session or not start.
+   */
+  requiredSessionId?: string
 }
 
 export function normalizeAgentRunPostcheck(
