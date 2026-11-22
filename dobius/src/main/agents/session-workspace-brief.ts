@@ -20,6 +20,13 @@ import {
   runWorkspaceGit,
   type WorkspaceRootInfo
 } from './session-workspace-facts'
+import {
+  collectWorkspacePreflight,
+  getWorkspacePreflightSources,
+  type PreflightReaders,
+  type WorkspacePreflightContext,
+  type WorkspacePreflightSources
+} from './session-workspace-preflight'
 
 // Generates CLAUDE.local.md (Claude Code's per-checkout, uncommitted memory
 // file) describing the session's worktree. Codex gets nothing: its
@@ -58,6 +65,10 @@ const unavailableAdamContextPack: WorkspaceContextPackProvider = async () => {
 export type SessionWorkspaceBriefDeps = {
   contextPack: WorkspaceContextPackProvider
   now: () => Date
+  // Defaults to the sources main/index.ts registered.
+  preflightSources?: () => WorkspacePreflightSources
+  preflightGatherMs?: number
+  preflightReaders?: PreflightReaders
 }
 
 const defaultDeps: SessionWorkspaceBriefDeps = {
@@ -69,11 +80,17 @@ const defaultDeps: SessionWorkspaceBriefDeps = {
 // is still accurate enough, so scheduled refreshes skip the git work.
 export const WORKSPACE_BRIEF_REFRESH_TTL_MS = 60_000
 
+// Why: a new terminal tab never waits longer than this for its brief; a
+// slower refresh keeps going and lands for the next session.
+export const TERMINAL_BRIEF_WAIT_MS = 1500
+
 const EXCLUDE_RULE = `/${WORKSPACE_BRIEF_FILENAME}`
 
 // All keyed by worktree root, so different cwds inside one worktree share them.
-const inFlight = new Map<string, Promise<WorkspaceBriefResult>>()
+const inFlight = new Map<string, { run: Promise<WorkspaceBriefResult>; hasWorktree: boolean }>()
 const lastWrittenAt = new Map<string, number>()
+// Roots whose last brief knew its Dobius worktree (terminal count, spend).
+const lastWrittenWithWorktree = new Set<string>()
 // Why: a root whose ignore rules defeat ours (a `!CLAUDE.local.md` re-include,
 // or a tracked file) would otherwise get the exclude rule appended on every run.
 const notIgnorableRoots = new Set<string>()
@@ -172,7 +189,8 @@ async function hasNestedLinkedWorktrees(root: WorkspaceRootInfo): Promise<boolea
 
 async function refreshBrief(
   root: WorkspaceRootInfo,
-  deps: SessionWorkspaceBriefDeps
+  deps: SessionWorkspaceBriefDeps,
+  context: WorkspacePreflightContext
 ): Promise<WorkspaceBriefResult> {
   const filePath = path.join(root.worktreeRoot, WORKSPACE_BRIEF_FILENAME)
   if (notIgnorableRoots.has(root.worktreeRoot)) {
@@ -193,9 +211,15 @@ async function refreshBrief(
     console.warn(`[workspace-brief] skipped ${filePath}: git could not confirm it is ignored`)
     return { status: 'skipped', reason: 'not-ignorable', filePath }
   }
-  const [facts, contextPack] = await Promise.all([
+  const [facts, contextPack, preflight] = await Promise.all([
     collectSessionWorkspaceFacts(root),
-    deps.contextPack(root.worktreeRoot)
+    deps.contextPack(root.worktreeRoot),
+    collectWorkspacePreflight(
+      root.worktreeRoot,
+      context,
+      (deps.preflightSources ?? getWorkspacePreflightSources)(),
+      { gatherMs: deps.preflightGatherMs, readers: deps.preflightReaders }
+    )
   ])
   // Why: re-check right before the write so a file the user created while the
   // facts were collected is still never overwritten.
@@ -203,15 +227,21 @@ async function refreshBrief(
     return { status: 'skipped', reason: 'user-authored', filePath }
   }
   const now = deps.now()
-  writeFileAtomic(filePath, renderSessionWorkspaceBrief(facts, now, contextPack))
+  writeFileAtomic(filePath, renderSessionWorkspaceBrief(facts, now, contextPack, preflight))
   lastWrittenAt.set(root.worktreeRoot, now.getTime())
+  if (context.worktreeId) {
+    lastWrittenWithWorktree.add(root.worktreeRoot)
+  } else {
+    lastWrittenWithWorktree.delete(root.worktreeRoot)
+  }
   return { status: 'written', filePath }
 }
 
 async function refreshForCwd(
   cwd: string,
   deps: SessionWorkspaceBriefDeps,
-  honorTtl: boolean
+  honorTtl: boolean,
+  context: WorkspacePreflightContext = {}
 ): Promise<WorkspaceBriefResult> {
   try {
     const root = await resolveWorkspaceRoot(path.resolve(cwd))
@@ -223,18 +253,31 @@ async function refreshForCwd(
     if (
       honorTtl &&
       writtenAt !== undefined &&
+      // Why: a brief written without the worktree (agent run, worktree
+      // creation) lacks the terminal count and spend a terminal can add.
+      (!context.worktreeId || lastWrittenWithWorktree.has(key)) &&
       deps.now().getTime() - writtenAt < WORKSPACE_BRIEF_REFRESH_TTL_MS
     ) {
       return { status: 'skipped', reason: 'recently-refreshed' }
     }
     const pending = inFlight.get(key)
     if (pending) {
-      return await pending
+      const joined = await pending.run
+      // Why: a refresh started without the worktree (agent run, worktree
+      // creation) lacks the terminal count and spend; a terminal waiting on it
+      // asks for one more run, which later terminals then share.
+      if (!context.worktreeId || pending.hasWorktree || joined.status !== 'written') {
+        return joined
+      }
+      const next = inFlight.get(key)
+      if (next) {
+        return await next.run
+      }
     }
-    const run = refreshBrief(root, deps).finally(() => {
+    const run = refreshBrief(root, deps, context).finally(() => {
       inFlight.delete(key)
     })
-    inFlight.set(key, run)
+    inFlight.set(key, { run, hasWorktree: Boolean(context.worktreeId) })
     return await run
   } catch (error) {
     console.warn(
@@ -261,4 +304,24 @@ export function scheduleSessionWorkspaceBriefRefresh(
   deps: SessionWorkspaceBriefDeps = defaultDeps
 ): Promise<WorkspaceBriefResult> {
   return refreshForCwd(cwd, deps, true)
+}
+
+export type TerminalBriefOutcome = WorkspaceBriefResult | { status: 'timed-out' }
+
+// Awaited by pty:spawn before a local shell starts, so a Claude session in the
+// new tab reads a current brief. Waits at most waitMs, never rejects; a
+// refresh still running then finishes in the background (single-flight per
+// worktree root, so a window restoring many tabs runs it once).
+export function primeTerminalWorkspaceBrief(
+  cwd: string,
+  worktreeId: string | undefined,
+  options: { waitMs?: number; deps?: SessionWorkspaceBriefDeps } = {}
+): Promise<TerminalBriefOutcome> {
+  const refresh = refreshForCwd(cwd, options.deps ?? defaultDeps, true, { worktreeId })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<TerminalBriefOutcome>((resolve) => {
+    timer = setTimeout(() => resolve({ status: 'timed-out' }), options.waitMs ?? TERMINAL_BRIEF_WAIT_MS)
+    timer.unref?.()
+  })
+  return Promise.race([refresh, timeout]).finally(() => clearTimeout(timer))
 }
