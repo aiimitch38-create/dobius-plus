@@ -11,7 +11,7 @@ import {
 import { RuntimeClientError } from './types'
 
 /**
- * Inside a Dobius terminal or agent run the CLI uses the agent bootstrap file
+ * Inside a background agent run the CLI uses the agent bootstrap file
  * (limited key). Why the fallback: an older Dobius app writes only the full
  * file, and the CLI must keep working against it. The agent sandbox denies
  * reading the full file, so a sandboxed agent cannot use either fallback.

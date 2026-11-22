@@ -146,6 +146,12 @@ describe('startCodexAgentProcess run policy', () => {
     expect(vi.mocked(spawn).mock.calls[0]?.[0]).toBe('/opt/tools/bin/codex')
   })
 
+  it('marks the run for the limited runtime agent key', () => {
+    startFake()
+    const options = vi.mocked(spawn).mock.calls[0]?.[2] as { env: NodeJS.ProcessEnv }
+    expect(options.env.DOBIUS_RUNTIME_SCOPE).toBe('agent')
+  })
+
   it('turns off Codex multi-agent so sub-agents cannot escape the step cap', () => {
     startFake()
     const commandArgs = vi.mocked(spawn).mock.calls[0]?.[1] as string[]

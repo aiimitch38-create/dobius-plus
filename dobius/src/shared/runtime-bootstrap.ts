@@ -48,7 +48,7 @@ export function getRuntimeMetadataPath(userDataPath: string): string {
   return join(userDataPath, PRIMARY_RUNTIME_METADATA_FILE)
 }
 
-// Why: agents (Dobius terminals and agent runs) must not hold the full runtime
+// Why: background (sandboxed) agent runs must not hold the full runtime
 // key. The runtime also publishes a second bootstrap file with the same
 // endpoint and a narrower agent key; the server maps that key to a short
 // method allowlist (main/runtime/agent-rpc-scope.ts). The agent sandbox denies
@@ -59,7 +59,7 @@ export function getAgentRuntimeMetadataPath(userDataPath: string): string {
   return join(userDataPath, AGENT_RUNTIME_METADATA_FILE)
 }
 
-/** Set on every process Dobius spawns for an agent; the CLI then uses the agent key. */
+/** Set on background agent runs (SDK, Codex, postchecks); the CLI then uses the agent key. */
 export const DOBIUS_RUNTIME_SCOPE_ENV = 'DOBIUS_RUNTIME_SCOPE'
 export const AGENT_RUNTIME_SCOPE = 'agent'
 

@@ -1,5 +1,6 @@
-// Why: default-deny for the agent key. Dobius terminals and agent runs get a
-// narrower runtime key than Carson's own CLI. That key may only talk to other
+// Why: default-deny for the agent key. Background (sandboxed) agent runs and
+// their postchecks get a narrower runtime key than Carson's own CLI and the
+// interactive Dobius terminals. That key may only talk to other
 // terminals, the orchestration mailbox and the Kanban work board, and read
 // workspace state. Anything that starts processes or agent runs (including
 // `agent.run --check`), changes settings, drives the browser or desktop,
@@ -64,7 +65,7 @@ export const AGENT_RPC_METHOD_ALLOWLIST: ReadonlySet<string> = new Set([
 ])
 
 const OUTSIDE_DOBIUS_HINT =
-  'Dobius terminals and agent runs use a limited Dobius key. Run this command from a terminal outside Dobius+ (for example Terminal.app).'
+  'Background agent runs use a limited Dobius key. Ask Carson to run this command from his own terminal.'
 
 /** Why the agent key may not make this call, or null when it may. */
 export function agentRpcDenial(method: string, params: unknown): string | null {

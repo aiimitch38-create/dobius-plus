@@ -452,7 +452,7 @@ export class DobiusRuntimeRpcServer {
   private readonly wsPort: number
   private readonly webClientRoot: string | undefined
   private readonly authToken = randomBytes(24).toString('hex')
-  // Why: the key handed to agents (Dobius terminals, agent runs). It only
+  // Why: the key handed to background agent runs. It only
   // reaches the methods in AGENT_RPC_METHOD_ALLOWLIST; see agent-rpc-scope.ts.
   private readonly agentAuthToken = randomBytes(24).toString('hex')
   private readonly keepaliveIntervalMs: number

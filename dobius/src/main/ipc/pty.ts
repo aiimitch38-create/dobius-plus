@@ -43,7 +43,6 @@ import { agentHookServer } from '../agent-hooks/server'
 import { isAgentStatusHooksEnabled } from '../agent-hooks/managed-agent-hook-controls'
 import { piTitlebarExtensionService } from '../pi/titlebar-extension-service'
 import { detectPiAgentKindFromCommand, type PiAgentKind } from '../../shared/pi-agent-kind'
-import { AGENT_RUNTIME_SCOPE, DOBIUS_RUNTIME_SCOPE_ENV } from '../../shared/runtime-bootstrap'
 import { isPwshAvailable } from '../pwsh'
 import { LocalPtyProvider } from '../providers/local-pty-provider'
 import type { IPtyProvider, PtySpawnOptions, PtySpawnResult } from '../providers/types'
@@ -1023,10 +1022,6 @@ export function buildPtyHostEnv(
       isWsl: opts.isWsl
     })
   })
-
-  // Why: anything running in a Dobius terminal (agents included) gets the
-  // limited runtime key; the CLI reads it from the agent bootstrap file.
-  baseEnv[DOBIUS_RUNTIME_SCOPE_ENV] = AGENT_RUNTIME_SCOPE
 
   return baseEnv
 }

@@ -36,7 +36,8 @@ describe('buildPostcheckEnv', () => {
       TMPDIR: '/tmp',
       NODE_ENV: 'test',
       CI: '1',
-      TERM: 'xterm'
+      TERM: 'xterm',
+      DOBIUS_RUNTIME_SCOPE: 'agent'
     })
   })
 })
