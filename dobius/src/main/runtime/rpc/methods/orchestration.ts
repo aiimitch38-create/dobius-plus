@@ -34,16 +34,28 @@ const TASK_STATUSES: TaskStatus[] = [
  * Why: the immediate push types the message plus Enter into the recipient's
  * PTY when its last agent status was 'idle'. That status can be stale after
  * the agent exits to a shell that sets no title, so a message from the
- * limited agent key could run as shell input outside every sandbox. Agent-key
- * messages are only stored; they reach the recipient on its next real idle
- * transition or an explicit `check`.
+ * limited agent key could run as shell input outside every sandbox. For the
+ * agent key the target is re-checked (same rule as a guarded terminal.send:
+ * running an agent, not at a permission prompt) right before the write;
+ * otherwise the message stays stored for the next idle transition or `check`.
  */
-function pushUnlessAgentKey(
+async function pushMessages(
   runtime: DobiusRuntimeService,
   handle: string,
   agentKey: true | undefined
-): void {
+): Promise<void> {
   if (!agentKey) {
+    runtime.deliverPendingMessagesForHandle(handle)
+    return
+  }
+  let status: Awaited<ReturnType<DobiusRuntimeService['getTerminalAgentStatus']>>
+  try {
+    status = await runtime.getTerminalAgentStatus(handle)
+  } catch {
+    // Unknown or closed handle: nothing to push into; the message stays stored.
+    return
+  }
+  if (status.isRunningAgent && status.status !== 'permission') {
     runtime.deliverPendingMessagesForHandle(handle)
   }
 }
@@ -223,8 +235,8 @@ export const ORCHESTRATION_METHODS: RpcMethod[] = [
         if (msg.type === 'worker_done' || msg.type === 'heartbeat') {
           reconcileLifecycleMessage(db, msg)
         }
-        // Why: see pushUnlessAgentKey.
-        pushUnlessAgentKey(runtime, params.to, agentKey)
+        // Why: see pushMessages.
+        await pushMessages(runtime, params.to, agentKey)
         runtime.notifyMessageArrived(params.to, msg.type)
         return { message: msg }
       }
@@ -255,7 +267,7 @@ export const ORCHESTRATION_METHODS: RpcMethod[] = [
         })
       )
       for (const message of messages) {
-        pushUnlessAgentKey(runtime, message.to_handle, agentKey)
+        await pushMessages(runtime, message.to_handle, agentKey)
         runtime.notifyMessageArrived(message.to_handle, message.type)
       }
 
@@ -600,7 +612,7 @@ export const ORCHESTRATION_METHODS: RpcMethod[] = [
         type: 'decision_gate',
         payload
       })
-      pushUnlessAgentKey(runtime, params.to, agentKey)
+      await pushMessages(runtime, params.to, agentKey)
       runtime.notifyMessageArrived(params.to, outbound.type)
 
       const threadId = outbound.id
