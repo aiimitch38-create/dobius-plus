@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import type { CustomAgent } from '../../shared/agents'
+import { AGENT_RUNTIME_SCOPE, DOBIUS_RUNTIME_SCOPE_ENV } from '../../shared/runtime-bootstrap'
 import { resolveCodexCommand } from '../codex-cli/command'
 import { getSpawnArgsForWindows } from '../win32-utils'
 import { buildSystemPrompt } from './agent-run-prompt'
@@ -92,7 +93,9 @@ export function startCodexAgentProcess(args: {
   commandArgs.push('-')
   const environment = {
     ...process.env,
-    ...(args.codexHome ? { CODEX_HOME: args.codexHome } : {})
+    ...(args.codexHome ? { CODEX_HOME: args.codexHome } : {}),
+    // Why: an agent run's `dobius` CLI calls must use the limited agent key.
+    [DOBIUS_RUNTIME_SCOPE_ENV]: AGENT_RUNTIME_SCOPE
   }
   // Why: a GUI-launched app has a minimal PATH, so a bare `codex` spawn fails
   // with ENOENT even when Codex is installed under a version manager.

@@ -97,10 +97,12 @@ describe('buildAgentRunSandboxPolicy', () => {
     )
     expect(disallowedTools).toContain(rule('Read', `${HOME}/Library/Messages/**`))
     expect(disallowedTools).toContain(rule('Read', `${USER_DATA}/claude-accounts/**`))
-    // The runtime file the dobius CLI needs stays readable.
-    expect(denyRead.some((entry) => isWithin(`${USER_DATA}/dobius-runtime.json`, entry))).toBe(
-      false
-    )
+    // The full runtime key is denied; the agent-key file the dobius CLI uses stays readable.
+    expect(denyRead).toContain(`${USER_DATA}/dobius-runtime.json`)
+    expect(disallowedTools).toContain(rule('Read', `${USER_DATA}/dobius-runtime.json`))
+    expect(
+      denyRead.some((entry) => isWithin(`${USER_DATA}/dobius-runtime-agent.json`, entry))
+    ).toBe(false)
   })
 
   it('lets Bash write only the cwd, the repo git dirs, the own agent folder, temp and caches', () => {

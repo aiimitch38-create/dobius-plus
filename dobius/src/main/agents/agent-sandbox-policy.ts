@@ -1,5 +1,6 @@
 import path from 'node:path'
 import type { Options, SandboxSettings } from '@anthropic-ai/claude-agent-sdk'
+import { getRuntimeMetadataPath } from '../../shared/runtime-bootstrap'
 
 /**
  * Process-boundary confinement for Claude agent runs (root fix for Codex F6).
@@ -151,6 +152,8 @@ export function buildAgentRunSandboxPolicy(context: AgentSandboxContext): AgentR
     path.join(home, 'Library', 'Messages'),
     ...USER_DATA_SECRET_DIRS.map((dir) => path.join(context.userDataDir, dir))
   ]
+  // The full runtime key. Agents use the limited key in dobius-runtime-agent.json.
+  const runtimeKeyFile = getRuntimeMetadataPath(context.userDataDir)
 
   // Why: Bash writes are an allowlist. A home-wide grant let an agent plant
   // code that runs outside the sandbox later (Claude hook scripts, settings
@@ -194,7 +197,8 @@ export function buildAgentRunSandboxPolicy(context: AgentSandboxContext): AgentR
         path.join(dobiusDir, 'agents-*'),
         ...credentialFiles,
         ...secretFileGlobs,
-        ...secretDirs
+        ...secretDirs,
+        runtimeKeyFile
       ],
       allowRead: [ownAgentDir],
       allowWrite: [...new Set(writable)],
@@ -214,7 +218,9 @@ export function buildAgentRunSandboxPolicy(context: AgentSandboxContext): AgentR
   const disallowedTools = [
     ...otherAgentDirs.map((dir) => absoluteRule('Read', path.join(dir, '**'))),
     absoluteRule('Read', path.join(dobiusDir, 'agents-*', '**')),
-    ...[...credentialFiles, ...secretFileGlobs].map((target) => absoluteRule('Read', target)),
+    ...[...credentialFiles, ...secretFileGlobs, runtimeKeyFile].map((target) =>
+      absoluteRule('Read', target)
+    ),
     ...secretDirs.map((dir) => absoluteRule('Read', path.join(dir, '**'))),
     ...[...new Set(protectedWrites)].flatMap(editRules),
     // The run's project (and nested projects) settings files.

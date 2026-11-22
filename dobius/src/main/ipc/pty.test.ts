@@ -1030,6 +1030,15 @@ describe('registerPtyHandlers', () => {
       expect(env.LANG).toBe('fr_FR.UTF-8')
     })
 
+    it('marks every terminal for the limited agent key and never passes the full key', async () => {
+      const env = await spawnAndGetEnv()
+      expect(env.DOBIUS_RUNTIME_SCOPE).toBe('agent')
+      // Caller-provided env cannot opt a terminal back into the full key.
+      const overridden = await spawnAndGetEnv({ DOBIUS_RUNTIME_SCOPE: 'full' })
+      expect(overridden.DOBIUS_RUNTIME_SCOPE).toBe('agent')
+      expect(Object.keys(env).filter((key) => /AUTH_?TOKEN|RUNTIME_TOKEN/i.test(key))).toEqual([])
+    })
+
     it('always sets TERM and COLORTERM regardless of env', async () => {
       const env = await spawnAndGetEnv()
       expect(env.TERM).toBe('xterm-256color')

@@ -12,7 +12,8 @@ import { constantTimeEqual } from '../lib/constant-time-equal'
 import { isPidAlive } from '../lib/is-pid-alive'
 import type { RuntimeMetadata, RuntimeTransportMetadata } from '../../shared/runtime-bootstrap'
 import type { DobiusRuntimeService } from './dobius-runtime'
-import { writeRuntimeMetadata } from './runtime-metadata'
+import { writeAgentRuntimeMetadata, writeRuntimeMetadata } from './runtime-metadata'
+import { agentRpcDenial } from './agent-rpc-scope'
 import { RpcDispatcher } from './rpc/dispatcher'
 import type { RpcRequest, RpcResponse } from './rpc/core'
 import { errorResponse } from './rpc/errors'
@@ -451,6 +452,9 @@ export class DobiusRuntimeRpcServer {
   private readonly wsPort: number
   private readonly webClientRoot: string | undefined
   private readonly authToken = randomBytes(24).toString('hex')
+  // Why: the key handed to agents (Dobius terminals, agent runs). It only
+  // reaches the methods in AGENT_RPC_METHOD_ALLOWLIST; see agent-rpc-scope.ts.
+  private readonly agentAuthToken = randomBytes(24).toString('hex')
   private readonly keepaliveIntervalMs: number
   private readonly longPollCap: number
   private deviceRegistry: DeviceRegistry | null = null
@@ -1027,8 +1031,18 @@ export class DobiusRuntimeRpcServer {
     if (typeof request.authToken !== 'string' || request.authToken.length === 0) {
       return { error: this.buildError(request.id, 'unauthorized', 'Missing auth token') }
     }
-    if (!constantTimeEqual(request.authToken, this.authToken)) {
+    // Why: compare against both keys every time so timing does not reveal
+    // which one a guess was closer to.
+    const isFullToken = constantTimeEqual(request.authToken, this.authToken)
+    const isAgentToken = constantTimeEqual(request.authToken, this.agentAuthToken)
+    if (!isFullToken && !isAgentToken) {
       return { error: this.buildError(request.id, 'unauthorized', 'Invalid auth token') }
+    }
+    if (!isFullToken) {
+      const denial = agentRpcDenial(request.method, request.params)
+      if (denial) {
+        return { error: this.buildError(request.id, 'forbidden', denial) }
+      }
     }
 
     return { request }
@@ -1193,6 +1207,9 @@ export class DobiusRuntimeRpcServer {
       authToken: this.authToken,
       startedAt: this.runtime.getStartedAt()
     }
+    // Why: the agent file goes first so that whenever the full file names this
+    // runtime, an agent CLI already finds the matching agent key.
+    writeAgentRuntimeMetadata(this.userDataPath, { ...metadata, authToken: this.agentAuthToken })
     writeRuntimeMetadata(this.userDataPath, metadata)
   }
 }

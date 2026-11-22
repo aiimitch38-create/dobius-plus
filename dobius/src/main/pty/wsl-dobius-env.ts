@@ -22,6 +22,7 @@ export function addDobiusWslInteropEnv(env: Record<string, string>): void {
     'DOBIUS_TERMINAL_HANDLE/u',
     'DOBIUS_PANE_KEY/u',
     'DOBIUS_TAB_ID/u',
+    'DOBIUS_RUNTIME_SCOPE/u',
     'DOBIUS_WORKTREE_ID/u',
     'DOBIUS_BOARD_ID/u',
     'DOBIUS_BOARD_CARD_ID/u',
