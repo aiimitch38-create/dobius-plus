@@ -26,6 +26,7 @@ export function startLibraryRefresh(env: NodeJS.ProcessEnv = process.env): void 
   getLibraryService().start()
 }
 
-export function stopLibraryRefresh(): void {
-  void service?.stop()
+/** Resolves once a running pass has stopped (at most about 5.5 s). */
+export function stopLibraryRefresh(): Promise<void> {
+  return service?.stop() ?? Promise.resolve()
 }

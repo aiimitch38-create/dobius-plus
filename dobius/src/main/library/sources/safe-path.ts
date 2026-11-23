@@ -1,7 +1,9 @@
 // Where the library may read. Why realpath: a root or a file can be a symlink
 // into a vendor tree or a secrets folder, and the name-based denylist only
 // sees the link's own path. Every read goes through safeFile first.
-import { lstat, realpath } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import type { FileHandle } from 'node:fs/promises'
+import { lstat, open, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { isSecretOrSkippedPath } from '../library-secrets'
 
@@ -39,4 +41,28 @@ export async function safeFile(path: string, realRootPath: string): Promise<stri
   } catch {
     return null
   }
+}
+
+/**
+ * An open handle on a file that passes safeFile, or null. Why open, then
+ * check: a folder above the file can be swapped between a check and an open.
+ * The file is opened without following a final link, then the path is checked
+ * again and must still name the very file that was opened (same device and
+ * inode); every read then goes through the handle, never the path.
+ */
+export async function openSafe(path: string, realRootPath: string): Promise<FileHandle | null> {
+  let handle: FileHandle | null = null
+  try {
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+    const opened = await handle.stat()
+    const real = opened.isFile() ? await safeFile(path, realRootPath) : null
+    const named = real ? await stat(real) : null
+    if (named && named.dev === opened.dev && named.ino === opened.ino) {
+      return handle
+    }
+  } catch {
+    // Missing, a link, or unreadable: refused like any other unsafe file.
+  }
+  await handle?.close().catch(() => undefined)
+  return null
 }

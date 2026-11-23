@@ -5,6 +5,7 @@
 import { statfs } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { cleanDocument } from './library-clean'
+import { docKeyId } from './library-schema'
 import type { LibraryStore } from './library-store'
 import { WAL_SIZE_LIMIT } from './library-store'
 import { scrubText } from './library-secrets'
@@ -232,11 +233,11 @@ function finish(
   try {
     // Why only after a full pass: a stopped pass did not look at every file.
     if (full) {
-      const seen = new Set(full.candidates.map((candidate) => candidate.key))
+      const seen = new Set(full.candidates.map((candidate) => docKeyId(candidate.key)))
       for (const source of full.listed) {
-        for (const key of store.listKeys(source)) {
-          if (!seen.has(key)) {
-            store.removeDoc(key)
+        for (const keyId of store.listKeyIds(source)) {
+          if (!seen.has(keyId)) {
+            store.removeDocByKeyId(keyId)
             report.removed += 1
           }
         }

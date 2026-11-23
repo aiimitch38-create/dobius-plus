@@ -16,6 +16,8 @@ import { LIBRARY_DEFAULT_CAP_BYTES } from './library-types'
 
 export const LIBRARY_FIRST_REFRESH_DELAY_MS = 2 * 60 * 1000
 export const LIBRARY_REFRESH_INTERVAL_MS = 30 * 60 * 1000
+/** How long quit waits for a running pass to stop (the worker is terminated at 5 s). */
+export const LIBRARY_STOP_WAIT_MS = 5500
 
 export type RunningPass = { done: Promise<LibraryRefreshReport>; stop: () => void }
 export type PassRunner = (job: LibraryRefreshJob) => RunningPass
@@ -93,8 +95,18 @@ export class LibraryService {
     }
     this.timers = []
     const pass = this.running
-    pass?.stop()
-    await pass?.done.catch(() => undefined)
+    if (pass) {
+      pass.stop()
+      // Why a cap: quit must not hang on a stuck pass; the runner terminates it at 5 s.
+      let timer: NodeJS.Timeout | undefined
+      await Promise.race([
+        pass.done.catch(() => undefined),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, LIBRARY_STOP_WAIT_MS)
+        })
+      ])
+      clearTimeout(timer)
+    }
     this.store?.close()
     this.store = null
   }

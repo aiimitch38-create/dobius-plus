@@ -3,10 +3,10 @@
 // different plans (WORKSTATION-BUILD/plans is the main build plan), while most
 // notes are identical copies of main's.
 import { createHash } from 'node:crypto'
-import { createReadStream } from 'node:fs'
 import { lstat } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { isEligibleSize } from './fs-walk'
+import { openSafe, realRoot } from './safe-path'
 
 export type Checkout = {
   root: string
@@ -17,17 +17,28 @@ export type Checkout = {
 
 export type CheckoutFile = { checkout: Checkout; path: string }
 
-export type ContentHasher = (path: string) => Promise<string | null>
+export type ContentHasher = (path: string, realRootPath: string) => Promise<string | null>
 
-/** sha256 of a file, streamed so a large file is never held in memory. */
-export function streamHash(path: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    const hash = createHash('sha256')
-    createReadStream(path)
-      .on('data', (chunk) => hash.update(chunk))
-      .on('end', () => resolve(hash.digest('hex')))
-      .on('error', () => resolve(null))
-  })
+/**
+ * sha256 of a file inside realRootPath, streamed from a handle opened through
+ * openSafe, so a link or a swapped parent folder is never read.
+ */
+export async function streamHash(path: string, realRootPath: string): Promise<string | null> {
+  const handle = await openSafe(path, realRootPath)
+  if (!handle) {
+    return null
+  }
+  const hash = createHash('sha256')
+  try {
+    for await (const chunk of handle.createReadStream({ autoClose: false })) {
+      hash.update(chunk as Buffer)
+    }
+    return hash.digest('hex')
+  } catch {
+    return null
+  } finally {
+    await handle.close()
+  }
 }
 
 async function sizeOf(path: string): Promise<number | null> {
@@ -56,6 +67,15 @@ export async function dedupeAcrossCheckouts(
   files: CheckoutFile[],
   contentHash: ContentHasher = streamHash
 ): Promise<CheckoutFile[]> {
+  const roots = new Map<string, Promise<string | null>>()
+  const rootOf = (root: string): Promise<string | null> => {
+    let real = roots.get(root)
+    if (!real) {
+      real = realRoot(root)
+      roots.set(root, real)
+    }
+    return real
+  }
   const byRepo = new Map<string, CheckoutFile[]>()
   const kept: CheckoutFile[] = []
   for (const file of files) {
@@ -91,14 +111,16 @@ export async function dedupeAcrossCheckouts(
         kept.push(file)
         continue
       }
-      const hash = await contentHash(file.path)
-      const owner = hash ? seen.get(hash) : undefined
+      const base = await rootOf(file.checkout.root)
+      const hash = base ? await contentHash(file.path, base) : null
+      if (!hash) {
+        continue
+      }
+      const owner = seen.get(hash)
       if (owner !== undefined && owner !== file.checkout.root) {
         continue
       }
-      if (hash) {
-        seen.set(hash, file.checkout.root)
-      }
+      seen.set(hash, file.checkout.root)
       kept.push(file)
     }
   }

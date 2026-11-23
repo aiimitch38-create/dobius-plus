@@ -5,6 +5,7 @@
 // index over the doc title plus the chunk text.
 import { statSync } from 'node:fs'
 import SyncDatabase from '../sqlite/sync-database'
+import { docKeyId, hasFts5, migrateSchema, runTransaction, SCHEMA } from './library-schema'
 import type { LibrarySection, LibrarySource } from './library-types'
 
 export type StoredDoc = {
@@ -31,49 +32,6 @@ export const WAL_SIZE_LIMIT = 16 * 1024 * 1024
 /** mtime of a document whose write has not finished; never equals a real one. */
 const PENDING_MTIME = -1
 
-const SCHEMA = `
-  CREATE TABLE IF NOT EXISTS docs (
-    id INTEGER PRIMARY KEY,
-    key TEXT NOT NULL UNIQUE,
-    source TEXT NOT NULL,
-    project TEXT,
-    path TEXT NOT NULL,
-    title TEXT NOT NULL,
-    mtime_ms INTEGER NOT NULL,
-    size INTEGER NOT NULL,
-    evicted INTEGER NOT NULL DEFAULT 0,
-    indexed_at INTEGER NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS docs_live_mtime ON docs(evicted, mtime_ms);
-  CREATE TABLE IF NOT EXISTS chunks (
-    id INTEGER PRIMARY KEY,
-    doc_id INTEGER NOT NULL,
-    at_ms INTEGER NOT NULL,
-    text TEXT NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS chunks_doc ON chunks(doc_id);
-  CREATE VIEW IF NOT EXISTS chunk_view AS
-    SELECT c.id AS id, d.title AS title, c.text AS text
-    FROM chunks c JOIN docs d ON d.id = c.doc_id;
-  CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-`
-
-const FTS_SCHEMA = `
-  CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
-    title, text, content='chunk_view', content_rowid='id', tokenize='porter unicode61'
-  );
-`
-
-function hasFts5(db: SyncDatabase): boolean {
-  try {
-    db.exec(FTS_SCHEMA)
-    return true
-  } catch (error) {
-    console.warn('Library: FTS5 is unavailable, search falls back to LIKE:', error)
-    return false
-  }
-}
-
 export class LibraryStore {
   readonly db: SyncDatabase
   readonly fts: boolean
@@ -89,6 +47,7 @@ export class LibraryStore {
     // Why: a checkpointed WAL is cut back to this size instead of staying at its peak.
     this.db.exec(`PRAGMA journal_size_limit = ${WAL_SIZE_LIMIT}`)
     this.db.exec(SCHEMA)
+    migrateSchema(this.db)
     this.fts = hasFts5(this.db)
   }
 
@@ -99,7 +58,7 @@ export class LibraryStore {
   getDoc(key: string): StoredDoc | null {
     const row = this.db
       .prepare('SELECT id, key, source, mtime_ms, size, evicted FROM docs WHERE key = ?')
-      .get(key) as
+      .get(docKeyId(key)) as
       | { id: number; key: string; source: LibrarySource; mtime_ms: number; size: number; evicted: number }
       | undefined
     return row
@@ -114,7 +73,8 @@ export class LibraryStore {
       : null
   }
 
-  listKeys(source: LibrarySource): string[] {
+  /** Stored key ids (hashes, see docKeyId) of one source. */
+  listKeyIds(source: LibrarySource): string[] {
     return (
       this.db.prepare('SELECT key FROM docs WHERE source = ?').all(source) as { key: string }[]
     ).map((row) => row.key)
@@ -135,15 +95,7 @@ export class LibraryStore {
   }
 
   private transaction<T>(work: () => T): T {
-    this.db.exec('BEGIN IMMEDIATE')
-    try {
-      const result = work()
-      this.db.exec('COMMIT')
-      return result
-    } catch (error) {
-      this.db.exec('ROLLBACK')
-      throw error
-    }
+    return runTransaction(this.db, work)
   }
 
   /**
@@ -164,7 +116,7 @@ export class LibraryStore {
              path = excluded.path, title = excluded.title, mtime_ms = excluded.mtime_ms,
              size = excluded.size, evicted = excluded.evicted, indexed_at = excluded.indexed_at`
         )
-        .run(doc.key, doc.source, doc.project, doc.path, doc.title, PENDING_MTIME, doc.size, evicted ? 1 : 0, Date.now())
+        .run(docKeyId(doc.key), doc.source, doc.project, doc.path, doc.title, PENDING_MTIME, doc.size, evicted ? 1 : 0, Date.now())
       return this.getDoc(doc.key)!.id
     })
   }
@@ -205,14 +157,16 @@ export class LibraryStore {
     })
   }
 
-  removeDoc(key: string): void {
-    const doc = this.getDoc(key)
-    if (!doc) {
+  removeDocByKeyId(keyId: string): void {
+    const row = this.db.prepare('SELECT id FROM docs WHERE key = ?').get(keyId) as
+      | { id: number }
+      | undefined
+    if (!row) {
       return
     }
     this.transaction(() => {
-      this.deleteChunks(doc.id)
-      this.db.prepare('DELETE FROM docs WHERE id = ?').run(doc.id)
+      this.deleteChunks(row.id)
+      this.db.prepare('DELETE FROM docs WHERE id = ?').run(row.id)
     })
   }
 

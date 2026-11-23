@@ -1,8 +1,9 @@
-import { lstat, open, readdir } from 'node:fs/promises'
+import type { FileHandle } from 'node:fs/promises'
+import { lstat, readdir } from 'node:fs/promises'
 import { basename, join, relative, sep } from 'node:path'
 import { isSecretOrSkippedPath, isSkippedDirName } from '../library-secrets'
 import type { LibraryCandidate, LibraryDocument, LibrarySource } from '../library-types'
-import { realRoot, safeFile } from './safe-path'
+import { openSafe, realRoot } from './safe-path'
 
 export type WalkOptions = {
   maxDepth: number
@@ -64,16 +65,11 @@ export function isEligibleSize(size: number): boolean {
   return size > 0 && size <= MAX_FILE_BYTES
 }
 
-/** At most maxBytes of a file, as text; a file that grew past the cap is cut. */
-export async function readTextCapped(path: string, maxBytes: number): Promise<string> {
-  const handle = await open(path, 'r')
-  try {
-    const buffer = Buffer.alloc(maxBytes)
-    const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0)
-    return buffer.subarray(0, bytesRead).toString('utf8')
-  } finally {
-    await handle.close()
-  }
+/** At most maxBytes of an open file, as text; a file that grew past the cap is cut. */
+export async function readTextCapped(handle: FileHandle, maxBytes: number): Promise<string> {
+  const buffer = Buffer.alloc(maxBytes)
+  const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0)
+  return buffer.subarray(0, bytesRead).toString('utf8')
 }
 
 /** Stat each file into a candidate that reads it as one markdown document. */
@@ -103,11 +99,11 @@ export async function markdownCandidates(
       size: info.size,
       load: async (): Promise<LibraryDocument | null> => {
         // Why again at read time: the file may have been swapped for a link.
-        const real = await safeFile(file, base)
-        if (!real) {
+        const handle = await openSafe(file, base)
+        if (!handle) {
           return null
         }
-        const text = await readTextCapped(real, MAX_FILE_BYTES)
+        const text = await readTextCapped(handle, MAX_FILE_BYTES).finally(() => handle.close())
         return {
           project: project(file),
           title: markdownTitle(text, [label(file), basename(file)].filter(Boolean).join('/')),

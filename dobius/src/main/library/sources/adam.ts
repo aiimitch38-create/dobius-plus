@@ -3,13 +3,13 @@
 // read here read-only. Its sessions/ folder holds only failed-request dumps
 // with Authorization headers, so it is never read; nor is ~/.hermes/.env.
 import { existsSync, lstatSync, realpathSync } from 'node:fs'
-import { readFile, realpath, stat } from 'node:fs/promises'
+import { realpath, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { DOCUMENT_MAX_CHARS, RecentSections, titleFrom } from '../library-chunk'
 import { isSecretOrSkippedPath } from '../library-secrets'
 import type { LibraryCandidate, LibraryDocument, LibraryIngester } from '../library-types'
 import SyncDatabase from '../../sqlite/sync-database'
-import { safeFile } from './safe-path'
+import { openSafe, safeFile } from './safe-path'
 
 const THREAD_MAX_BYTES = 16 * 1024 * 1024
 
@@ -38,8 +38,12 @@ async function threadCandidate(file: string): Promise<LibraryCandidate[]> {
       mtimeMs: info.mtimeMs,
       size: info.size,
       load: async (): Promise<LibraryDocument | null> => {
-        const real = await safeFile(info.real, dirname(info.real))
-        const rows: unknown = real ? JSON.parse(await readFile(real, 'utf8')) : null
+        const handle = await openSafe(info.real, dirname(info.real))
+        if (!handle) {
+          return null
+        }
+        const raw = await handle.readFile('utf8').finally(() => handle.close())
+        const rows: unknown = JSON.parse(raw)
         if (!Array.isArray(rows)) {
           return null
         }

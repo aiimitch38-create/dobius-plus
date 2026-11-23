@@ -1,6 +1,6 @@
 // Review fixes: secrets split across chunks or hidden in titles, provider
 // prefixes, document budgets, disk limits and the refresh worker job.
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,7 +10,12 @@ import { runRefreshJob } from './library-refresh-job'
 import { defaultLibraryRoots } from './library-roots'
 import { searchLibrary } from './library-search'
 import { scrubText } from './library-secrets'
-import { LibraryService } from './library-service'
+import { docKeyId, runTransaction, SCHEMA_VERSION } from './library-schema'
+import { LIBRARY_STOP_WAIT_MS, LibraryService } from './library-service'
+import SyncDatabase from '../sqlite/sync-database'
+import { obsidianIngester } from './sources/obsidian'
+import { streamHash } from './sources/project-checkouts'
+import { openSafe } from './sources/safe-path'
 import { LibraryStore } from './library-store'
 import type { LibraryCandidate, LibraryDocument, LibraryIngester } from './library-types'
 
@@ -178,5 +183,101 @@ describe('refresh job and service', () => {
     expect(service.status().refreshing).toBe(true)
     await service.stop()
     expect(stop).toHaveBeenCalledOnce()
+  })
+})
+
+describe('second review: keys, safe reads, rollbacks, quit', () => {
+  it('stores a hash, not the raw path, as the document key', async () => {
+    const secretPath = `/fixture/${FAKE_KEY}/notes.md`
+    const ingester: LibraryIngester = {
+      source: 'project',
+      list: async () => [
+        { key: `project:${secretPath}`, source: 'project', path: secretPath, mtimeMs: 1, size: 1, load: async () => doc('plain body words') }
+      ]
+    }
+    await refreshLibrary(store, [ingester], { capBytes: 1e9, ...plenty })
+    const keys = store.db.prepare('SELECT key, path FROM docs').all() as { key: string; path: string }[]
+    expect(JSON.stringify(keys)).not.toContain(FAKE_KEY)
+    expect(keys[0].key).toBe(docKeyId(`project:${secretPath}`))
+    // Unchanged on the next pass, and removed once the file is gone.
+    expect((await refreshLibrary(store, [ingester], { capBytes: 1e9, ...plenty })).unchanged).toBe(1)
+    const gone: LibraryIngester = { source: 'project', list: async () => [] }
+    expect((await refreshLibrary(store, [gone], { capBytes: 1e9, ...plenty })).removed).toBe(1)
+  })
+
+  it('rebuilds a library from the old layout with raw keys', () => {
+    const oldPath = join(dir, 'old.sqlite')
+    const old = new SyncDatabase(oldPath)
+    old.exec(`CREATE TABLE docs (id INTEGER PRIMARY KEY, key TEXT NOT NULL UNIQUE, source TEXT NOT NULL,
+      project TEXT, path TEXT NOT NULL, title TEXT NOT NULL, mtime_ms INTEGER NOT NULL, size INTEGER NOT NULL,
+      evicted INTEGER NOT NULL DEFAULT 0, indexed_at INTEGER NOT NULL);
+      INSERT INTO docs (key, source, path, title, mtime_ms, size, indexed_at) VALUES ('project:/raw/${FAKE_KEY}', 'project', '/raw', 't', 1, 1, 1);`)
+    old.close()
+    const upgraded = new LibraryStore(oldPath)
+    expect(upgraded.db.prepare('SELECT COUNT(*) AS n FROM docs').get()).toEqual({ n: 0 })
+    expect(upgraded.db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION)
+    upgraded.close()
+  })
+
+  it('keeps the disk-full error when SQLite already rolled back', () => {
+    const full = new Error('database or disk is full')
+    expect(() =>
+      runTransaction(store.db, () => {
+        store.db.exec('ROLLBACK')
+        throw full
+      })
+    ).toThrow(full)
+    // No transaction is left open: a new one starts fine.
+    expect(runTransaction(store.db, () => 1)).toBe(1)
+  })
+
+  it('stops a pass cleanly when the store reports a full disk after an auto-rollback', async () => {
+    vi.spyOn(store, 'addChunks').mockImplementation(() => {
+      runTransaction(store.db, () => {
+        store.db.exec('ROLLBACK')
+        throw new Error('database or disk is full')
+      })
+    })
+    const report = await refreshLibrary(store, [source({ a: doc('alpha'), b: doc('beta') })], { capBytes: 1e9, ...plenty })
+    expect(report.stopped).toBe('the disk is full')
+    expect(report.indexed).toBe(0)
+    vi.restoreAllMocks()
+  })
+
+  it('refuses a read when a parent folder is swapped for a link after listing', async () => {
+    const vault = join(dir, 'vault')
+    mkdirSync(join(vault, 'sub'), { recursive: true })
+    writeFileSync(join(vault, 'sub/Note.md'), '# Note\ninside')
+    mkdirSync(join(dir, 'outside'), { recursive: true })
+    writeFileSync(join(dir, 'outside/Note.md'), '# Outside\nnot in the vault')
+    const [candidate] = await obsidianIngester(vault).list()
+    expect(await streamHash(candidate.path, vault)).not.toBeNull()
+    renameSync(join(vault, 'sub'), join(dir, 'moved'))
+    symlinkSync(join(dir, 'outside'), join(vault, 'sub'))
+    expect(await candidate.load()).toBeNull()
+    expect(await streamHash(candidate.path, vault)).toBeNull()
+    expect(await openSafe(candidate.path, vault)).toBeNull()
+  })
+
+  it('quit waits for a running pass, but no longer than the cap', async () => {
+    vi.useFakeTimers()
+    try {
+      const stop = vi.fn()
+      const runPass = vi.fn(() => ({ done: new Promise<never>(() => undefined), stop }))
+      const service = new LibraryService(join(dir, 'quit.sqlite'), defaultLibraryRoots(dir, dir), runPass)
+      void service.refresh()
+      let stopped = false
+      const stopping = service.stop().then(() => {
+        stopped = true
+      })
+      await vi.advanceTimersByTimeAsync(LIBRARY_STOP_WAIT_MS - 100)
+      expect(stopped).toBe(false)
+      await vi.advanceTimersByTimeAsync(200)
+      await stopping
+      expect(stopped).toBe(true)
+      expect(stop).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

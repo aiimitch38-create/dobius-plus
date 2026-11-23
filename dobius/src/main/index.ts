@@ -2403,7 +2403,8 @@ app.on('will-quit', (e) => {
   starNag?.stop()
   stopImessageBridge()
   stopDobiusCli()
-  stopLibraryRefresh()
+  // Why awaited below: a refresh pass in its worker gets to finish its write.
+  const libraryShutdown = stopLibraryRefresh()
   shutdownBugAutoFix()
   automations?.stop()
   setUnreadDockBadgeCount(0)
@@ -2484,7 +2485,8 @@ app.on('will-quit', (e) => {
       watcherShutdown,
       emulatorShutdown,
       catalogShutdown,
-      cloudWorkerShutdown
+      cloudWorkerShutdown,
+      libraryShutdown
     ])
       .then(() => shutdownTelemetry())
       .then(() => shutdownObservability())

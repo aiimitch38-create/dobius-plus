@@ -1,8 +1,9 @@
 import { createReadStream } from 'node:fs'
+import type { FileHandle } from 'node:fs/promises'
 import { lstat, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { isSecretOrSkippedPath, isSkippedDirName } from '../library-secrets'
-import { realRoot, safeFile } from './safe-path'
+import { openSafe, realRoot } from './safe-path'
 
 /** Lines longer than this are skipped unparsed (tool output; never message text worth keeping). */
 export const MAX_LINE_CHARS = 1_000_000
@@ -12,11 +13,19 @@ export const MAX_LINE_CHARS = 1_000_000
  * line is dropped as it streams past. Why not readline: it holds a whole line
  * in memory, and one transcript line can be hundreds of megabytes.
  */
-export async function* boundedLines(file: string, maxChars = MAX_LINE_CHARS): AsyncGenerator<string> {
+export async function* boundedLines(
+  file: string | FileHandle,
+  maxChars = MAX_LINE_CHARS
+): AsyncGenerator<string> {
+  const options = { encoding: 'utf8' as const, highWaterMark: 64 * 1024 }
+  const stream =
+    typeof file === 'string'
+      ? createReadStream(file, options)
+      : file.createReadStream({ ...options, autoClose: false })
   let parts: string[] = []
   let length = 0
   let skipping = false
-  for await (const chunk of createReadStream(file, { encoding: 'utf8', highWaterMark: 64 * 1024 })) {
+  for await (const chunk of stream) {
     let text = chunk as string
     let newline = text.indexOf('\n')
     while (newline !== -1) {
@@ -51,7 +60,7 @@ export async function* boundedLines(file: string, maxChars = MAX_LINE_CHARS): As
  * parsing; tool output lines are most of a transcript and are never parsed).
  */
 export async function* jsonLines(
-  file: string,
+  file: string | FileHandle,
   keep: (line: string) => boolean
 ): AsyncGenerator<Record<string, unknown>> {
   for await (const line of boundedLines(file)) {
@@ -107,9 +116,14 @@ export async function* safeJsonLines(
   file: FileStat,
   keep: (line: string) => boolean
 ): AsyncGenerator<Record<string, unknown>> {
-  const real = await safeFile(file.path, file.root)
-  if (real) {
-    yield* jsonLines(real, keep)
+  const handle = await openSafe(file.path, file.root)
+  if (!handle) {
+    return
+  }
+  try {
+    yield* jsonLines(handle, keep)
+  } finally {
+    await handle.close()
   }
 }
 
