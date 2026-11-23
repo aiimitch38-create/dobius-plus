@@ -4,6 +4,7 @@ import {
   branchLabel,
   cleanTitle,
   matchTerminals,
+  pickCandidate,
   spokenWords,
   whichOneQuestion,
   type QuickTerminal
@@ -72,6 +73,25 @@ describe('matchTerminals', () => {
 
   it('project words are whole words', () => {
     expect(matchTerminals(REAL, 'terminal 1 in epo', 'exact')).toEqual([])
+    expect(matchTerminals(REAL, 'terminal 1 in site', 'exact')).toEqual([])
+  })
+
+  it('a leading part of a project name narrows to every project it starts', () => {
+    const two: QuickTerminal[] = [
+      { handle: 'p', name: 'Terminal 1', project: 'epoxy-site' },
+      { handle: 'q', name: 'Terminal 1', project: 'epoxy-admin' }
+    ]
+    expect(matchTerminals(two, 'terminal 1 in epoxy', 'exact')).toHaveLength(2)
+    expect(ids(matchTerminals(two, 'terminal 1 in epoxy admin', 'exact'))).toEqual(['q'])
+  })
+
+  it('typing never lets a project stand in for a label; reading may', () => {
+    const lone: QuickTerminal[] = [
+      { handle: 'only', name: 'Terminal 1', project: 'SMID' },
+      { handle: 'other', name: 'Terminal 1', project: 'Website' }
+    ]
+    expect(matchTerminals(lone, 'smid', 'exact')).toEqual([])
+    expect(ids(matchTerminals(lone, 'smid', 'words'))).toEqual(['only'])
   })
 })
 
@@ -84,17 +104,41 @@ describe('whichOneQuestion', () => {
   it('lists the names otherwise', () => {
     expect(whichOneQuestion([REAL[3], REAL[4]])).toBe('Two match: Terminal 2 and SMID. Which one?')
   })
-  it('is null for one, none, more than five, or hits the voice cannot tell apart', () => {
+  it('is null for one, none, or more than five', () => {
     expect(whichOneQuestion([REAL[0]])).toBeNull()
     expect(whichOneQuestion([])).toBeNull()
     expect(whichOneQuestion(REAL.slice(0, 6))).toBeNull()
+  })
+  it('asks by order when not even the project tells them apart', () => {
     expect(
       whichOneQuestion([
         { handle: 'x', name: 'Terminal 1', project: 'SMID' },
         { handle: 'y', name: 'Terminal 1', project: 'SMID' }
       ])
-    ).toBeNull()
+    ).toBe("Two match Terminal 1, and I can't tell them apart by name. Say the first or the second.")
   })
+})
+
+describe('pickCandidate', () => {
+  const asked = REAL.slice(0, 3)
+  it.each([
+    ['the second one', 'b'],
+    ['second', 'b'],
+    ['the 3rd', 'c'],
+    ['number one', 'a'],
+    ['the SMID one', 'a'],
+    ['Website', 'b'],
+    ['Terminal 1 in FEATURES-HUB', 'c'],
+    ['in features hub', 'c']
+  ])('%s picks %s', (reply, handle) => {
+    expect(pickCandidate(reply, asked)?.handle).toBe(handle)
+  })
+  it.each(['terminal one', 'the sixth', 'fix the login bug in the API and tell me how it went', 'epoxy'])(
+    '%s picks nothing',
+    (reply) => {
+      expect(pickCandidate(reply, asked)).toBeNull()
+    }
+  )
 })
 
 describe('quick hands on the real list', () => {
@@ -133,6 +177,12 @@ describe('quick hands on the real list', () => {
       'Typed it into Submit SMIDs.'
     )
     expect(typeInto).toHaveBeenCalledWith('f', 'hello', expect.any(Function))
+  })
+
+  it('"type hello into smid" needs a terminal labeled SMID, not just the project', async () => {
+    const list: QuickTerminal[] = [{ handle: 'z', name: 'Terminal 1', project: 'SMID' }]
+    const lone = { ...deps(), listTerminals: async () => ({ terminals: list, truncated: false }) }
+    expect(await runQuickHand('type hello into smid', lone)).toBeNull()
   })
 
   it('"type ls in terminal 1 in smid" is two-way ambiguous and goes to ADAM', () => {

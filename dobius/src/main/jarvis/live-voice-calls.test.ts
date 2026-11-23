@@ -12,7 +12,11 @@ import {
   speakableReply
 } from './live-voice-calls'
 import { LiveVoiceMeter } from './live-voice-meter'
-import { QuickHandRefused, type QuickHandsDeps } from './live-voice-quick-hands'
+import {
+  QuickHandRefused,
+  type QuickHandsDeps,
+  type QuickTerminal
+} from './live-voice-quick-hands'
 
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void }
 function deferred<T>(): Deferred<T> {
@@ -238,6 +242,149 @@ describe('quick hands', () => {
     expect(seen!()).toBe(true)
     calls.callStarted(7)
     expect(seen!()).toBe(false)
+  })
+})
+
+describe('quick hands, round 2', () => {
+  const SAME: QuickTerminal[] = [
+    { handle: 'a', name: 'Terminal 1', project: 'SMID' },
+    { handle: 'b', name: 'Terminal 1', project: 'Website' }
+  ]
+  function calls2(
+    over: Partial<QuickHandsDeps> = {},
+    extra: Partial<ConstructorParameters<typeof LiveVoiceCalls>[0]> = {}
+  ): { calls: LiveVoiceCalls; typeInto: ReturnType<typeof vi.fn> } {
+    const typeInto = vi.fn(async () => undefined)
+    const calls = new LiveVoiceCalls({
+      ...depsFor(),
+      now: () => now,
+      quickHands: {
+        listTerminals: async () => ({ terminals: SAME, truncated: false }),
+        typeInto,
+        readTail: async () => ['done'],
+        ...over
+      },
+      ...extra
+    })
+    calls.callStarted(7)
+    return { calls, typeInto }
+  }
+
+  it('"stop" cancels quick work in flight: nothing is written and ADAM is not asked', async () => {
+    let release: () => void = () => undefined
+    const listed = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { calls, typeInto } = calls2({
+      listTerminals: async () => {
+        await listed
+        return { terminals: [{ handle: 'a', name: 'Backend' }], truncated: false }
+      }
+    })
+    const answer = calls.delegate(7, { request: 'type ls into backend' })
+    expect(calls.cancelDelegation(7)).toBe(true)
+    release()
+    await expect(answer).resolves.toEqual({ ok: true, kind: 'cancelled', speak: '' })
+    expect(typeInto).not.toHaveBeenCalled()
+    expect(ask).not.toHaveBeenCalled()
+  })
+
+  it('asks which one, then does the original action on the answer', async () => {
+    const { calls, typeInto } = calls2()
+    await expect(calls.delegate(7, { request: 'type ls into terminal 1' })).resolves.toMatchObject({
+      speak: 'Two are called Terminal 1: in SMID and Website. Which one?'
+    })
+    expect(typeInto).not.toHaveBeenCalled()
+    await expect(calls.delegate(7, { request: 'the Website one' })).resolves.toMatchObject({
+      speak: 'Typed it into Terminal 1.'
+    })
+    expect(typeInto).toHaveBeenCalledWith('b', 'ls', expect.any(Function))
+    expect(ask).not.toHaveBeenCalled()
+  })
+
+  it('answers by order too ("the second one")', async () => {
+    const { calls, typeInto } = calls2()
+    await calls.delegate(7, { request: 'type ls into terminal 1' })
+    await calls.delegate(7, { request: 'the second one' })
+    expect(typeInto).toHaveBeenCalledWith('b', 'ls', expect.any(Function))
+  })
+
+  it('an answer after a minute, or after an unrelated request, goes to ADAM', async () => {
+    const { calls, typeInto } = calls2()
+    await calls.delegate(7, { request: 'type ls into terminal 1' })
+    now += 61_000
+    const late = calls.delegate(7, { request: 'the second one' })
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1))
+    pending?.resolve({ kind: 'answer', text: 'Which what?' })
+    await late
+    await calls.delegate(7, { request: 'type ls into terminal 1' })
+    await calls.delegate(7, { request: 'how many terminals are open' })
+    const after = calls.delegate(7, { request: 'the second one' })
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(2))
+    pending?.resolve({ kind: 'answer', text: 'Hm?' })
+    await after
+    expect(typeInto).not.toHaveBeenCalled()
+  })
+
+  it('a terminal gone by the time of the answer sends it to ADAM, writing nothing', async () => {
+    let list = SAME
+    const { calls, typeInto } = calls2({
+      listTerminals: async () => ({ terminals: list, truncated: false })
+    })
+    await calls.delegate(7, { request: 'type ls into terminal 1' })
+    list = [SAME[0]]
+    const answer = calls.delegate(7, { request: 'the Website one' })
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1))
+    pending?.resolve({ kind: 'answer', text: 'It closed.' })
+    await answer
+    expect(typeInto).not.toHaveBeenCalled()
+  })
+
+  it('"stop" drops an open which-one question', async () => {
+    const { calls, typeInto } = calls2()
+    await calls.delegate(7, { request: 'type ls into terminal 1' })
+    calls.cancelDelegation(7)
+    const answer = calls.delegate(7, { request: 'the second one' })
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1))
+    pending?.resolve({ kind: 'answer', text: 'Okay.' })
+    await answer
+    expect(typeInto).not.toHaveBeenCalled()
+  })
+
+  it('a failed user row does not stop the assistant row', async () => {
+    const saved: AdamThreadRow[] = []
+    const { calls } = calls2(
+      {},
+      {
+        appendThread: async (row) => {
+          if (row.role === 'user') {
+            throw new Error('disk full')
+          }
+          saved.push(row)
+        }
+      }
+    )
+    await calls.delegate(7, { request: 'how many terminals are open' })
+    await vi.waitFor(() => expect(saved).toHaveLength(1))
+    expect(saved[0]).toMatchObject({ role: 'assistant', id: expect.stringMatching(/:quick-1:assistant$/) })
+    expect(log).toHaveBeenCalledWith('quick-hand', 'thread row user not saved: disk full')
+  })
+
+  it('puts quick exchanges among the window lines in the order they happened', async () => {
+    const { calls } = calls2()
+    await calls.delegate(7, { request: 'how many terminals are open', callLines: ['Carson: hi'] })
+    const window = ['Carson: hi', ...Array.from({ length: 7 }, (_, i) => `Carson: later ${i}`)]
+    const answer = calls.delegate(7, { request: 'and the plan?', callLines: window })
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1))
+    const sent = JSON.parse(
+      String(ask.mock.calls[0][0]).split('<untrusted_context>\n')[1].split('\n</untrusted_context>')[0]
+    ) as { earlier_on_this_call: string[] }
+    expect(sent.earlier_on_this_call).toEqual([
+      "ADAM's quick answer: 2 terminals are open: Terminal 1, Terminal 1.",
+      ...window.slice(1)
+    ])
+    pending?.resolve({ kind: 'answer', text: 'Sure.' })
+    await answer
   })
 })
 

@@ -7,8 +7,10 @@
 // text the request spelled out, and Enter is never pressed.
 
 import { matchTerminals, whichOneQuestion, type QuickTerminal } from './live-voice-terminal-target'
+import { lastOutputLine, looksSecret, shortForSpeech } from './live-voice-terminal-text'
 
 export type { QuickTerminal } from './live-voice-terminal-target'
+export { lastSpokenLine, looksSecret } from './live-voice-terminal-text'
 export type QuickTerminalList = { terminals: QuickTerminal[]; truncated: boolean }
 
 /** Thrown when nothing reached the terminal: ADAM may take the request instead. */
@@ -30,18 +32,22 @@ export type QuickHandsDeps = {
   weekUsage?: () => Promise<{ costUsd: number; sessions: number } | null>
 }
 
-export type QuickHandResult =
-  | { name: string; speak: string; cancelled?: false }
-  | { name: string; speak: ''; cancelled: true }
-
 export type QuickIntent =
   | { hand: 'list-terminals' }
   | { hand: 'type'; text: string; target: string }
   | { hand: 'read-terminal'; target: string; exact: boolean }
   | { hand: 'usage'; today: boolean }
 
+export type TerminalIntent = Extract<QuickIntent, { hand: 'type' | 'read-terminal' }>
+
+/** A "which one?" asked instead of acting: the intent waits for the answer. */
+export type QuickAsk = { intent: TerminalIntent; candidates: QuickTerminal[] }
+
+export type QuickHandResult =
+  | { name: string; speak: string; cancelled?: false; ask?: QuickAsk }
+  | { name: string; speak: ''; cancelled: true }
+
 const MAX_NAMED = 5
-const MAX_READ_CHARS = 150
 const MAX_TYPED_CHARS = 500
 const MAX_TARGET_WORDS = 7
 
@@ -109,9 +115,9 @@ const USAGE_PATTERNS = [
 // local scan only knows Claude.
 const USAGE_WORDS = /\b(?:claude|ai|tokens?|usage)\b/
 
-// Any ask to submit what was typed: quick hands never press Enter. Why the
-// typed text and the end only: a terminal may be called "Submit SMIDs".
-const SUBMIT_ASK = /\b(?:send it|send that|press (?:enter|return)|hit (?:enter|return)|enter key|submit|run it|run that|execute)\b/i
+// An ask to submit what was typed, after the terminal name: quick hands never
+// press Enter, so ADAM takes it. Why only at the end: inside the payload the
+// words are just text to type, and a terminal may be called "Submit SMIDs".
 const SUBMIT_SUFFIX = /[\s,]+(?:and|then)\s+(?:send it|send that|press (?:enter|return)|hit (?:enter|return)|submit(?: it)?|run it|run that|execute it)$/i
 
 /** The spoken name of a terminal, without "the" and a trailing "terminal" or "tab". */
@@ -169,7 +175,6 @@ function matchType(request: string): Extract<QuickIntent, { hand: 'type' }> | nu
     !typed.trim() ||
     // oxlint-disable-next-line no-control-regex -- a control character could submit or escape; refuse it
     /[\u0000-\u001F\u007F]/.test(typed) ||
-    SUBMIT_ASK.test(typed) ||
     !target ||
     typed.length > MAX_TYPED_CHARS
   ) {
@@ -221,51 +226,54 @@ export function matchQuickHand(request: string): QuickIntent | null {
   return matchRead(text)
 }
 
-// oxlint-disable-next-line no-control-regex -- stripping terminal escapes is the point
-const ANSI = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|\u001b[@-_]/g
-
-/** The last output line with a letter or digit, without escapes, short enough to say. */
-export function lastSpokenLine(lines: string[]): string | null {
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    // oxlint-disable-next-line no-control-regex -- removing control characters is the point
-    const line = lines[i].replace(ANSI, '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim()
-    if (/[A-Za-z0-9]/.test(line)) {
-      return line.length > MAX_READ_CHARS ? `${line.slice(0, MAX_READ_CHARS - 1).trimEnd()}…` : line
-    }
-  }
-  return null
-}
-
-// Why so broad: a read line is spoken aloud and lands in the thread; a git
-// hash refused now and then costs less than a key read out on a call.
-const SECRET_SHAPED = [
-  /\bsk-[A-Za-z0-9_-]{6,}/,
-  /\bek_[A-Za-z0-9_-]{6,}/,
-  /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{6,}/,
-  /\bgithub_pat_[A-Za-z0-9_]{6,}/,
-  /\bxox[bpas]-[A-Za-z0-9-]{6,}/,
-  /\bAKIA[0-9A-Z]{12,}/,
-  /\bbearer\s+[A-Za-z0-9._~+/=-]{8,}/i,
-  /[A-Za-z0-9+/=_-]{32,}/,
-  /\b(?:password|passwd|secret|token|api[\s_-]?key)s?\s*[:=]/i
-]
-
-/** True when a line holds anything that looks like a key, token or password. */
-export function looksSecret(line: string): boolean {
-  return SECRET_SHAPED.some((pattern) => pattern.test(line))
-}
-
 function money(usd: number): string {
   return usd >= 100 ? `$${Math.round(usd)}` : `$${usd.toFixed(2)}`
 }
 
 const CANCELLED = Symbol('cancelled')
+type Said = string | typeof CANCELLED
+
+/** Does what a terminal intent asks, on the one terminal it means. */
+async function actOn(
+  intent: TerminalIntent,
+  terminal: QuickTerminal,
+  deps: QuickHandsDeps,
+  isCurrent: () => boolean
+): Promise<Said> {
+  if (intent.hand === 'type') {
+    try {
+      await deps.typeInto(terminal.handle, intent.text, isCurrent)
+    } catch (error) {
+      if (error instanceof QuickHandCancelled) {
+        return CANCELLED
+      }
+      if (error instanceof QuickHandRefused) {
+        throw error
+      }
+      // Why not ADAM: some text may already be in the terminal, and a retry
+      // would type it twice.
+      return `I may have typed part of that into ${terminal.name}; check it.`
+    }
+    return `Typed it into ${terminal.name}.`
+  }
+  const line = lastOutputLine(await deps.readTail(terminal.handle))
+  if (!isCurrent()) {
+    return CANCELLED
+  }
+  if (!line) {
+    return `${terminal.name} has no output yet.`
+  }
+  // Why the whole line: a key past the cut would still be read in part.
+  return looksSecret(line)
+    ? `${terminal.name}'s last line looks like it has a secret, so I won't read it out.`
+    : `${terminal.name} last showed: ${shortForSpeech(line)}`
+}
 
 async function runIntent(
   intent: QuickIntent,
   deps: QuickHandsDeps,
   isCurrent: () => boolean
-): Promise<string | typeof CANCELLED | null> {
+): Promise<Said | { speak: string; ask: QuickAsk } | null> {
   switch (intent.hand) {
     case 'list-terminals': {
       const { terminals, truncated } = await deps.listTerminals()
@@ -283,57 +291,25 @@ async function runIntent(
         terminals.length === 1 && !truncated ? 'One terminal is open' : `${total} terminals are open`
       return `${count}: ${names.join(', ')}${more}.`
     }
-    case 'type': {
+    case 'type':
+    case 'read-terminal': {
       const list = await deps.listTerminals()
       if (!isCurrent()) {
         return CANCELLED
       }
-      // Why exact and complete: typing goes to one terminal only, so the
-      // spoken name must be that terminal's whole label, and a cut-off list
-      // could hide a second terminal with the same label.
-      if (list.truncated) {
+      // Why exact and complete for typing: it goes to one terminal only, so
+      // the spoken name must be that terminal's whole label, and a cut-off
+      // list could hide a second terminal with the same label.
+      if (intent.hand === 'type' && list.truncated) {
         return null
       }
-      const hits = matchTerminals(list.terminals, intent.target, 'exact')
-      const terminal = hits.length === 1 ? hits[0] : null
-      if (!terminal) {
-        return whichOneQuestion(hits)
+      const exact = intent.hand === 'type' || intent.exact
+      const hits = matchTerminals(list.terminals, intent.target, exact ? 'exact' : 'words')
+      if (hits.length === 1) {
+        return actOn(intent, hits[0], deps, isCurrent)
       }
-      try {
-        await deps.typeInto(terminal.handle, intent.text, isCurrent)
-      } catch (error) {
-        if (error instanceof QuickHandCancelled) {
-          return CANCELLED
-        }
-        if (error instanceof QuickHandRefused) {
-          throw error
-        }
-        // Why not ADAM: some text may already be in the terminal, and a retry
-        // would type it twice.
-        return `I may have typed part of that into ${terminal.name}; check it.`
-      }
-      return `Typed it into ${terminal.name}.`
-    }
-    case 'read-terminal': {
-      const { terminals } = await deps.listTerminals()
-      if (!isCurrent()) {
-        return CANCELLED
-      }
-      const hits = matchTerminals(terminals, intent.target, intent.exact ? 'exact' : 'words')
-      const terminal = hits.length === 1 ? hits[0] : null
-      if (!terminal) {
-        return whichOneQuestion(hits)
-      }
-      const line = lastSpokenLine(await deps.readTail(terminal.handle))
-      if (!isCurrent()) {
-        return CANCELLED
-      }
-      if (!line) {
-        return `${terminal.name} has no output yet.`
-      }
-      return looksSecret(line)
-        ? `${terminal.name}'s last line looks like it has a secret, so I won't read it out.`
-        : `${terminal.name} last showed: ${line}`
+      const question = whichOneQuestion(hits)
+      return question ? { speak: question, ask: { intent, candidates: hits } } : null
     }
     case 'usage': {
       const usage = deps.weekUsage ? await deps.weekUsage() : null
@@ -350,10 +326,21 @@ async function runIntent(
   }
 }
 
+function resultOf(name: string, said: Awaited<ReturnType<typeof runIntent>>): QuickHandResult | null {
+  if (said === CANCELLED) {
+    return { name, speak: '', cancelled: true }
+  }
+  if (said && typeof said === 'object') {
+    return { name, speak: said.speak, ask: said.ask }
+  }
+  return said ? { name, speak: said } : null
+}
+
 /**
  * Answers the request with a quick hand, or null so ADAM handles it.
  * `isCurrent` is false once the call that asked has ended: then nothing is
- * written and the result is `cancelled`, never a hand-off to ADAM.
+ * written and the result is `cancelled`, never a hand-off to ADAM. A result
+ * with `ask` is a "which one?" question; nothing was done yet.
  */
 export async function runQuickHand(
   request: string,
@@ -361,12 +348,23 @@ export async function runQuickHand(
   isCurrent: () => boolean = () => true
 ): Promise<QuickHandResult | null> {
   const intent = matchQuickHand(request)
-  if (!intent) {
-    return null
+  return intent ? resultOf(intent.hand, await runIntent(intent, deps, isCurrent)) : null
+}
+
+/**
+ * Finishes an intent after "which one?" was answered with `handle`. Null
+ * (ADAM takes it) when that terminal is no longer listed.
+ */
+export async function runQuickHandOn(
+  intent: TerminalIntent,
+  handle: string,
+  deps: QuickHandsDeps,
+  isCurrent: () => boolean
+): Promise<QuickHandResult | null> {
+  const { terminals } = await deps.listTerminals()
+  if (!isCurrent()) {
+    return resultOf(intent.hand, CANCELLED)
   }
-  const speak = await runIntent(intent, deps, isCurrent)
-  if (speak === CANCELLED) {
-    return { name: intent.hand, speak: '', cancelled: true }
-  }
-  return speak ? { name: intent.hand, speak } : null
+  const terminal = terminals.find((candidate) => candidate.handle === handle)
+  return terminal ? resultOf(intent.hand, await actOn(intent, terminal, deps, isCurrent)) : null
 }

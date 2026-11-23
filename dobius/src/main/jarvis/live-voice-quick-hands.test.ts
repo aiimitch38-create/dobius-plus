@@ -73,11 +73,17 @@ describe('matchQuickHand: type into a terminal', () => {
     'type git push into backend, then send it',
     'type ls into backend and submit',
     'type ls into backend and submit it',
-    'type submit the form into backend',
-    'type ls and press enter into backend',
     'type rm -rf build into backend and run it'
   ])('never submits: %s goes to ADAM', (phrase) => {
     expect(matchQuickHand(phrase)).toBeNull()
+  })
+
+  it.each([
+    ['type submit the form into backend', 'submit the form'],
+    ['type ls and press enter into backend', 'ls and press enter'],
+    ['type "git commit and run it" into backend', 'git commit and run it']
+  ])('submit words inside the payload are just text: %s', (phrase, text) => {
+    expect(matchQuickHand(phrase)).toEqual({ hand: 'type', text, target: 'backend' })
   })
 
   it('refuses typed text with control characters', () => {
@@ -191,7 +197,14 @@ const FAKE_SECRETS = [
   'client secret = abc',
   'TOKEN: abc',
   'api key: abc',
-  'API_KEY=abc'
+  'API_KEY=abc',
+  '{"password":"x"}',
+  'config "token": "x"',
+  "api_key='x'",
+  'client_secret=abc',
+  'Authorization: Basic Zm9vOmJhcg==',
+  'basic YQ',
+  'aws ASIAFAKEFAKEFAKE0000'
 ]
 
 describe('looksSecret', () => {
@@ -348,7 +361,14 @@ describe('createRuntimeQuickHands', () => {
                 type: 'group',
                 groupId: null,
                 activeTabId: 'tab-1',
-                tabs: [{ tabId: 'tab-1', title: 'My API', activeLeafId: null, panes: {} }]
+                tabs: [
+                  {
+                    tabId: 'tab-1',
+                    title: 'My API',
+                    activeLeafId: null,
+                    panes: { type: 'terminal', handle: 't1' }
+                  }
+                ]
               },
               second: { type: 'group', groupId: null, activeTabId: null, tabs: [] }
             }
@@ -427,5 +447,90 @@ describe('createRuntimeQuickHands', () => {
       .catch((caught: unknown) => caught)
     expect(error).toBeInstanceOf(Error)
     expect(error).not.toBeInstanceOf(QuickHandRefused)
+  })
+})
+
+describe('round 2 review', () => {
+  it('checks the whole line for a secret before cutting it to 150 characters', async () => {
+    const line = `${'ok '.repeat(70)}OPENAI_API_KEY=sk-FAKEfakeFAKEfake0000`
+    expect(line.length).toBeGreaterThan(150)
+    const deps = fakeDeps({ readTail: async () => [line] })
+    expect((await runQuickHand("what's backend doing", deps))?.speak).toBe(
+      "Backend's last line looks like it has a secret, so I won't read it out."
+    )
+  })
+
+  it('names the panes of a split tab by place, so they never share a name', async () => {
+    const runtime = {
+      listTerminals: async () => ({
+        terminals: [
+          { handle: 'L', tabId: 'tab', title: '✳ API', branch: 'main', worktreePath: '/p/SMID' },
+          { handle: 'R', tabId: 'tab', title: '✳ API', branch: 'main', worktreePath: '/p/SMID' }
+        ],
+        truncated: false,
+        visualLayouts: [
+          {
+            worktreeId: 'w',
+            worktreePath: '/p/SMID',
+            root: {
+              type: 'group',
+              groupId: null,
+              activeTabId: 'tab',
+              tabs: [
+                {
+                  tabId: 'tab',
+                  title: 'Backend',
+                  activeLeafId: null,
+                  panes: {
+                    type: 'pane-split',
+                    direction: 'vertical',
+                    first: { type: 'terminal', handle: 'L' },
+                    second: { type: 'terminal', handle: 'R' }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }),
+      readTerminal: async () => ({ tail: [] }),
+      sendTerminal: async () => undefined,
+      getDriver: () => ({ kind: 'idle' }),
+      getTerminalAgentStatus: async () => ({ isRunningAgent: true, status: 'idle' })
+    } as unknown as QuickHandsRuntime
+    const hands = createRuntimeQuickHands(() => runtime)
+    const { terminals } = await hands.listTerminals()
+    expect(terminals.map((terminal) => terminal.name)).toEqual(['Backend left', 'Backend right'])
+    expect(terminals[0].labels).toEqual(['Backend left', 'Backend', 'API'])
+    const deps = { ...hands, typeInto: vi.fn(async () => undefined) }
+    expect((await runQuickHand('type ls into backend', deps))?.speak).toBe(
+      'Two match: Backend left and Backend right. Which one?'
+    )
+    expect((await runQuickHand('type ls into backend right', deps))?.speak).toBe(
+      'Typed it into Backend right.'
+    )
+    expect(deps.typeInto).toHaveBeenCalledWith('R', 'ls', expect.any(Function))
+  })
+
+  it('re-checks the phone after waiting on the agent status, right before the write', async () => {
+    let driver = 'idle'
+    const sendTerminal = vi.fn(async (_handle: string, _action: unknown, options?: {
+      beforeWrite?: (ptyId: string) => Promise<void> | void
+    }) => {
+      await options?.beforeWrite?.('pty-1')
+    })
+    const runtime = {
+      listTerminals: async () => ({ terminals: [] }),
+      readTerminal: async () => ({ tail: [] }),
+      sendTerminal,
+      getDriver: () => ({ kind: driver }),
+      getTerminalAgentStatus: async () => {
+        driver = 'mobile'
+        return { isRunningAgent: true, status: 'idle' }
+      }
+    } as unknown as QuickHandsRuntime
+    await expect(
+      createRuntimeQuickHands(() => runtime).typeInto('t1', 'ls', () => true)
+    ).rejects.toBeInstanceOf(QuickHandRefused)
   })
 })

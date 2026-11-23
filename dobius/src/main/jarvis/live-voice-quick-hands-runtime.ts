@@ -5,7 +5,8 @@ import type {
   RuntimeTerminalRead,
   RuntimeTerminalSummary,
   RuntimeTerminalVisualLayout,
-  RuntimeTerminalVisualLayoutNode
+  RuntimeTerminalVisualLayoutNode,
+  RuntimeTerminalVisualPaneNode
 } from '../../shared/runtime-types'
 import { usageSummaryForRuntime } from '../ipc/usage-access'
 import { QuickHandCancelled, QuickHandRefused, type QuickHandsDeps } from './live-voice-quick-hands'
@@ -37,17 +38,24 @@ const READ_TAIL_LINES = 40
 // Why above the runtime's default of 200: a cut-off list makes "type" refuse.
 const LIST_LIMIT = 1_000
 
+/** Where a pane sits in a split tab, and that tab's title. */
+export type PaneSpot = { tabTitle: string | null; position: string | null }
+
 /**
  * A terminal as the voice names it. Why the tab title first: it is the tab's
  * label as the window resolves it, so Carson's own rename wins there; the
- * pane title (Claude's topic) also answers. A terminal with neither is
- * called by its branch.
+ * pane title (Claude's topic) also answers. A pane of a split tab is called
+ * by the tab and its place ("Backend left"), so two panes never share a name.
+ * A terminal with no title is called by its branch.
  */
 export function quickTerminalOf(
   summary: Pick<RuntimeTerminalSummary, 'handle' | 'title' | 'branch' | 'worktreePath'>,
-  tabTitle: string | null | undefined
+  spot: PaneSpot | undefined
 ): QuickTerminal {
-  const titles = [...new Set([cleanTitle(tabTitle), cleanTitle(summary.title)].filter(Boolean))]
+  const tab = cleanTitle(spot?.tabTitle)
+  const pane = cleanTitle(summary.title)
+  const placed = spot?.position ? `${tab || pane} ${spot.position}`.trim() : ''
+  const titles = [...new Set([placed, tab, pane].filter(Boolean))]
   const labels = titles.length > 0 ? titles : [branchLabel(summary.branch)].filter(Boolean)
   return {
     handle: summary.handle,
@@ -57,14 +65,28 @@ export function quickTerminalOf(
   }
 }
 
-/** Tab id -> the tab's title, from the listing's window layouts. */
-export function tabTitlesOf(layouts: RuntimeTerminalVisualLayout[] | undefined): Map<string, string> {
-  const titles = new Map<string, string>()
+// Why vertical is left/right: a vertical split divides the width (pty-connection.ts).
+const SIDES = { vertical: ['left', 'right'], horizontal: ['top', 'bottom'] } as const
+
+/** Terminal handle -> its tab's title and, in a split tab, its place, from the window layouts. */
+export function paneSpotsOf(layouts: RuntimeTerminalVisualLayout[] | undefined): Map<string, PaneSpot> {
+  const spots = new Map<string, PaneSpot>()
+  const panes = (node: RuntimeTerminalVisualPaneNode, at: string[], out: [string, string[]][]): void => {
+    if (node.type === 'terminal') {
+      out.push([node.handle, at])
+      return
+    }
+    const [first, second] = SIDES[node.direction as keyof typeof SIDES] ?? ['first', 'second']
+    panes(node.first, [...at, first], out)
+    panes(node.second, [...at, second], out)
+  }
   const walk = (node: RuntimeTerminalVisualLayoutNode): void => {
     if (node.type === 'group') {
       for (const tab of node.tabs) {
-        if (tab.title) {
-          titles.set(tab.tabId, tab.title)
+        const found: [string, string[]][] = []
+        panes(tab.panes, [], found)
+        for (const [handle, at] of found) {
+          spots.set(handle, { tabTitle: tab.title, position: found.length > 1 ? at.join(' ') : null })
         }
       }
     } else {
@@ -75,7 +97,7 @@ export function tabTitlesOf(layouts: RuntimeTerminalVisualLayout[] | undefined):
   for (const layout of layouts ?? []) {
     walk(layout.root)
   }
-  return titles
+  return spots
 }
 
 /** Quick hands backed by the live runtime and the Claude usage store. */
@@ -92,11 +114,11 @@ export function createRuntimeQuickHands(
   return {
     listTerminals: async () => {
       const result = await runtime().listTerminals(undefined, LIST_LIMIT)
-      const tabTitles = tabTitlesOf(result.visualLayouts)
+      const spots = paneSpotsOf(result.visualLayouts)
       return {
         truncated: result.truncated === true,
         terminals: result.terminals.map((terminal) =>
-          quickTerminalOf(terminal, tabTitles.get(terminal.tabId))
+          quickTerminalOf(terminal, spots.get(terminal.handle))
         )
       }
     },
@@ -123,8 +145,12 @@ export function createRuntimeQuickHands(
         if (agent.status === 'permission') {
           throw refusal('terminal is waiting on a permission prompt')
         }
+        // Why again after the await: the call or a phone may have taken over meanwhile.
         if (!isCurrent()) {
           throw refusal('the call ended', true)
+        }
+        if (current.getDriver(ptyId).kind === 'mobile') {
+          throw refusal('terminal is driven from the phone')
         }
         wrote = true
       }
