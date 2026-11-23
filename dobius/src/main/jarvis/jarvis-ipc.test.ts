@@ -26,6 +26,7 @@ const adam = vi.hoisted(() => ({
   speak: vi.fn(async () => ({ played: true })),
   created: vi.fn()
 }))
+vi.mock('./adam-brief-handle-ipc', () => ({ registerBriefHandleIpc: () => undefined }))
 vi.mock('./adam-speaks-up-wiring', () => ({
   startAdamSpeaksUp: () => ({ overnight: { record: () => undefined } })
 }))

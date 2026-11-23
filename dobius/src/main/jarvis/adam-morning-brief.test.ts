@@ -9,7 +9,13 @@ import {
   OvernightLog,
   type BriefFacts
 } from './adam-morning-brief-facts'
-import { AdamMorningBrief, morningBriefDue, type MorningBriefImessage } from './adam-morning-brief'
+import {
+  AdamMorningBrief,
+  BRIEF_IN_THREAD,
+  briefNotificationBody,
+  morningBriefDue,
+  type MorningBriefImessage
+} from './adam-morning-brief'
 
 const at = (day: number, hour: number, minute = 0): Date => new Date(2026, 10, day, hour, minute)
 const SEVEN = { hour: 7, minute: 0 }
@@ -22,6 +28,18 @@ describe('morningBriefDue', () => {
     expect(morningBriefDue(at(23, 11, 0), SEVEN, null)).toBe(false)
     expect(morningBriefDue(at(23, 8), SEVEN, '2026-11-23')).toBe(false)
     expect(morningBriefDue(at(24, 7), SEVEN, '2026-11-23')).toBe(true)
+  })
+
+  it('stops at 11:00 whatever the set time; a time at 11:00 or later gets one hour', () => {
+    const half = { hour: 10, minute: 30 }
+    expect(morningBriefDue(at(23, 10, 59), half, null)).toBe(true)
+    expect(morningBriefDue(at(23, 11, 0), half, null)).toBe(false)
+    const late = { hour: 11, minute: 30 }
+    expect(morningBriefDue(at(23, 11, 29), late, null)).toBe(false)
+    expect(morningBriefDue(at(23, 12, 29), late, null)).toBe(true)
+    expect(morningBriefDue(at(23, 12, 30), late, null)).toBe(false)
+    const night = { hour: 23, minute: 30 }
+    expect(morningBriefDue(at(23, 23, 59), night, null)).toBe(true)
   })
 })
 
@@ -169,13 +187,64 @@ describe('AdamMorningBrief delivery', () => {
     expect(showNotification).toHaveBeenCalledOnce()
   })
 
-  it('never texts a reply that looks like it holds a secret', async () => {
+  it('never texts or shows a reply that looks like it holds a secret', async () => {
     ask.mockResolvedValueOnce({
       kind: 'answer',
       text: 'Your key: sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789'
     })
     expect(await brief().tick()).toBe('not-texted')
     expect(imessage.send).not.toHaveBeenCalled()
+    expect(showNotification).toHaveBeenCalledWith('ADAM', BRIEF_IN_THREAD)
+    expect(JSON.stringify(showNotification.mock.calls)).not.toContain('sk-ant')
+    // A secret past the notification's cut is still caught on the whole brief.
+    expect(briefNotificationBody(`${'word '.repeat(60)}sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789`)).toBe(
+      BRIEF_IN_THREAD
+    )
+  })
+
+  it('keeps a brief that was ready after its window in the thread only', async () => {
+    now = at(23, 10, 58)
+    ask.mockImplementationOnce(async () => {
+      now = at(23, 11, 2)
+      return { kind: 'answer', text: 'Calendar: free.' }
+    })
+    expect(await brief().tick()).toBe('late')
+    expect(imessage.send).not.toHaveBeenCalled()
+    expect(showNotification).not.toHaveBeenCalled()
+    expect(rows[0].text).toContain('ready after its time')
+    expect(saved).toBe('2026-11-23')
+  })
+
+  it('keeps a brief that was ready after midnight in the thread only', async () => {
+    const night = new AdamMorningBrief({
+      settings: () => ({ enabled: true, time: { hour: 23, minute: 50 } }),
+      lastRunDate: () => saved,
+      setLastRunDate: (date) => {
+        saved = date
+        return true
+      },
+      isBusy: () => false,
+      ask: async () => {
+        now = at(24, 0, 5)
+        return { kind: 'answer', text: 'Late.' }
+      },
+      facts: async (date) => facts(date),
+      imessage: () => imessage,
+      appendThread: async (row) => void rows.push(row),
+      showNotification,
+      now: () => now
+    })
+    now = at(23, 23, 55)
+    expect(await night.tick()).toBe('late')
+    expect(imessage.send).not.toHaveBeenCalled()
+  })
+
+  it('does not text an unverified handle and says to verify it', async () => {
+    imessage = { unavailableReason: () => 'verify your iMessage number in Settings', send: vi.fn() }
+    expect(await brief().tick()).toBe('not-texted')
+    expect(imessage.send).not.toHaveBeenCalled()
+    expect(rows[0].text).toContain('verify your iMessage number in Settings')
+    expect(showNotification).toHaveBeenCalledOnce()
   })
 })
 

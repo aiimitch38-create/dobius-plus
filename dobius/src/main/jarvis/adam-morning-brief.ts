@@ -1,14 +1,11 @@
 // The morning brief (build plan 7.16): once a day at Carson's chosen time
 // (default 7:00), Dobius+ asks ADAM for a short brief and texts it to Carson's
 // own iMessage handle. Also always a thread row and a Mac notification.
-// Scheduling: due from the brief time until MORNING_BRIEF_CATCH_UP_MINUTES
-// later (a Mac asleep at 7:00 gets it on wake before 11:00), at most once per
-// local day; the day is saved before ADAM is asked, so a restart never repeats it.
-import {
-  MORNING_BRIEF_CATCH_UP_MINUTES,
-  clockTimeText,
-  type ClockTime
-} from '../../shared/adam-speaks-up'
+// Scheduling: due from the brief time until 11:00 (morningBriefWindowEnd; a
+// Mac asleep at 7:00 gets it on wake), at most once per local day; the day is
+// saved before ADAM is asked, so a restart never repeats it. Every text that
+// leaves the thread (iMessage, notification) is secret-filtered first.
+import { clockTimeText, morningBriefWindowEnd, type ClockTime } from '../../shared/adam-speaks-up'
 import type { AdamThreadRow, JarvisAskResult } from '../../shared/speech-types'
 import {
   ADAM_BUSY_TEXT,
@@ -51,13 +48,20 @@ export function morningBriefDue(now: Date, time: ClockTime, lastRunDate: string 
   }
   const minute = now.getHours() * 60 + now.getMinutes()
   const start = time.hour * 60 + time.minute
-  return minute >= start && minute < Math.min(start + MORNING_BRIEF_CATCH_UP_MINUTES, 24 * 60)
+  return minute >= start && minute < morningBriefWindowEnd(start)
+}
+
+/** What a notification may show: the brief, or a pointer to the thread when it looks secret. */
+export function briefNotificationBody(brief: string): string {
+  const body = clip(brief.replace(/\n/g, ' · '), NOTIFY_BODY_MAX_CHARS)
+  return looksSecret(brief) || looksSecret(body) ? BRIEF_IN_THREAD : body
 }
 
 const NOTIFY_BODY_MAX_CHARS = 240
 const ERROR_MAX_CHARS = 160
+export const BRIEF_IN_THREAD = 'ADAM’s morning brief is in his thread.'
 
-export type MorningBriefOutcome = 'not-due' | 'busy' | 'sent' | 'not-texted' | 'failed'
+export type MorningBriefOutcome = 'not-due' | 'busy' | 'sent' | 'not-texted' | 'late' | 'failed'
 
 export class AdamMorningBrief {
   private running = false
@@ -114,10 +118,18 @@ export class AdamMorningBrief {
       this.deps.showNotification('ADAM', 'The morning brief could not be written. Open Dobius+ for details.')
       return 'failed'
     }
-    const texted = await this.text(reply)
     const left = leftOut(facts)
+    // Why checked again: facts and ADAM's turn take time; a brief ready past its
+    // window (or past midnight) stays in the thread instead of texting late.
+    const sendAt = this.now()
+    if (localDateKey(sendAt) !== today || !morningBriefDue(sendAt, this.deps.settings().time, null)) {
+      const late = 'Morning brief: it was ready after its time, so it was not texted or shown.'
+      await this.row(today, [late, ...left].join(' '), true)
+      return 'late'
+    }
+    const texted = await this.text(reply)
     await this.row(today, [`Morning brief: ${texted.status}`, ...left].join(' '), !texted.ok)
-    this.deps.showNotification('ADAM', clip(reply.replace(/\n/g, ' · '), NOTIFY_BODY_MAX_CHARS))
+    this.deps.showNotification('ADAM', briefNotificationBody(reply))
     return texted.ok ? 'sent' : 'not-texted'
   }
 

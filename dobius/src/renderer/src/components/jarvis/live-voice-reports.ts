@@ -17,7 +17,13 @@ import {
 } from './live-voice-call-types'
 import { LiveProgressNotes } from './live-voice-progress-notes'
 import { tapLiveMessages } from './live-voice-tap'
-import { adamSaysEvent, parseLiveEvent, sayNowEvent, thinkingEvent } from './live-voice-wire'
+import {
+  adamSaysNoteEvent,
+  adamSaysSayNowEvent,
+  parseLiveEvent,
+  sayNowEvent,
+  thinkingEvent
+} from './live-voice-wire'
 
 // Why a cap: main rate-limits ADAM's taps; this only bounds a burst held through noise.
 const ADAM_SAYS_HELD_MAX = 4
@@ -193,7 +199,10 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
     const adamSays = this.adamSays
     this.adamSays = []
     for (const message of adamSays) {
-      this.send(adamSaysEvent(message))
+      this.send(adamSaysNoteEvent(message))
+    }
+    if (adamSays.length > 0) {
+      this.send(adamSaysSayNowEvent())
     }
     const important = this.reports.some((update) => !isProgress(update))
     // Why checked again: Carson may have spoken, or a line been said, while these waited.

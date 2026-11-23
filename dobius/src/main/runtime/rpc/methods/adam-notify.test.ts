@@ -35,6 +35,15 @@ describe('adam.notify RPC', () => {
     expect(process.env.DOBIUS_ADAM_CALLER_ID).toBeUndefined()
   })
 
+  it('rotates the id on every Hermes spawn, so an old one stops working', async () => {
+    const old = adamHermesEnvironment({ python: '/p', root: '/r', profileHome: '/h' })
+      .DOBIUS_ADAM_CALLER_ID
+    const next = adamHermesEnvironment({ python: '/p', root: '/r', profileHome: '/h' })
+      .DOBIUS_ADAM_CALLER_ID
+    expect(next).not.toBe(old)
+    expect(await call({ ...valid(), callerId: old })).toMatchObject({ ok: false })
+  })
+
   it('delivers for ADAM over the local socket', async () => {
     const response = await call(valid())
     expect(response).toMatchObject({ ok: true, result: { delivered: 'notification' } })

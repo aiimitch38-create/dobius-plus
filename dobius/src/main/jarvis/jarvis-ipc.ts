@@ -27,6 +27,7 @@ import { adamConductor } from './adam-conductor'
 import { trackedQuickHands, type ConductorRuntime } from './adam-conductor-runtime'
 import { startAdamConductor } from './adam-conductor-wiring'
 import { startAdamSpeaksUp } from './adam-speaks-up-wiring'
+import { registerBriefHandleIpc } from './adam-brief-handle-ipc'
 
 export { forceEndLiveCallForTest, getActiveLiveSessionForTest } from './live-voice-ipc'
 import { migrateElevenLabsKeyOutOfSettings } from './elevenlabs-key-store'
@@ -345,6 +346,7 @@ function registerHandlers(store: Store, service: JarvisService): void {
 
   registerElevenLabsAgentHandlers(store)
   registerSelfEditHandlers((event) => trustedLiveSender(event) !== null)
+  registerBriefHandleIpc((event) => trustedLiveSender(event) !== null)
 
   ipcMain.removeHandler('jarvis:status')
   ipcMain.handle('jarvis:status', () => jarvisStatusOf(service))

@@ -11,6 +11,7 @@ import {
 } from '../../../../shared/adam-speaks-up'
 import type { VoiceSettings } from '../../../../shared/speech-types'
 import { Input } from '../ui/input'
+import { AdamBriefHandleVerify } from './AdamBriefHandleVerify'
 import { Label } from '../ui/label'
 
 type Props = {
@@ -160,7 +161,7 @@ export function AdamSpeaksUpSettings({
         label="Morning brief"
         on={resolved.morningBrief}
         onToggle={() => onUpdateVoiceSettings({ adamMorningBrief: !resolved.morningBrief })}
-        hint="Every day ADAM texts your phone a short brief (needs the iMessage bridge on), and posts it in his thread with a Mac notification. If the Mac was asleep, it comes on wake within 4 hours."
+        hint="Every day ADAM texts your phone a short brief (needs the iMessage bridge on), and posts it in his thread with a Mac notification. If the Mac was asleep, it comes on wake until 11:00 (a time set at 11:00 or later gets one hour)."
       />
       <div className="space-y-1.5">
         <Label htmlFor="adam-morning-brief-time">Morning brief time</Label>
@@ -172,6 +173,7 @@ export function AdamSpeaksUpSettings({
           onBlur={commitTime}
         />
       </div>
+      <AdamBriefHandleVerify />
     </div>
   )
 }

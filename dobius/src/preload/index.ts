@@ -1,5 +1,6 @@
 import type { BoardCardActionReply, BoardCardActionRequest } from '../shared/board-card-actions'
 import type { TabSnoozeCliReply, TabSnoozeCliRequest } from '../shared/tab-snooze-cli'
+import type { BriefHandleResult, BriefHandleStatus } from '../shared/adam-speaks-up'
 import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
 import type {
   RuntimeBoardOpenWebTileEvent,
@@ -4649,6 +4650,12 @@ const api = {
     pressPtt: (): Promise<void> => ipcRenderer.invoke('jarvis:pressPtt'),
     getAdamProjectDirectory: (): Promise<string> =>
       ipcRenderer.invoke('jarvis:getAdamProjectDirectory'),
+    briefHandleStatus: (): Promise<BriefHandleStatus | null> =>
+      ipcRenderer.invoke('jarvis:briefHandleStatus'),
+    briefHandleSendCode: (): Promise<BriefHandleResult> =>
+      ipcRenderer.invoke('jarvis:briefHandleSendCode'),
+    briefHandleConfirm: (code: string): Promise<BriefHandleResult> =>
+      ipcRenderer.invoke('jarvis:briefHandleConfirm', code),
     agentContext: (): Promise<string> => ipcRenderer.invoke('jarvis:agentContext'),
     agentOpening: (): Promise<string> => ipcRenderer.invoke('jarvis:agentOpening'),
     conversationMemory: (): Promise<string> => ipcRenderer.invoke('jarvis:conversationMemory'),

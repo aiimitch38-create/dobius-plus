@@ -3,6 +3,7 @@
 tightly coupled PTY lifecycle logic (scan → ready → write → exit cleanup) across
 files without a cleaner ownership seam. */
 import { basename, delimiter } from 'node:path'
+import { ADAM_CALLER_ID_ENV } from '../jarvis/adam-caller-id'
 import {
   continueStoppedGroupForShell,
   isForegroundSignal,
@@ -545,6 +546,9 @@ export class LocalPtyProvider implements IPtyProvider {
     for (const key of args.envToDelete ?? []) {
       delete finalEnv[key]
     }
+    // Why last: ADAM's caller id proves `dobius adam notify` comes from his Hermes
+    // process; no terminal may hold it, whatever the caller's env or a hook put in.
+    delete finalEnv[ADAM_CALLER_ID_ENV]
     if (args.env?.TERM) {
       finalEnv.TERM = args.env.TERM
     }

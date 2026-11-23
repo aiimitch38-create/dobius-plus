@@ -3,13 +3,12 @@
 import { app, BrowserWindow, Notification, powerMonitor } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { resolveSpeaksUpSettings } from '../../shared/adam-speaks-up'
+import { BRIEF_HANDLE_UNVERIFIED, resolveSpeaksUpSettings } from '../../shared/adam-speaks-up'
 import type { JarvisAskResult } from '../../shared/speech-types'
 import { getAsanaSnapshot, refreshAsanaTasks } from '../asana/asana-queue-service'
 import { hasAsanaToken } from '../asana/asana-token-store'
 import { getImessageBridgeConfig } from '../imessage-bridge/bridge-config'
 import type { Store } from '../persistence'
-import { SafeJsonFile } from '../storage/safe-json-file'
 import { getUserDataRoot } from '../storage/user-data-root'
 import { conductorImessageHandle } from '../voice-conductor/conductor-settings'
 import { createIMessageBridge } from '../voice-conductor/imessage-bridge'
@@ -22,7 +21,9 @@ import {
   OvernightLog,
   type BriefFacts
 } from './adam-morning-brief-facts'
+import { BriefHandleVerifier } from './adam-brief-handle'
 import { AdamMorningBrief, type MorningBriefImessage } from './adam-morning-brief'
+import { createBriefDayStore, createVerifiedHandleStore } from './adam-speaks-up-store'
 import { AdamNotifier, setAdamNotifier } from './adam-notify'
 import { AdamStaleWatch, type StaleAlert } from './adam-stale-watch'
 import type { AdamThreadStore } from './adam-thread-store'
@@ -84,25 +85,34 @@ function staleToCarson(alert: StaleAlert, thread: () => AdamThreadStore): void {
   }
 }
 
-const lastRunFile = new SafeJsonFile<{ lastRunDate: string | null }>({
-  filePath: () => join(getUserDataRoot(), 'adam-morning-brief.json'),
-  parse: (raw) => {
-    const date = (raw as { lastRunDate?: unknown } | null)?.lastRunDate
-    return date === null || (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date))
-      ? { lastRunDate: date }
-      : undefined
-  },
-  fallback: () => ({ lastRunDate: null }),
-  label: '[adam] adam-morning-brief.json'
-})
+const briefDay = createBriefDayStore(() => join(getUserDataRoot(), 'adam-morning-brief.json'))
+
+let handleVerifier: BriefHandleVerifier | null = null
+
+/** Proof the brief texts Carson's own handle (adam-brief-handle.ts); Settings drives it. */
+export function briefHandleVerifier(): BriefHandleVerifier {
+  if (!handleVerifier) {
+    const bridge = createIMessageBridge({ resolveHandle: conductorImessageHandle })
+    const store = createVerifiedHandleStore(() => join(getUserDataRoot(), 'adam-brief-handle.json'))
+    handleVerifier = new BriefHandleVerifier({
+      handle: conductorImessageHandle,
+      // Why the bridge's own send: same handle checks, rate limit and outbound tag.
+      send: (_handle, text) => bridge.send(text),
+      ...store
+    })
+  }
+  return handleVerifier
+}
 
 function briefImessage(): MorningBriefImessage {
   const bridge = createIMessageBridge({ resolveHandle: conductorImessageHandle })
   return {
-    unavailableReason: () =>
-      getImessageBridgeConfig().enabled
-        ? bridge.unavailableReason()
-        : 'the iMessage bridge is turned off in Settings',
+    unavailableReason: () => {
+      if (!getImessageBridgeConfig().enabled) {
+        return 'the iMessage bridge is turned off in Settings'
+      }
+      return bridge.unavailableReason() ?? (briefHandleVerifier().isVerified() ? null : BRIEF_HANDLE_UNVERIFIED)
+    },
     send: (text) => bridge.send(text)
   }
 }
@@ -155,8 +165,7 @@ export function startAdamSpeaksUp(
   const overnight = new OvernightLog()
   const brief = new AdamMorningBrief({
     settings: () => ({ enabled: settings().morningBrief, time: settings().morningBriefTime }),
-    lastRunDate: () => lastRunFile.get().lastRunDate,
-    setLastRunDate: (date) => lastRunFile.set({ lastRunDate: date }),
+    ...briefDay,
     isBusy: adam.isBusy,
     ask: adam.ask,
     facts: async (now) => ({
