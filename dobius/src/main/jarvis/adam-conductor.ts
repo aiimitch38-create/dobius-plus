@@ -1,90 +1,32 @@
 // ADAM the conductor: remembers the terminals ADAM sent work to (quick hands
 // typing, `dobius terminal send` from his Hermes process) and, when one of
 // them finishes or stops to ask Carson something, produces one short notice.
-// Why main and no AI step: the notice is built from the agent's own status and
-// its own last reply, so ADAM never claims more than the agent said.
+// Why two texts per notice: `display` (the thread row Carson reads) may quote
+// the agent's first sentence; `spoken` (anything a model hears: the live
+// voice, Hermes) is a fixed template plus an allowlisted name, never a word
+// from the terminal (shared/conductor-speech.ts).
 // No Electron import: the runtime RPC (terminal.send) reaches it too.
+
+import { conductorSpeech, speakableName } from '../../shared/conductor-speech'
+import type {
+  ConductorDeps,
+  ConductorNotice,
+  ConductorNoticeKind,
+  ConductorProgress,
+  ConductorRead,
+  DispatchSource,
+  Tracked
+} from './adam-conductor-types'
 
 import {
   doneNotice,
   freshReply,
   lastSentenceAsks,
   needsYouNotice,
-  plainWords,
-  clip,
   safeLabel,
   summarizeUpdates,
   type ConductorUpdate
 } from './adam-conductor-text'
-
-export {
-  CONDUCTOR_NOTICE_MAX_CHARS,
-  doneNotice,
-  firstSentence,
-  lastQuestion,
-  needsYouNotice,
-  plainWords,
-  safeLabel,
-  summarizeUpdates
-} from './adam-conductor-text'
-
-export type ConductorStatus = {
-  isRunningAgent: boolean
-  status: 'working' | 'permission' | 'idle' | null
-}
-
-/** What the agent last said, from its transcript (or screen), for the notice. */
-export type ConductorRead = {
-  /** The agent's last reply and when it was written (null = no timestamp). */
-  reply: { text: string; at: number | null } | null
-  /** The visible screen lines, top to bottom, for a question the transcript lacks. */
-  screen: string[]
-}
-
-export type ConductorNoticeKind = 'done' | 'needs-you'
-
-export type ConductorNotice = {
-  kind: ConductorNoticeKind
-  handle: string
-  label: string
-  /** Plain words, already secret-filtered and short: safe to show and say. */
-  text: string
-  at: number
-}
-
-export type ConductorDeps = {
-  status: (handle: string) => Promise<ConductorStatus>
-  read: (handle: string) => Promise<ConductorRead>
-  /** The terminal's current name, or null when it is gone. */
-  labelOf: (handle: string) => Promise<string | null>
-  report: (notice: ConductorNotice) => void
-  /** Reports were switched off: anything still waiting to be said is dropped. */
-  cleared?: () => void
-  /** The "ADAM reports finished work" setting. */
-  enabled: () => boolean
-  now?: () => number
-  setInterval?: (run: () => void, ms: number) => unknown
-  clearInterval?: (timer: unknown) => void
-}
-
-export type DispatchSource = 'quick-hands' | 'cli'
-
-type Tracked = {
-  /** Unique per dispatch: a newer send to the same terminal replaces this one. */
-  id: number
-  handle: string
-  what: string
-  source: DispatchSource
-  sentAt: number
-  sawWorking: boolean
-  /** The agent's last reply when ADAM sent the work (undefined = not read yet). */
-  baselineReply: string | null | undefined
-  replyCheckedAt: number
-  /** When the current done / needs-you reading began; it must hold SETTLE_MS. */
-  settling: { kind: ConductorNoticeKind; since: number } | null
-  /** A notice was already given for this stretch of waiting. */
-  askedAt: number | null
-}
 
 export const CONDUCTOR_POLL_MS = 2_000
 // Why 5 seconds: an agent between two tool calls, or a prompt Carson answers
@@ -94,9 +36,17 @@ export const CONDUCTOR_EXPIRE_MS = 6 * 60 * 60_000
 export const CONDUCTOR_MAX_TRACKED = 30
 // Why throttled: a reply check reads the agent's transcript file.
 export const CONDUCTOR_REPLY_CHECK_MS = 6_000
-const WHAT_MAX_CHARS = 80
+// Why: a progress line every 5 minutes per job; "started" only when it comes
+// well after the send, so ADAM does not echo his own dispatch.
+export const CONDUCTOR_PROGRESS_EVERY_MS = 5 * 60_000
+export const CONDUCTOR_STARTED_AFTER_MS = 20_000
 const CONTEXT_MAX_LINES = 6
 const UNSEEN_MAX = 50
+
+/** A handle as ADAM's context may carry it (Dobius+ makes them; checked anyway). */
+function safeHandle(handle: string): string {
+  return handle.replace(/[^A-Za-z0-9_:.-]/g, '').slice(0, 80) || 'unknown'
+}
 
 /** Identifies one reply, so "a new reply since ADAM's message" can be told apart. */
 function replyKey(read: ConductorRead | null): string | null {
@@ -141,14 +91,15 @@ export class AdamConductor {
     const entry: Tracked = {
       id: this.nextId++,
       handle,
-      what: clip(plainWords(text), WHAT_MAX_CHARS),
       source,
       sentAt: this.now(),
       sawWorking: false,
       baselineReply: undefined,
       replyCheckedAt: this.now(),
       settling: null,
-      askedAt: null
+      askedAt: null,
+      workingSince: null,
+      progressAt: 0
     }
     this.tracked.set(handle, entry)
     while (this.tracked.size > CONDUCTOR_MAX_TRACKED) {
@@ -273,6 +224,7 @@ export class AdamConductor {
       entry.sawWorking = true
       entry.settling = null
       entry.askedAt = null
+      await this.maybeProgress(entry, now)
       return
     }
     // Why a prompt counts: quick hands never type into one and a guarded send
@@ -307,12 +259,44 @@ export class AdamConductor {
     await this.announce(entry, kind)
   }
 
+  private progressOn(): boolean {
+    return this.deps.enabled() && (this.deps.progressEnabled?.() ?? true)
+  }
+
+  /** "Juniper started working." once, then "still working, N minutes in." every 5 minutes. */
+  private async maybeProgress(entry: Tracked, now: number): Promise<void> {
+    let event: ConductorProgress['event'] | null = null
+    if (entry.workingSince === null) {
+      entry.workingSince = now
+      entry.progressAt = now
+      event = now - entry.sentAt > CONDUCTOR_STARTED_AFTER_MS ? 'started' : null
+    } else if (now - entry.progressAt >= CONDUCTOR_PROGRESS_EVERY_MS) {
+      entry.progressAt = now
+      event = 'progress'
+    }
+    if (!event || !this.deps.progress || !this.progressOn()) {
+      return
+    }
+    const identity = await this.deps.identify(entry.handle).catch(() => null)
+    if (!this.isCurrent(entry) || !this.progressOn()) {
+      return
+    }
+    const name = speakableName(identity?.agentName, identity?.project)
+    const minutes = Math.max(1, Math.round((now - entry.workingSince) / 60_000))
+    this.deps.progress({
+      event,
+      handle: entry.handle,
+      name,
+      ...(event === 'progress' ? { minutes } : {})
+    })
+  }
+
   private async announce(entry: Tracked, settled: ConductorNoticeKind): Promise<void> {
     // Why claimed before the awaits: a poke during the reads must not announce twice.
     entry.askedAt = this.now()
     entry.settling = null
-    const [label, read, after] = await Promise.all([
-      this.deps.labelOf(entry.handle).catch(() => null),
+    const [identity, read, after] = await Promise.all([
+      this.deps.identify(entry.handle).catch(() => null),
       this.deps.read(entry.handle).catch(() => null),
       this.deps.status(entry.handle).catch(() => null)
     ])
@@ -331,18 +315,24 @@ export class AdamConductor {
     }
     const reply = freshReply(read, entry.sentAt)
     // Why: an agent that ended its turn on a question is waiting for Carson, not done.
+    // The reply only picks the template; none of its words go into `spoken`.
     const kind: ConductorNoticeKind =
       settled === 'done' && reply && lastSentenceAsks(reply) ? 'needs-you' : settled
     if (kind === 'done') {
       this.forget(entry)
     }
-    const name = safeLabel(label)
-    const text =
+    const event: ConductorNotice['event'] =
+      kind === 'needs-you' ? 'needs-you' : reply ? 'done' : 'unclear'
+    const name = speakableName(identity?.agentName, identity?.project)
+    const spoken = conductorSpeech([{ event, name }])
+    const shown = safeLabel(identity?.agentName || identity?.title)
+    const display =
       kind === 'done'
-        ? doneNotice(name, read, entry.sentAt)
-        : needsYouNotice(name, read, after.status, entry.sentAt)
-    this.unseen = [...this.unseen, { label: name, text }].slice(-UNSEEN_MAX)
-    this.deps.report({ kind, handle: entry.handle, label: name, text, at: this.now() })
+        ? doneNotice(shown, read, entry.sentAt)
+        : needsYouNotice(shown, read, after.status, entry.sentAt)
+    const line = `${spoken} (terminal ${safeHandle(entry.handle)})`
+    this.unseen = [...this.unseen, { label: name, text: line }].slice(-UNSEEN_MAX)
+    this.deps.report({ kind, event, handle: entry.handle, name, spoken, display, at: this.now() })
   }
 
   private startPolling(): void {

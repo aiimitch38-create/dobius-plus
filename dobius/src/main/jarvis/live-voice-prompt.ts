@@ -29,7 +29,13 @@ export function recentThreadSeed(
   let total = 0
   for (let index = rows.length - 1; index >= 0 && picked.length < LIVE_SEED_MAX_ROWS; index -= 1) {
     const row = rows[index]
-    if ((row.role !== 'user' && row.role !== 'assistant') || typeof row.text !== 'string') {
+    // Why skip conductor rows: they may quote a terminal's agent, and no
+    // terminal text may reach a model through the conductor.
+    if (
+      (row.role !== 'user' && row.role !== 'assistant') ||
+      row.conductor === true ||
+      typeof row.text !== 'string'
+    ) {
       continue
     }
     const text = clip(row.text, LIVE_SEED_ROW_MAX_CHARS)

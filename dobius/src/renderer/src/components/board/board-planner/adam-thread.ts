@@ -10,6 +10,18 @@ import type { BoardThreadMessage } from '../board-command-bar/BoardThread'
 /** One earlier row of the thread, as ADAM is shown it. */
 export type ThreadTurn = { role: 'user' | 'assistant'; text: string }
 
+/**
+ * The earlier rows ADAM's model may see. Why not conductor rows: they may
+ * quote a terminal, and no terminal text reaches a model through the conductor.
+ */
+export function threadTurns(messages: readonly BoardThreadMessage[]): ThreadTurn[] {
+  return messages.flatMap((m) =>
+    !m.transient && m.conductor !== true && (m.role === 'user' || m.role === 'assistant')
+      ? [{ role: m.role, text: m.text }]
+      : []
+  )
+}
+
 /** Sends one message to Hermes ADAM and resolves with his result. */
 export type AdamTransport = (message: string) => Promise<JarvisAskResult>
 

@@ -1,10 +1,12 @@
 // The live runtime behind the conductor: the same agent status, terminal read
 // (transcript + screen) and terminal list `dobius terminal` serves.
+import { basename } from 'node:path'
 import type {
   RuntimeTerminalAgentStatus,
   RuntimeTerminalRead
 } from '../../shared/runtime-types'
-import type { AdamConductor, ConductorDeps, ConductorRead } from './adam-conductor'
+import type { AdamConductor } from './adam-conductor'
+import type { ConductorDeps, ConductorRead } from './adam-conductor-types'
 import { QuickHandCancelled, QuickHandRefused, type QuickHandsDeps } from './live-voice-quick-hands'
 import { paneSpotsOf, quickTerminalOf, type QuickHandsRuntime } from './live-voice-quick-hands-runtime'
 
@@ -36,7 +38,7 @@ export function conductorReadOf(read: RuntimeTerminalRead): ConductorRead {
 
 export function createRuntimeConductorDeps(
   getRuntime: () => ConductorRuntime | null
-): Pick<ConductorDeps, 'status' | 'read' | 'labelOf'> {
+): Pick<ConductorDeps, 'status' | 'read' | 'identify'> {
   const runtime = (): ConductorRuntime => {
     const current = getRuntime()
     if (!current) {
@@ -58,18 +60,18 @@ export function createRuntimeConductorDeps(
           transcriptLimit: TRANSCRIPT_MESSAGES
         })
       ),
-    labelOf: async (handle) => {
+    identify: async (handle) => {
       const result = await runtime().listTerminals(undefined, LIST_LIMIT)
       const summary = result.terminals.find((terminal) => terminal.handle === handle)
       if (!summary) {
         return null
       }
-      // Why read `name` first: terminals are getting agent names (7.11); until then it is absent.
-      const named = (summary as { name?: unknown }).name
-      if (typeof named === 'string' && named.trim()) {
-        return named.trim()
+      return {
+        agentName: typeof summary.name === 'string' ? summary.name : null,
+        project: summary.worktreePath ? basename(summary.worktreePath) : null,
+        // Display only: the thread may show it; speech never does.
+        title: quickTerminalOf(summary, paneSpotsOf(result.visualLayouts).get(handle)).name
       }
-      return quickTerminalOf(summary, paneSpotsOf(result.visualLayouts).get(handle)).name
     }
   }
 }

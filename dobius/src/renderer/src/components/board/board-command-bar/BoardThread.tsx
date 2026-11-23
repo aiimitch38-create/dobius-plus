@@ -26,6 +26,8 @@ export type BoardThreadMessage = {
   voice?: boolean
   /** Never persisted — a mid-turn "thinking" placeholder or other UI-only row. */
   transient?: boolean
+  /** Written by ADAM's conductor (may quote a terminal); never sent to a model. */
+  conductor?: boolean
 }
 
 type BoardThreadProps = {

@@ -56,29 +56,10 @@ export const LIVE_REPORT_QUIET_MS = 2_500
 // Why 100ms: the microphone is sampled between checks too, so a word said
 // between two samples still restarts the quiet window.
 export const LIVE_REPORT_POLL_MS = 100
-export const LIVE_REPORTS_MAX = 5
-
-/** A conductor report as the window holds it: the line and the terminal's safe name. */
-export type LiveReport = { text: string; label: string }
-
-const COUNT_WORDS = ['', 'One', 'Two', 'Three', 'Four', 'Five']
-
-/**
- * One report as is; several as "Two updates. A. B."; past `max`, the first
- * max-1 whole and the rest as "And 3 more updates: X, Y, Z." (never dropped).
- */
-export function liveReportsText(reports: LiveReport[], max: number = LIVE_REPORTS_MAX): string {
-  if (reports.length <= 1) {
-    return reports[0]?.text ?? ''
-  }
-  const end = (line: string): string => (/[.!?…]$/.test(line) ? line : `${line}.`)
-  const kept = reports.length > max ? reports.slice(0, max - 1) : reports
-  const rest = reports.slice(kept.length)
-  const names = [...new Set(rest.map((report) => report.label))]
-  const more = rest.length > 0 ? [`And ${rest.length} more updates: ${names.join(', ')}.`] : []
-  const count = COUNT_WORDS[reports.length] ?? String(reports.length)
-  return `${count} updates. ${[...kept.map((report) => end(report.text)), ...more].join(' ')}`
-}
+// - PROGRESS_*: "still working" lines are skipped when Carson spoke in the last
+//   30 seconds, and at most one is said every 2 minutes.
+export const LIVE_PROGRESS_AFTER_SPEECH_MS = 30_000
+export const LIVE_PROGRESS_MIN_GAP_MS = 2 * 60_000
 
 export const LIVE_NOT_HEARD_TEXT = 'Sorry, I did not catch that. Could you say it again?'
 export const LIVE_UNREACHABLE_TEXT = 'I could not reach ADAM just now. Try again in a moment.'

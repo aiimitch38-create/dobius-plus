@@ -1,6 +1,6 @@
 // The words of a conductor notice: plain, short, and never a secret.
 import { lastOutputLine, looksSecret } from './live-voice-terminal-text'
-import type { ConductorRead, ConductorStatus } from './adam-conductor'
+import type { ConductorRead, ConductorStatus } from './adam-conductor-types'
 
 export const CONDUCTOR_NOTICE_MAX_CHARS = 200
 const LABEL_MAX_CHARS = 40
