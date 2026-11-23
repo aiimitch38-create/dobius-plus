@@ -130,6 +130,47 @@ describe('transcript extraction', () => {
     ])
   })
 
+  it('pairs each Codex copy once and never across a user turn', () => {
+    const response = (role: string, text: string): string =>
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role,
+          content: [{ type: role === 'user' ? 'input_text' : 'output_text', text }]
+        }
+      })
+    const event = (type: string, message: string): string =>
+      JSON.stringify({ type: 'event_msg', payload: { type, message } })
+    const messages = extractTranscriptTextMessages('codex', [
+      response('assistant', 'Done.'),
+      event('agent_message', 'Done.'),
+      event('user_message', 'Do it again'),
+      event('agent_message', 'Done.')
+    ])
+    expect(messages.map(({ role, text }) => [role, text])).toEqual([
+      ['assistant', 'Done.'],
+      ['user', 'Do it again'],
+      ['assistant', 'Done.']
+    ])
+  })
+
+  it('does not let one Codex original absorb two copies', () => {
+    const messages = extractTranscriptTextMessages('codex', [
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'ok' }]
+        }
+      }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'agent_message', message: 'ok' } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'agent_message', message: 'ok' } })
+    ])
+    expect(messages.map(({ text }) => text)).toEqual(['ok', 'ok'])
+  })
+
   it('refuses a transcript path outside the allowed roots', async () => {
     dir = await mkdtemp(join(tmpdir(), 'terminal-read-transcript-'))
     const path = join(dir, 'session.jsonl')

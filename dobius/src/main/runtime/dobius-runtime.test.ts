@@ -26544,6 +26544,23 @@ describe('readTerminal screen + transcript views', () => {
     expect(read.screen.screen.at(-1)).toBe('live line')
   })
 
+  it('reports incomplete history when the pane seed returned nothing', async () => {
+    for (const result of [null, { data: '', cols: 80, rows: 24 }]) {
+      const runtime = createRuntime(() => [], {
+        hasRendererSerializer: () => true,
+        serializeBuffer: async () => result
+      })
+      runtime.onPtyData('pty-1', 'live line\r\n', 1)
+      const [terminal] = (await runtime.listTerminals()).terminals
+      const read = await runtime.readTerminal(terminal.handle, { screen: true })
+      if (!read.screen?.available) {
+        throw new Error('expected screen')
+      }
+      expect(read.screen.historyIncomplete).toMatch(/^seed-unavailable/)
+      expect(read.screen.screen).toEqual(['live line'])
+    }
+  })
+
   it('does not report incomplete history after a complete small seed', async () => {
     const runtime = createRuntime(() => [], {
       hasRendererSerializer: () => true,

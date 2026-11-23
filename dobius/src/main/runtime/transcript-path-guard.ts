@@ -6,7 +6,7 @@ import { extname, isAbsolute, relative, sep } from 'node:path'
 // process can post. terminal.read must not become a way to read arbitrary
 // files, so it only opens a regular .jsonl file whose canonical path is inside
 // the agent's own session folders, and checks the opened descriptor itself so
-// a symlink swapped in between the check and the open is caught.
+// a file swapped in between the check and the open is caught.
 
 export type ConfinedFile = { handle: FileHandle; canonicalPath: string; size: number }
 
@@ -34,6 +34,12 @@ export async function openConfinedTranscriptFile(
   if (!canonicalRoots.some((root) => isInside(root, canonicalPath))) {
     return { reason: 'transcript path is outside the agent session folders' }
   }
+  // ponytail: residual race. realpath, open and stat below are separate path
+  // lookups, so a process that can rename directories inside the session
+  // folders could swap a parent directory between them. Accepted: that process
+  // already has write access to the user's home, so reading a file through us
+  // is not an escalation. Upgrade path if that changes: walk from an fd opened
+  // on the root with openat-style per-component O_NOFOLLOW opens.
   let handle: FileHandle
   try {
     handle = await open(canonicalPath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
@@ -46,9 +52,10 @@ export async function openConfinedTranscriptFile(
       await handle.close()
       return { reason: 'transcript is not a regular file' }
     }
-    const again = await realpath(canonicalPath)
-    const current = await stat(again)
-    if (again !== canonicalPath || current.dev !== opened.dev || current.ino !== opened.ino) {
+    // Why: the descriptor must be the very file the checked path names; all
+    // reads then go through this descriptor only.
+    const target = await stat(canonicalPath)
+    if (target.dev !== opened.dev || target.ino !== opened.ino) {
       await handle.close()
       return { reason: 'transcript path changed while it was being opened' }
     }

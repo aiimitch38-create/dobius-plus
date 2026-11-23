@@ -25,6 +25,8 @@ type DecodedTextRecord = {
   mergeKey: string | null
   /** Codex writes many turns twice (response_item and event_msg). */
   kind?: 'response' | 'event'
+  /** Already matched with its copy in the other representation. */
+  paired?: boolean
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -145,9 +147,11 @@ function decodeCodexEventMessage(
 
 const CODEX_DUPLICATE_LOOKBACK = 4
 
-// Why: when Codex records a turn both as a response_item and as an event_msg,
-// show it once. Only a nearby copy from the OTHER representation counts, so a
-// user genuinely repeating the same prompt is still shown twice.
+// Why: Codex records many turns twice, as a response_item and as an event_msg.
+// A copy is dropped only when it pairs with a not-yet-paired message of the
+// OTHER representation (same role and text) in the same turn: the search stops
+// at the previous user message, and each original pairs at most once. So a
+// reply that is genuinely repeated in a later turn is still shown.
 function isCodexDuplicate(messages: DecodedTextRecord[], next: DecodedTextRecord): boolean {
   if (!next.kind) {
     return false
@@ -161,10 +165,15 @@ function isCodexDuplicate(messages: DecodedTextRecord[], next: DecodedTextRecord
     if (
       earlier.kind &&
       earlier.kind !== next.kind &&
+      !earlier.paired &&
       earlier.role === next.role &&
       earlier.text === next.text
     ) {
+      earlier.paired = true
       return true
+    }
+    if (earlier.role === 'user') {
+      return false
     }
   }
   return false

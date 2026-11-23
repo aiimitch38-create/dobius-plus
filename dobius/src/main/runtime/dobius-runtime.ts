@@ -5973,6 +5973,10 @@ export class DobiusRuntimeService {
           altScreenForcesZeroRows: true
         })
         if (!rendered || rendered.data.length === 0) {
+          // Why: a timed-out serialize returns null, indistinguishable from an
+          // empty pane, so the mirror cannot claim it holds the earlier output.
+          state.historyIncomplete =
+            'seed-unavailable: the pane returned no buffer to seed the mirror (empty or timed out); earlier output may be missing'
           return
         }
         this.recordOsc7MetadataForPty(ptyId, rendered.data)
