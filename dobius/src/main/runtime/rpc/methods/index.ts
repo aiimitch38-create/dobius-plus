@@ -55,6 +55,7 @@ import { AGENT_CONTROL_METHODS } from './agent-control'
 import { CREW_METHODS } from './crew'
 import { LEAD_METHODS } from './leads'
 import { ADAM_METHODS } from './adam'
+import { LIBRARY_METHODS } from './library'
 import { APP_SERVICE_METHODS } from './app-services'
 import { APP_UI_METHODS } from './app-ui'
 import { TELEGRAM_REPLY_METHODS } from './telegram-replies'
@@ -137,6 +138,7 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...CREW_METHODS,
   ...LEAD_METHODS,
   ...ADAM_METHODS,
+  ...LIBRARY_METHODS,
   ...APP_SERVICE_METHODS,
   ...APP_UI_METHODS,
   ...TELEGRAM_REPLY_METHODS,

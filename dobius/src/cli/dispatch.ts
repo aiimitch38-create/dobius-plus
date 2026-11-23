@@ -41,6 +41,7 @@ import { ACCOUNT_HANDLERS } from './handlers/accounts'
 import { APP_UI_HANDLERS } from './handlers/app-ui'
 import { APP_SERVICE_HANDLERS } from './handlers/app-services'
 import { ADAM_HANDLERS } from './handlers/adam'
+import { LIBRARY_HANDLERS } from './handlers/library'
 
 export type HandlerContext = {
   flags: Map<string, string | boolean>
@@ -93,6 +94,7 @@ function buildHandlers(): Map<string, CommandHandler> {
     GIT_HANDLERS,
     PR_HANDLERS,
     ADAM_HANDLERS,
+    LIBRARY_HANDLERS,
     APP_SERVICE_HANDLERS,
     APP_UI_HANDLERS,
     ACCOUNT_HANDLERS

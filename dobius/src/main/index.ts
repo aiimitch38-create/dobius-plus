@@ -145,6 +145,7 @@ import { ClaudeRuntimeAuthService } from './claude-accounts/runtime-auth-service
 import { StarNagService } from './star-nag/service'
 import { startImessageBridge, stopImessageBridge } from './imessage-bridge/bridge-service'
 import { startDobiusCli, stopDobiusCli } from './dobius-cli/dispatch-server'
+import { startLibraryRefresh, stopLibraryRefresh } from './library/library-service'
 import { shutdownBugAutoFix } from './vertex/bug-autofix-wiring'
 import { bootLeadsFromAutostart } from './runtime/rpc/methods/leads'
 import { syncVoiceConductorFromSettings } from './voice-conductor/service'
@@ -1987,6 +1988,8 @@ app.whenReady().then(async () => {
   // Localhost dispatch server + dobius-* CLIs (dobius-send, dobius-task-done).
   // Reuses the runtime's active-terminal resolution + send path.
   startDobiusCli(runtimeService)
+  // The library: local search index of projects, conversations and notes.
+  startLibraryRefresh()
   // Voice Conductor: background Opus session that routes voice/dispatched work.
   // Starts/stops in step with the voice.conductorEnabled setting. Its iMessage
   // handle comes from the iMessage bridge setting (voice-conductor/conductor-settings.ts).
@@ -2400,6 +2403,7 @@ app.on('will-quit', (e) => {
   starNag?.stop()
   stopImessageBridge()
   stopDobiusCli()
+  stopLibraryRefresh()
   shutdownBugAutoFix()
   automations?.stop()
   setUnreadDockBadgeCount(0)
