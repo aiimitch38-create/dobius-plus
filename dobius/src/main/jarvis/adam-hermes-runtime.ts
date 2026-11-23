@@ -2,6 +2,7 @@ import { realpathSync, statSync } from 'node:fs'
 import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join, delimiter } from 'node:path'
+import { ADAM_CALLER_ID_ENV, rotateAdamCallerId } from './adam-caller-id'
 
 export type AdamHermesRuntime = {
   python: string
@@ -141,6 +142,9 @@ export function adamHermesEnvironment(runtime: AdamHermesRuntime): NodeJS.Proces
     // Why: `dobius terminal send` marks ADAM's sends with it, so the conductor
     // watches those terminals and tells Carson when they finish (adam-conductor.ts).
     DOBIUS_CALLER: 'adam',
+    // Why: `dobius adam notify` is ADAM's alone; this id proves the caller
+    // (adam-caller-id.ts). Built once per Hermes spawn, so each restart rotates it.
+    [ADAM_CALLER_ID_ENV]: rotateAdamCallerId(),
     HERMES_VOICE: '0',
     HERMES_VOICE_TTS: '0',
     PYTHONUNBUFFERED: '1',

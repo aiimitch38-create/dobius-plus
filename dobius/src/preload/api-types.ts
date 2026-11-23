@@ -1,3 +1,4 @@
+import type { BriefHandleResult, BriefHandleStatus } from '../shared/adam-speaks-up'
 import type { WhatsNewPayload, WhatsNewSection } from '../shared/whats-new'
 import type {
   SnoozedTabEntry,
@@ -3378,6 +3379,10 @@ export type PreloadApi = {
     pressPtt: () => Promise<void>
     /** Absolute path to the ADAM project checkout (`~/dobius/projects/ADAM`). */
     getAdamProjectDirectory: () => Promise<string>
+    /** Morning brief: is Carson's iMessage handle verified (a texted code typed back)? */
+    briefHandleStatus: () => Promise<BriefHandleStatus | null>
+    briefHandleSendCode: () => Promise<BriefHandleResult>
+    briefHandleConfirm: (code: string) => Promise<BriefHandleResult>
     /** Snapshot of worktrees, terminals and agents for the voice agent. */
     agentContext: () => Promise<string>
     /** Proposes a change to Adam's own code; opens the review window. */

@@ -4,7 +4,15 @@
 // so none of their words may ever reach a model (Carson's call, 2026-11-22).
 import { AGENT_NAMES } from './agent-names'
 
-export type ConductorEvent = 'done' | 'unclear' | 'needs-you' | 'started' | 'progress'
+export type ConductorEvent =
+  | 'done'
+  | 'unclear'
+  | 'needs-you'
+  | 'started'
+  | 'progress'
+  // Stale alerts (adam-stale-watch.ts): still waiting on Carson, or working long with no reply.
+  | 'still-waiting'
+  | 'long-running'
 
 /** One update, as it may be spoken: an event and a speakable name. */
 export type ConductorSpoken = { event: ConductorEvent; name: string; minutes?: number }
@@ -124,7 +132,10 @@ export function conductorSentences(updates: ConductorSpoken[]): string[] {
   const done = of('done')
   const unclear = of('unclear')
   const needs = of('needs-you')
-  const groups = [done, unclear, needs].filter((names) => names.length > 0).length || 2
+  const waiting = safe.filter((update) => update.event === 'still-waiting')
+  const long = safe.filter((update) => update.event === 'long-running')
+  const groups =
+    [done, unclear, needs, waiting, long].filter((names) => names.length > 0).length || 2
   const budget = Math.floor(CONDUCTOR_SPEECH_MAX_CHARS / groups) - SUFFIX_ROOM
   if (done.length > 0) {
     lines.push(namesThen(done, 'finished', 'finished', budget))
@@ -141,6 +152,7 @@ export function conductorSentences(updates: ConductorSpoken[]): string[] {
   if (needs.length > 0) {
     lines.push(namesThen(needs, 'needs you', 'need you', budget))
   }
+  lines.push(...staleLines(waiting, long, budget))
   if (lines.length > 0) {
     return lines.map(capitalized)
   }
@@ -156,6 +168,33 @@ export function conductorSentences(updates: ConductorSpoken[]): string[] {
     lines.push(namesThen(workingNames, 'is still working', 'are still working', budget))
   }
   return lines.map(capitalized)
+}
+
+/** "Juniper has been waiting on you for 12 minutes." and the like, templates only. */
+function staleLines(waiting: ConductorSpoken[], long: ConductorSpoken[], budget: number): string[] {
+  const lines: string[] = []
+  const waitingNames = [...new Set(waiting.map((update) => update.name))]
+  if (waitingNames.length === 1 && typeof waiting[0]?.minutes === 'number') {
+    lines.push(`${waitingNames[0]} has been waiting on you for ${minutesText(waiting[0].minutes)}.`)
+  } else if (waitingNames.length > 0) {
+    lines.push(namesThen(waitingNames, 'is still waiting on you', 'are still waiting on you', budget))
+  }
+  const longNames = [...new Set(long.map((update) => update.name))]
+  if (longNames.length === 1 && typeof long[0]?.minutes === 'number') {
+    lines.push(
+      `${longNames[0]} has been working for ${minutesText(long[0].minutes)} with no new reply.`
+    )
+  } else if (longNames.length > 0) {
+    lines.push(
+      namesThen(
+        longNames,
+        'has been working a long time with no new reply',
+        'have been working a long time with no new reply',
+        budget
+      )
+    )
+  }
+  return lines
 }
 
 /** All updates as one spoken line. */

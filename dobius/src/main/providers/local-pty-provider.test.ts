@@ -302,6 +302,22 @@ describe('LocalPtyProvider', () => {
       expect(spawnCall[2].env.POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD).toBe('already-set')
     })
 
+    it('never hands ADAM\'s caller id to a terminal', async () => {
+      const saved = process.env.DOBIUS_ADAM_CALLER_ID
+      process.env.DOBIUS_ADAM_CALLER_ID = 'from-parent'
+      try {
+        await provider.spawn({ cols: 80, rows: 24, env: { DOBIUS_ADAM_CALLER_ID: 'from-caller' } })
+        const spawnCall = spawnMock.mock.calls.at(-1)!
+        expect(spawnCall[2].env.DOBIUS_ADAM_CALLER_ID).toBeUndefined()
+      } finally {
+        if (saved === undefined) {
+          delete process.env.DOBIUS_ADAM_CALLER_ID
+        } else {
+          process.env.DOBIUS_ADAM_CALLER_ID = saved
+        }
+      }
+    })
+
     it('honors requests to delete the Powerlevel10k wizard env value', async () => {
       await provider.spawn({
         cols: 80,

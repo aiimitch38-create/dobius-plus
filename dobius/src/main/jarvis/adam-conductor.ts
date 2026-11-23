@@ -8,7 +8,7 @@
 // No Electron import: the runtime RPC (terminal.send) reaches it too.
 
 import { conductorSpeech, speakableName } from '../../shared/conductor-speech'
-import { conductorJobs } from './adam-conductor-jobs'
+import { conductorJobs, conductorStaleJobs } from './adam-conductor-jobs'
 import type {
   ConductorDeps,
   ConductorJob,
@@ -137,6 +137,9 @@ export class AdamConductor {
     return conductorJobs(this.tracked.values(), this.deps.identify)
   }
 
+  /** Every tracked job's waiting and working clocks, for the stale alerts. */
+  readonly staleJobs = () => conductorStaleJobs(this.tracked.values())
+
   /** Reports were switched off: forget every terminal and every unsaid update. */
   clear(): void {
     this.tracked.clear()
@@ -231,6 +234,7 @@ export class AdamConductor {
       return
     }
     const { isRunningAgent, status } = await this.deps.status(entry.handle)
+    entry.lastStatus = status
     if (status === 'working') {
       entry.sawWorking = true
       entry.settling = null

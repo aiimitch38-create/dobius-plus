@@ -63,6 +63,7 @@ export const BOOLEAN_FLAGS = new Set([
   'text-stdin',
   'unread',
   'unresolved',
+  'urgent',
   'value-stdin',
   'wait',
   'whole-word'

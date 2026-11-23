@@ -123,6 +123,16 @@ export type VoiceSettings = {
   adamProgressUpdates?: boolean
   /** The live voice says ADAM's answers exactly as written, not in its own words. Off unless true. */
   adamReadFactsVerbatim?: boolean
+  /** `dobius adam notify`: ADAM may tap Carson on the shoulder. On unless false. */
+  adamCanTapShoulder?: boolean
+  /** Stale alerts (shared/adam-speaks-up.ts has defaults and bounds), in minutes. */
+  adamStaleWaitingMinutes?: number
+  adamStaleReminderMinutes?: number
+  adamStaleWorkingMinutes?: number
+  /** The daily morning brief. On unless false. */
+  adamMorningBrief?: boolean
+  /** "07:00" style local time of the morning brief. */
+  adamMorningBriefTime?: string
 }
 
 export type LiveVoiceEngine = 'hermes' | 'elevenlabs' | 'openai-live'
@@ -198,6 +208,11 @@ export type LiveVoiceNotice =
       callToken: string
       delegationId: string
     }
+  /**
+   * ADAM's own message to Carson (`dobius adam notify`), said once the call is
+   * quiet and framed as his message. ADAM is trusted; main checked the text.
+   */
+  | { kind: 'adam-says'; text: string; urgent?: boolean }
 
 /** Session events the window reports to main's spend meter. */
 export type LiveVoiceSessionReport = {
@@ -244,9 +259,10 @@ export type AdamThreadRow = {
 
 /**
  * Which way in a turn with ADAM came from. All share one Hermes session. `cli`
- * is `dobius adam ask`; main writes its rows, as it does for voice.
+ * is `dobius adam ask`; `schedule` is the morning brief. Main writes the rows
+ * of both, as it does for voice.
  */
-export type AdamTurnSource = 'voice' | 'thread' | 'cli'
+export type AdamTurnSource = 'voice' | 'thread' | 'cli' | 'schedule'
 
 /** Sent to the window for each accepted ADAM turn: first the words asked, then the reply. */
 export type AdamTurnEvent = {
