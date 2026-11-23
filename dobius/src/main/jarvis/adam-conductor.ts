@@ -8,8 +8,10 @@
 // No Electron import: the runtime RPC (terminal.send) reaches it too.
 
 import { conductorSpeech, speakableName } from '../../shared/conductor-speech'
+import { conductorJobs } from './adam-conductor-jobs'
 import type {
   ConductorDeps,
+  ConductorJob,
   ConductorNotice,
   ConductorNoticeKind,
   ConductorRead,
@@ -128,6 +130,11 @@ export class AdamConductor {
     const lines = summarizeUpdates(this.unseen, CONTEXT_MAX_LINES)
     this.unseen = []
     return lines
+  }
+
+  /** The tracked jobs as a model may hear them (adam-conductor-jobs.ts). */
+  jobs(): Promise<ConductorJob[]> {
+    return conductorJobs(this.tracked.values(), this.deps.identify)
   }
 
   /** Reports were switched off: forget every terminal and every unsaid update. */

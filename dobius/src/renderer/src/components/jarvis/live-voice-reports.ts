@@ -14,6 +14,7 @@ import {
   type LiveVoiceCallDeps,
   type LiveVoiceSnapshot
 } from './live-voice-call-types'
+import { LiveProgressNotes } from './live-voice-progress-notes'
 import { tapLiveMessages } from './live-voice-tap'
 import { parseLiveEvent, sayNowEvent, thinkingEvent } from './live-voice-wire'
 
@@ -41,6 +42,7 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
   private lastHeardInputAt = Number.NEGATIVE_INFINITY
   private lastProgressAt = Number.NEGATIVE_INFINITY
   private timer: number | null = null
+  private readonly progressNotes = new LiveProgressNotes()
   private readonly setTimer: (handler: () => void, ms: number) => number
   private readonly clearTimer: (timer: number) => void
 
@@ -55,6 +57,13 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
   }
 
   override notice(notice: LiveVoiceNotice): void {
+    if (notice.kind === 'adam-progress') {
+      const note = this.active ? this.progressNotes.note(notice.step) : null
+      if (note) {
+        this.send(note)
+      }
+      return
+    }
     if (notice.kind === 'reports-cleared') {
       if (notice.only === 'progress') {
         this.reports = this.reports.filter((update) => !isProgress(update))
@@ -89,6 +98,7 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
   protected override teardown(): void {
     super.teardown()
     this.dropReports()
+    this.progressNotes.reset()
   }
 
   private dropReports(): void {
@@ -113,6 +123,7 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
   /** Any transcript, from Carson or the voice, restarts the quiet window. */
   private heard(data: unknown): void {
     const event = parseLiveEvent(data)
+    this.progressNotes.seen(event)
     if (event?.type === 'input' || event?.type === 'output') {
       this.quietSince = null
     }

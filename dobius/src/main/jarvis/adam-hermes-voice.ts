@@ -1,33 +1,15 @@
 import type { JarvisAskResult } from '../../shared/speech-types'
-import { resolveAdamHermesRuntime, type AdamHermesRuntime } from './adam-hermes-runtime'
+import { resolveAdamHermesRuntime } from './adam-hermes-runtime'
 import { readAdamVoiceSession, saveAdamVoiceSession } from './adam-hermes-session'
+import type { AdamHermesTurn, AdamHermesVoiceOptions } from './adam-hermes-voice-types'
+import { contextPercentOf, progressStepOf } from './adam-progress'
+import { compactNow } from './adam-idle-tidy'
 import {
   HermesDesktopRpc,
   HermesRpcError,
   type HermesDesktopEvent,
   type HermesRpc
 } from './hermes-desktop-rpc'
-
-type VoiceOptions = {
-  sessionFile: string
-  runtime?: () => AdamHermesRuntime | null | Promise<AdamHermesRuntime | null>
-  connect?: (
-    runtime: AdamHermesRuntime,
-    onEvent: (event: HermesDesktopEvent) => void,
-    onDisconnect: () => void
-  ) => HermesRpc
-  approve?: (command: string, description: string) => Promise<boolean>
-  turnTimeoutMs?: number
-  /** Budget for one context compaction; Hermes' own ceiling is 600s by default. */
-  compactionTimeoutMs?: number
-  /** Told when Hermes starts or stops compacting ADAM's context during a turn. */
-  onCompacting?: (compacting: boolean) => void
-}
-type Turn = {
-  resolve: (result: JarvisAskResult) => void
-  timer?: ReturnType<typeof setTimeout>
-  compacting: boolean
-}
 
 export const ADAM_TURN_TIMEOUT_TEXT =
   'ADAM went too long without answering, so Dobius+ stopped the request. Send your message again.'
@@ -41,9 +23,11 @@ export class AdamHermesVoice {
   private connecting: Promise<void> | null = null
   private retiring: Promise<void> = Promise.resolve()
   private generation = 0
-  private turn: Turn | null = null
+  private turn: AdamHermesTurn | null = null
+  private tidying: Promise<unknown> | null = null
+  private context: number | null = null
 
-  constructor(private readonly options: VoiceOptions) {}
+  constructor(private readonly options: AdamHermesVoiceOptions) {}
 
   ask(raw: string): Promise<JarvisAskResult> {
     const text = raw.trim()
@@ -54,7 +38,7 @@ export class AdamHermesVoice {
       return Promise.resolve({ kind: 'error', text: 'Adam is already handling a voice request.' })
     }
     return new Promise((resolve) => {
-      const turn: Turn = { resolve, compacting: false }
+      const turn: AdamHermesTurn = { resolve, compacting: false }
       this.armTimer(turn)
       this.turn = turn
       void this.submit(text, turn).catch(() => {
@@ -69,6 +53,29 @@ export class AdamHermesVoice {
     })
   }
 
+  /** How full ADAM's context was at Hermes' last usage report, in percent; null = never reported. */
+  get contextPercent(): number | null {
+    return this.context
+  }
+
+  /**
+   * Idle-time memory tidy (adam-idle-tidy.ts): asks Hermes to compact now.
+   * False, without asking, while a turn runs or no session is open.
+   */
+  async tidy(): Promise<boolean> {
+    if (!this.rpc || !this.sessionId || this.turn || this.tidying) {
+      return false
+    }
+    const run = compactNow(this.rpc, this.sessionId, this.options)
+    this.tidying = run
+    try {
+      this.context = (await run) ?? this.context
+      return true
+    } finally {
+      this.tidying = null
+    }
+  }
+
   /** True while Hermes is compacting ADAM's context inside the running turn. */
   get compacting(): boolean {
     return this.turn?.compacting ?? false
@@ -81,7 +88,7 @@ export class AdamHermesVoice {
    * Hermes says it is compacting, the turn gets the compaction budget; once
    * that ends, a fresh turn budget.
    */
-  private armTimer(turn: Turn): void {
+  private armTimer(turn: AdamHermesTurn): void {
     clearTimeout(turn.timer)
     turn.timer = setTimeout(
       () => {
@@ -97,7 +104,7 @@ export class AdamHermesVoice {
     )
   }
 
-  private setCompacting(turn: Turn, compacting: boolean): void {
+  private setCompacting(turn: AdamHermesTurn, compacting: boolean): void {
     if (turn.compacting === compacting) {
       return
     }
@@ -134,8 +141,14 @@ export class AdamHermesVoice {
     await this.retiring
   }
 
-  private async submit(text: string, turn: Turn): Promise<void> {
+  private async submit(text: string, turn: AdamHermesTurn): Promise<void> {
     await this.ensureSession()
+    if (this.tidying) {
+      // Why wait: an idle tidy is still compacting; the turn gets its budget.
+      this.setCompacting(turn, true)
+      await this.tidying.catch(() => undefined)
+      this.setCompacting(turn, false)
+    }
     if (this.turn !== turn) {
       return
     }
@@ -235,11 +248,18 @@ export class AdamHermesVoice {
   }
 
   private async onEvent(event: HermesDesktopEvent, rpc: HermesRpc): Promise<void> {
+    if (event.session_id === this.sessionId) {
+      this.context = contextPercentOf(event.payload) ?? this.context
+    }
     if (!this.turn || event.session_id !== this.sessionId) {
       event.respond?.(event.type === 'approval.request' ? { choice: 'deny' } : {})
       return
     }
     const payload = event.payload ?? {}
+    const step = progressStepOf(event)
+    if (step) {
+      this.options.onProgress?.(step)
+    }
     // Hermes re-tags every in-progress compaction line (preflight, idle, heartbeat)
     // as kind "compacting" and ends it with "compacted" (tui_gateway/server.py _status_update).
     if (event.type === 'status.update') {

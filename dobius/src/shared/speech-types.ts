@@ -1,4 +1,5 @@
 import type { ConductorEvent } from './conductor-speech'
+import type { AdamProgressStep } from './adam-progress'
 export type SpeechModelType = 'transducer' | 'paraformer' | 'whisper' | 'openai' | 'vps'
 export type SpeechModelProvider = 'local' | 'openai' | 'vps'
 
@@ -120,6 +121,8 @@ export type VoiceSettings = {
   adamReportsFinishedWork?: boolean
   /** Short "still working" lines on a live call while those jobs run. On unless false. */
   adamProgressUpdates?: boolean
+  /** The live voice says ADAM's answers exactly as written, not in its own words. Off unless true. */
+  adamReadFactsVerbatim?: boolean
 }
 
 export type LiveVoiceEngine = 'hermes' | 'elevenlabs' | 'openai-live'
@@ -182,6 +185,12 @@ export type LiveVoiceNotice =
     }
   /** `only: 'progress'`: drop held progress lines only (progress updates turned off). */
   | { kind: 'reports-cleared'; text: ''; only?: 'progress' }
+  /**
+   * What ADAM is doing in the voice request he is working on: a step only,
+   * the window rebuilds the fixed phrase (shared/adam-progress.ts). Quiet
+   * context for the voice (thinking.append), never spoken on its own.
+   */
+  | { kind: 'adam-progress'; text: ''; step: AdamProgressStep }
 
 /** Session events the window reports to main's spend meter. */
 export type LiveVoiceSessionReport = {

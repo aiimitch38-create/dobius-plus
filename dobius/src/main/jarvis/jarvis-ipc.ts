@@ -20,7 +20,8 @@ import {
 } from './adam-conversation'
 import { AdamHermesVoice } from './adam-hermes-voice'
 import { registerElevenLabsAgentHandlers } from './elevenlabs-agent-ipc'
-import { registerLiveVoiceIpc } from './live-voice-ipc'
+import { isLiveCallOpen, registerLiveVoiceIpc, sendLiveProgress } from './live-voice-ipc'
+import { startAdamIdleTidy } from './adam-idle-tidy'
 import { createRuntimeQuickHands, type QuickHandsRuntime } from './live-voice-quick-hands-runtime'
 import { adamConductor } from './adam-conductor'
 import { trackedQuickHands, type ConductorRuntime } from './adam-conductor-runtime'
@@ -87,6 +88,7 @@ function getAdamVoice(): AdamHermesVoice {
   if (!adamVoice) {
     adamVoice = new AdamHermesVoice({
       sessionFile: join(getUserDataRoot(), 'adam-voice-session.json'),
+      onProgress: sendLiveProgress,
       onCompacting: (compacting) => {
         adamCompacting = compacting
         const host = jarvisHostWindow
@@ -212,7 +214,13 @@ export function registerJarvisIpcHandlers(
     cancelAdam: cancelAdamTurn,
     lookingAt: () => lastLookingAt,
     thread: getAdamThread,
-    quickHands: runtime ? trackedQuickHands(createRuntimeQuickHands(() => runtime), adamConductor) : undefined
+    quickHands: runtime ? trackedQuickHands(createRuntimeQuickHands(() => runtime), adamConductor) : undefined,
+    conductorJobs: async () => (await adamConductor()?.jobs()) ?? []
+  })
+  startAdamIdleTidy({
+    busy: () => isAdamBusy() || isLiveCallOpen(),
+    contextPercent: () => adamVoice?.contextPercent ?? null,
+    tidy: () => adamVoice?.tidy() ?? Promise.resolve(false)
   })
   // Why once: the main window is recreated on macOS re-activation, and the
   // terminals ADAM is waiting on must stay tracked across that.

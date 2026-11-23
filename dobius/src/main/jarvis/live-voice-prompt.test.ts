@@ -47,7 +47,7 @@ describe('recentThreadSeed', () => {
 describe('buildLiveVoiceInstructions', () => {
   it('tells the voice model to delegate and stay short', () => {
     const text = buildLiveVoiceInstructions({ recentThread: [], lookingAt: null })
-    expect(text).toContain('Hand every real request to the app')
+    expect(text).toContain('Hand it off at once')
     expect(text).toContain('Keep every reply short')
     expect(text).not.toContain('<recent_thread>')
   })
