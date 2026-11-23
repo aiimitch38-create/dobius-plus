@@ -292,6 +292,16 @@ describe('delegation bridge', () => {
     expect(sentTypes()).not.toContain('session.commentary.append')
   })
 
+  it('a spoken "stop" with nothing pending here still tells main (a which-one may be open)', async () => {
+    const call = makeCall()
+    await connected(call)
+    peer().channel.emit({ type: 'session.output_transcript.delta', delta: 'Which one?' })
+    peer().channel.emit({ type: 'session.input_transcript.delta', delta: 'Stop.' })
+    await vi.advanceTimersByTimeAsync(800)
+    expect(api.liveDelegate).not.toHaveBeenCalled()
+    expect(api.liveCancel).toHaveBeenCalledTimes(1)
+  })
+
   it('a "stop" handed over as a request cancels instead of asking ADAM', async () => {
     const call = makeCall()
     await connected(call)

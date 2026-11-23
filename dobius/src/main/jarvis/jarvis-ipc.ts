@@ -23,6 +23,7 @@ import { AdamHermesVoice } from './adam-hermes-voice'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
 import { registerLiveVoiceIpc } from './live-voice-ipc'
+import { createRuntimeQuickHands, type QuickHandsRuntime } from './live-voice-quick-hands-runtime'
 
 export { forceEndLiveCallForTest, getActiveLiveSessionForTest } from './live-voice-ipc'
 import { migrateElevenLabsKeyOutOfSettings, resolveElevenLabsApiKey } from './elevenlabs-key-store'
@@ -198,7 +199,11 @@ function persistVoicePatch(store: Store, patch: Partial<VoiceSettings>): void {
   store.updateSettings({ voice: { ...current, ...patch } }, { notifyListeners: true })
 }
 
-export function registerJarvisIpcHandlers(store: Store, mainWindow: BrowserWindow): void {
+export function registerJarvisIpcHandlers(
+  store: Store,
+  mainWindow: BrowserWindow,
+  runtime?: QuickHandsRuntime
+): void {
   jarvisHostWindow = mainWindow
   // Why (#24): move a plaintext settings key into the protected store before
   // any handler reads it. Failure leaves it in settings, so it still works.
@@ -213,7 +218,8 @@ export function registerJarvisIpcHandlers(store: Store, mainWindow: BrowserWindo
     isAdamBusy,
     cancelAdam: cancelAdamTurn,
     lookingAt: () => lastLookingAt,
-    thread: getAdamThread
+    thread: getAdamThread,
+    quickHands: runtime ? createRuntimeQuickHands(() => runtime) : undefined
   })
   wireWakeWordObservation(store, service)
   restorePersistedMode(store, service)

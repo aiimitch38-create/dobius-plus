@@ -176,7 +176,7 @@ export function attachMainWindowServices(
   registerFloatingPhoneWindowHandlers()
   // Why here: Jarvis IPC needs the settings store, which is wired in this
   // main-window attach pass.
-  registerJarvisIpcHandlers(store, mainWindow)
+  registerJarvisIpcHandlers(store, mainWindow, runtime)
   registerFileDropRelay(mainWindow)
   // Why: setupAutoUpdater's first getAutoUpdater() call synchronously
   // require()s electron-updater in packaged builds — seconds on a cold
