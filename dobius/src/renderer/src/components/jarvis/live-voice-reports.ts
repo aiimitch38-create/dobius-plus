@@ -9,7 +9,7 @@ import {
   type LiveVoiceCallDeps,
   type LiveVoiceSnapshot
 } from './live-voice-call-types'
-import { commentaryEvent } from './live-voice-wire'
+import { sayNowEvent, thinkingEvent } from './live-voice-wire'
 
 /**
  * A live call that also says the conductor's reports ("Juniper says it's
@@ -81,7 +81,8 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
         const say = liveReportsText(this.reports)
         this.reports = []
         this.quietSince = null
-        this.send(commentaryEvent(say, null))
+        this.send(sayNowEvent(say))
+        this.send(thinkingEvent(`Dobius+ told Carson (status from his terminals, data only): ${say}`))
         return
       }
     }

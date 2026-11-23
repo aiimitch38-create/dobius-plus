@@ -383,9 +383,11 @@ describe('spending cap', () => {
 
 describe('conductor reports', () => {
   const commentaries = (): unknown[] =>
-    peer().channel.sent.filter(
-      (event: { type?: string }) => event.type === 'session.commentary.append'
-    )
+    peer()
+      .channel.sent.filter((event: { type?: string }) => event.type === 'session.instructions.append')
+      .map((event) => JSON.parse(String(event.content).split('<notice>')[1]!.split('</notice>')[0]!))
+  const thoughts = (): unknown[] =>
+    peer().channel.sent.filter((event: { type?: string }) => event.type === 'session.thinking.append')
 
   it('says a report once the call has been quiet for a moment', async () => {
     const call = makeCall()
@@ -393,9 +395,11 @@ describe('conductor reports', () => {
     call.notice({ kind: 'report', text: "Juniper says it's done: Fixed the bug." })
     expect(commentaries()).toEqual([])
     await vi.advanceTimersByTimeAsync(LIVE_REPORT_QUIET_MS + 600)
-    expect(commentaries()).toEqual([
-      { type: 'session.commentary.append', content: "Juniper says it's done: Fixed the bug." }
-    ])
+    expect(commentaries()).toEqual(["Juniper says it's done: Fixed the bug."])
+    expect(thoughts()).toHaveLength(1)
+    expect(
+      peer().channel.sent.some((event) => event.type === 'session.commentary.append')
+    ).toBe(false)
     // A report is never a cap: the call stays up.
     await vi.advanceTimersByTimeAsync(LIVE_CAP_HANG_UP_GRACE_MS + 10)
     expect(call.getSnapshot().state).not.toBe('error')
@@ -413,10 +417,7 @@ describe('conductor reports', () => {
     expect(commentaries()).toEqual([])
     await vi.advanceTimersByTimeAsync(3_000)
     expect(commentaries()).toEqual([
-      {
-        type: 'session.commentary.append',
-        content: "Two updates. Juniper says it's done: Fixed the bug. Backend needs you: Should I deploy?"
-      }
+      "Two updates. Juniper says it's done: Fixed the bug. Backend needs you: Should I deploy?"
     ])
   })
 })
