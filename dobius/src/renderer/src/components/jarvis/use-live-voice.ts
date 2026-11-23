@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LiveVoiceMicMode } from '../../../../shared/speech-types'
-import { LiveVoiceCall } from './live-voice-call'
+import type { LiveVoiceCall } from './live-voice-call'
+import { LiveVoiceReportingCall } from './live-voice-reports'
 import type {
   LiveVoiceCallDeps,
   LiveVoiceSnapshot,
@@ -96,7 +97,7 @@ export function useLiveVoice(
   micModeRef.current = micMode
 
   const getCall = useCallback((): LiveVoiceCall => {
-    callRef.current ??= new LiveVoiceCall(makeDepsRef.current(), setSnapshot)
+    callRef.current ??= new LiveVoiceReportingCall(makeDepsRef.current(), setSnapshot)
     return callRef.current
   }, [])
 

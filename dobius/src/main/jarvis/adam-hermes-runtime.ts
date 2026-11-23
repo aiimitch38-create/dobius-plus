@@ -138,6 +138,9 @@ export function adamHermesEnvironment(runtime: AdamHermesRuntime): NodeJS.Proces
     HERMES_HOME: runtime.profileHome,
     // Installation-bound commands own their import paths and dependency generations.
     ...(!runtime.args ? { HERMES_PYTHON_SRC_ROOT: runtime.root } : {}),
+    // Why: `dobius terminal send` marks ADAM's sends with it, so the conductor
+    // watches those terminals and tells Carson when they finish (adam-conductor.ts).
+    DOBIUS_CALLER: 'adam',
     HERMES_VOICE: '0',
     HERMES_VOICE_TTS: '0',
     PYTHONUNBUFFERED: '1',

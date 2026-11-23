@@ -4,11 +4,13 @@ import {
   LIVE_RECYCLE_FORCE_AFTER_MS,
   LIVE_RECYCLE_MIN_MS
 } from './live-voice-reconnect'
-import { LiveVoiceCall } from './live-voice-call'
+import type { LiveVoiceCall } from './live-voice-call'
+import { LiveVoiceReportingCall } from './live-voice-reports'
 import {
   LIVE_DROPPED_TEXT,
   LIVE_CAP_HANG_UP_GRACE_MS,
   LIVE_IDLE_HANGUP_MS,
+  LIVE_REPORT_QUIET_MS,
   type LiveVoiceApi,
   type LiveVoiceSnapshot
 } from './live-voice-call-types'
@@ -69,7 +71,8 @@ const OK: OpenAiLiveSessionResult = {
 }
 
 function makeCall(outputLevel?: () => number): LiveVoiceCall {
-  return new LiveVoiceCall(
+  // The app's call (the conductor's reports sit on top of the state machine).
+  return new LiveVoiceReportingCall(
     {
       api: api as unknown as LiveVoiceApi,
       levelOf: outputLevel
@@ -375,6 +378,46 @@ describe('spending cap', () => {
     await vi.advanceTimersByTimeAsync(LIVE_CAP_HANG_UP_GRACE_MS + 10)
     expect(call.getSnapshot()).toMatchObject({ state: 'error', errorText: 'cap reached' })
     expect(api.liveSessionReport).toHaveBeenCalledWith({ type: 'closed', callToken: 'call-1' })
+  })
+})
+
+describe('conductor reports', () => {
+  const commentaries = (): unknown[] =>
+    peer().channel.sent.filter(
+      (event: { type?: string }) => event.type === 'session.commentary.append'
+    )
+
+  it('says a report once the call has been quiet for a moment', async () => {
+    const call = makeCall()
+    await connected(call)
+    call.notice({ kind: 'report', text: "Juniper says it's done: Fixed the bug." })
+    expect(commentaries()).toEqual([])
+    await vi.advanceTimersByTimeAsync(LIVE_REPORT_QUIET_MS + 600)
+    expect(commentaries()).toEqual([
+      { type: 'session.commentary.append', content: "Juniper says it's done: Fixed the bug." }
+    ])
+    // A report is never a cap: the call stays up.
+    await vi.advanceTimersByTimeAsync(LIVE_CAP_HANG_UP_GRACE_MS + 10)
+    expect(call.getSnapshot().state).not.toBe('error')
+  })
+
+  it('holds reports while the voice speaks or Carson talks, then says them together', async () => {
+    const call = makeCall()
+    await connected(call)
+    peer().channel.emit({ type: 'session.output_transcript.delta', delta: 'Here is the plan' })
+    call.notice({ kind: 'report', text: "Juniper says it's done: Fixed the bug." })
+    peer().channel.emit({ type: 'session.input_transcript.delta', delta: 'and then' })
+    call.notice({ kind: 'report', text: 'Backend needs you: Should I deploy?' })
+    await vi.advanceTimersByTimeAsync(LIVE_REPORT_QUIET_MS - 500)
+    // Still inside the voice's answer plus the quiet window.
+    expect(commentaries()).toEqual([])
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(commentaries()).toEqual([
+      {
+        type: 'session.commentary.append',
+        content: "Two updates. Juniper says it's done: Fixed the bug. Backend needs you: Should I deploy?"
+      }
+    ])
   })
 })
 

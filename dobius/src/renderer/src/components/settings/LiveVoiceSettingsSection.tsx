@@ -69,6 +69,7 @@ export function LiveVoiceSettingsSection({
   const live = resolveLiveVoiceSettings(voiceSettings)
   const activeEngine = resolveActiveVoiceEngine(voiceSettings)
   const keySaved = voiceSettings.openAiApiKeyConfigured === true
+  const reportsOn = voiceSettings.adamReportsFinishedWork !== false
   // Why drafts: number and name fields are committed on blur so a half-typed
   // value ("1" on the way to "15") is never saved as the spending cap.
   const [voiceDraft, setVoiceDraft] = useState(live.voice)
@@ -272,6 +273,26 @@ export function LiveVoiceSettingsSection({
             {LIVE_VOICE_IDLE_TIMEOUT_MIN_SEC} to {LIVE_VOICE_IDLE_TIMEOUT_MAX_SEC} seconds).
           </p>
         </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="adam-reports-finished-work">ADAM reports finished work</Label>
+        <div className="flex items-center gap-2">
+          <button
+            id="adam-reports-finished-work"
+            type="button"
+            role="switch"
+            aria-checked={reportsOn}
+            onClick={() => onUpdateVoiceSettings({ adamReportsFinishedWork: !reportsOn })}
+            className={CHOICE_CLASS}
+          >
+            <span className="font-medium text-foreground">{reportsOn ? 'On' : 'Off'}</span>
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          When a terminal ADAM sent work to finishes or asks you something, he says so in his
+          thread, and out loud during a live call.
+        </p>
       </div>
     </div>
   )

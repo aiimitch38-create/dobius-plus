@@ -1,7 +1,11 @@
 import { ipcMain } from 'electron'
 import { join } from 'node:path'
 import { OPENAI_LIVE_CALL_READY, resolveLiveVoiceSettings } from '../../shared/live-voice-settings'
-import type { AdamLookingAt, OpenAiLiveSessionResult } from '../../shared/speech-types'
+import type {
+  AdamLookingAt,
+  LiveVoiceNotice,
+  OpenAiLiveSessionResult
+} from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getUserDataRoot } from '../storage/user-data-root'
 import type { AdamConversation } from './adam-conversation'
@@ -167,6 +171,20 @@ function setActiveLiveSession(owner: LiveSender, sessionId: string | null, callT
     }
   })
   activeLiveSession = { owner, ownerId: owner.id, sessionId, callToken, unwatch }
+}
+
+/**
+ * Hands a conductor report to the window that owns the live call, which says
+ * it once Carson and ADAM are both quiet. False when no call is open.
+ */
+export function sendLiveReport(text: string): boolean {
+  const owner = activeLiveSession?.owner
+  if (!owner || owner.isDestroyed()) {
+    return false
+  }
+  const notice: LiveVoiceNotice = { kind: 'report', text }
+  owner.send(LIVE_NOTICE_CHANNEL, notice)
+  return true
 }
 
 export function getActiveLiveSessionForTest(): {

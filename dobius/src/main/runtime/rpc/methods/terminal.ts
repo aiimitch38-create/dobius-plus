@@ -8,6 +8,7 @@ import {
 } from '../core'
 import { OptionalBoolean, OptionalFiniteNumber, OptionalString, requiredString } from '../schemas'
 import type { DriverState, DobiusRuntimeService } from '../../dobius-runtime'
+import { adamConductor } from '../../../jarvis/adam-conductor'
 import {
   TerminalStreamOpcode,
   decodeTerminalStreamJson,
@@ -462,6 +463,12 @@ async function handleTerminalSend(
   if (leaf?.ptyId && mobileFloorClientId) {
     await runtime.mobileTookFloor(leaf.ptyId, mobileFloorClientId)
   }
+  // Why: ADAM reports back when a terminal he sent work to finishes. The mark
+  // is self-declared by the caller (only ADAM's Hermes process sets it), so it
+  // only ever adds a terminal to his watch list; it grants nothing.
+  if (params.dispatchedBy === 'adam' && hasText && result.accepted && result.bytesWritten > 0) {
+    adamConductor()?.noteDispatch(params.terminal, params.text ?? '', 'cli')
+  }
   return { send: result }
 }
 
@@ -795,6 +802,8 @@ const TerminalSend = TerminalHandle.extend({
   enter: z.unknown().optional(),
   interrupt: z.unknown().optional(),
   requireAgentStatus: z.enum(['sendable']).optional(),
+  // Set by `dobius terminal send` when run by ADAM (DOBIUS_CALLER=adam): the conductor watches the terminal.
+  dispatchedBy: z.enum(['adam']).optional(),
   // Why: identifies the caller for the driver state machine. Optional for
   // backward compatibility with older mobile clients (server falls back to
   // the most recent mobile actor when absent). New mobile builds populate

@@ -112,6 +112,11 @@ export type VoiceSettings = {
   liveVoiceDailyCapUsd?: number
   /** Seconds of silence before an OpenAI Live session drops to standby. */
   liveVoiceIdleTimeoutSec?: number
+  /**
+   * ADAM tells Carson when a terminal he sent work to finishes or needs him
+   * (thread row, and out loud on a live call). On unless explicitly false.
+   */
+  adamReportsFinishedWork?: boolean
 }
 
 export type LiveVoiceEngine = 'hermes' | 'elevenlabs' | 'openai-live'
@@ -158,7 +163,8 @@ export type LiveDelegateResult =
   | { ok: false; error: string }
 
 /** Main tells the window owning a live call about the spending cap. */
-export type LiveVoiceNotice = { kind: 'cap-warning' | 'cap-reached'; text: string }
+/** `report`: the conductor's "X says it's done" line, said when Carson and ADAM are quiet. */
+export type LiveVoiceNotice = { kind: 'cap-warning' | 'cap-reached' | 'report'; text: string }
 
 /** Session events the window reports to main's spend meter. */
 export type LiveVoiceSessionReport = {
