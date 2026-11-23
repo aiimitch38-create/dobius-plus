@@ -16898,6 +16898,12 @@ export class DobiusRuntimeService {
     const leafId = randomUUID()
     const preAllocatedHandle = this.createPreAllocatedTerminalHandle()
     const paneKey = makePaneKey(parentTabId, leafId)
+    // Why: a split is the same agent's tab; inherit its name (synced tab, then
+    // the parent PTY) so a split of this split keeps it too.
+    const agentName =
+      this.tabs.get(parentTabId)?.agentName?.trim() ||
+      pty.agentName ||
+      this.resolveSpawnAgentName(parentTabId, opts.env)
     const result = await this.ptyController.spawn({
       cols: 120,
       rows: 40,
@@ -16906,10 +16912,7 @@ export class DobiusRuntimeService {
       commandDelivery: 'provider',
       env: this.buildTerminalWorkspaceEnv(
         workspace,
-        {
-          ...opts.env,
-          ...splitAgentNameEnv(this.tabs.get(parentTabId)?.agentName ?? pty.agentName)
-        },
+        { ...opts.env, DOBIUS_AGENT_NAME: agentName },
         paneKey,
         parentTabId
       ),
@@ -16924,6 +16927,7 @@ export class DobiusRuntimeService {
     if (createdPty) {
       createdPty.tabId = parentTabId
       createdPty.paneKey = paneKey
+      createdPty.agentName = agentName
     }
 
     try {
@@ -24457,11 +24461,6 @@ function getLatestPtyTitle(pty: RuntimePtyWorktreeRecord): string | null {
     { title: pty.title, updatedAt: pty.titleUpdatedAt },
     { title: pty.lastOscTitle, updatedAt: pty.lastOscTitleAt }
   )
-}
-
-function splitAgentNameEnv(agentName: string | null | undefined): Record<string, string> {
-  const name = agentName?.trim()
-  return name ? { DOBIUS_AGENT_NAME: name } : {}
 }
 
 // Why: omitted (not null) for unnamed tabs so the summary stays byte-identical

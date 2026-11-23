@@ -7487,6 +7487,56 @@ describe('DobiusRuntimeService', () => {
     expect(byPty('pty-preset')).toMatchObject({ name: 'Cedar' })
   })
 
+  it('headless splits inherit the parent name, down a chain of splits, and list it', async () => {
+    const spawn = vi
+      .fn()
+      .mockResolvedValueOnce({ id: 'pty-root' })
+      .mockResolvedValueOnce({ id: 'pty-split-1' })
+      .mockResolvedValueOnce({ id: 'pty-split-2' })
+    const runtime = new DobiusRuntimeService(store)
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    runtime.setNotifier({
+      worktreesChanged: vi.fn(),
+      reposChanged: vi.fn(),
+      activateWorktree: vi.fn(),
+      createTerminal: vi.fn(),
+      revealTerminalSession: vi.fn().mockResolvedValue(undefined),
+      splitTerminal: vi.fn(),
+      renameTerminal: vi.fn(),
+      focusTerminal: vi.fn(),
+      closeTerminal: vi.fn(),
+      sleepWorktree: vi.fn(),
+      terminalFitOverrideChanged: vi.fn(),
+      terminalDriverChanged: vi.fn()
+    })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
+    const envOf = (call: number): Record<string, string> =>
+      (spawn.mock.calls[call]![0] as { env: Record<string, string> }).env
+
+    const { handle } = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
+      presentation: 'background'
+    })
+    const first = await runtime.splitTerminal(handle, { direction: 'vertical' })
+    await runtime.splitTerminal(first.handle, { direction: 'vertical' })
+
+    const rootName = envOf(0).DOBIUS_AGENT_NAME
+    expect(rootName).toMatch(/^[A-Z][A-Za-z]+$/)
+    expect(envOf(1).DOBIUS_AGENT_NAME).toBe(rootName)
+    expect(envOf(2).DOBIUS_AGENT_NAME).toBe(rootName)
+    const { terminals } = await runtime.listTerminals(`path:${TEST_WORKTREE_PATH}`)
+    for (const ptyId of ['pty-root', 'pty-split-1', 'pty-split-2']) {
+      expect(terminals.find((terminal) => terminal.ptyId === ptyId)).toMatchObject({
+        name: rootName
+      })
+    }
+  })
+
   it('creates visible terminal sessions without asking the renderer to focus a tab', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-bg' })
     const createTerminal = vi.fn()

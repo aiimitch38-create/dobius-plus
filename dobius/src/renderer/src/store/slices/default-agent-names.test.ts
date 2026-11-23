@@ -60,6 +60,43 @@ describe('nameDefaultTerminalTabs', () => {
   })
 })
 
+describe('interrupted migration (card saved, tab name not yet)', () => {
+  it('adopts the tab own card name instead of seeding a different one (Hugo stays Hugo)', () => {
+    const legacyTab = tab({ id: 'tab-hugo', defaultTitle: 'Terminal 3' })
+    const boards = {
+      wt: {
+        cards: [
+          { id: 'c1', kind: 'console', tabId: 'tab-hugo', agentKind: 'claude', title: 'Hugo' },
+          { id: 'c2', kind: 'console', tabId: 'tab-other', agentKind: 'claude', title: 'Felix' }
+        ]
+      }
+    } as unknown as Record<string, BoardState>
+    const named = nameDefaultTerminalTabs(
+      { wt: [legacyTab, tab({ id: 'tab-other', defaultTitle: 'Terminal 4' })] },
+      boards
+    )
+    expect(named.wt[0].agentName).toBe('Hugo')
+    expect(named.wt[1].agentName).toBe('Felix')
+    expect(defaultConsoleTitleRenames(boards, named)).toEqual([])
+  })
+
+  it('still seeds a name when the own card keeps its spawn default', () => {
+    const boards = {
+      wt: {
+        cards: [
+          { id: 'c1', kind: 'console', tabId: 'tab-a', agentKind: 'claude', title: 'Claude 5' }
+        ]
+      }
+    } as unknown as Record<string, BoardState>
+    const named = nameDefaultTerminalTabs({ wt: [tab({ id: 'tab-a' })] }, boards)
+    expect(named.wt[0].agentName).toBeTruthy()
+    expect(named.wt[0].agentName).not.toBe('Claude 5')
+    expect(defaultConsoleTitleRenames(boards, named)).toEqual([
+      { worktreeId: 'wt', cardId: 'c1', title: named.wt[0].agentName }
+    ])
+  })
+})
+
 describe('defaultConsoleTitleRenames', () => {
   it('renames default console titles to the tab name, never typed ones', () => {
     const boards = {

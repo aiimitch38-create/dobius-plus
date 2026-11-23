@@ -1,4 +1,5 @@
 import { pickAgentName } from '../../../../shared/agent-names'
+import { isValidAgentDisplayName } from '../../../../shared/agent-identity-names'
 import { TUI_AGENT_DISPLAY_NAMES } from '../../../../shared/tui-agent-display-names'
 import type { TerminalTab, TuiAgent } from '../../../../shared/types'
 import type { AppState } from '../types'
@@ -69,10 +70,20 @@ export function nameDefaultTerminalTabs(
       }
     }
   }
+  const cardTitles: { tabId: string; title: string }[] = []
+  const ownCardName = new Map<string, string>()
   for (const board of Object.values(boardsByWorktree ?? {})) {
     for (const card of board?.cards ?? []) {
-      if (card.kind === 'console' && card.title?.trim()) {
-        used.push(card.title)
+      const title = card.kind === 'console' ? card.title?.trim() : undefined
+      if (card.kind !== 'console' || !title) {
+        continue
+      }
+      cardTitles.push({ tabId: card.tabId, title })
+      // Why: board persistence can save a renamed card ("Hugo") before the
+      // workspace session saves the tab's new name; on reload the card wins,
+      // or the tab would be seeded a different name and the two split.
+      if (!isAutomaticConsoleTitle(title, card.agentKind) && isValidAgentDisplayName(title)) {
+        ownCardName.set(card.tabId, title)
       }
     }
   }
@@ -83,7 +94,12 @@ export function nameDefaultTerminalTabs(
       if (!isAutomaticTabName(tab)) {
         return tab
       }
-      const agentName = pickAgentName(used, seededRandom(tab.id))
+      // Why: a tab's own card title is not a clash with that tab.
+      const pool = [
+        ...used,
+        ...cardTitles.filter((card) => card.tabId !== tab.id).map((card) => card.title)
+      ]
+      const agentName = ownCardName.get(tab.id) ?? pickAgentName(pool, seededRandom(tab.id))
       used.push(agentName)
       changed = true
       return { ...tab, agentName }
@@ -110,6 +126,7 @@ export function defaultConsoleTitleRenames(
   const renames: { worktreeId: string; cardId: string; title: string }[] = []
   for (const [worktreeId, board] of Object.entries(boardsByWorktree)) {
     for (const card of board?.cards ?? []) {
+      // ponytail: cards have no manual-title provenance; a typed "Claude 5" is renamed too.
       if (card.kind !== 'console' || !isAutomaticConsoleTitle(card.title, card.agentKind)) {
         continue
       }
