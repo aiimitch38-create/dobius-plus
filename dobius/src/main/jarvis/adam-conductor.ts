@@ -12,7 +12,6 @@ import type {
   ConductorDeps,
   ConductorNotice,
   ConductorNoticeKind,
-  ConductorProgress,
   ConductorRead,
   DispatchSource,
   Tracked
@@ -21,8 +20,12 @@ import type {
 import {
   doneNotice,
   freshReply,
+  isNewWork,
+  replyKey,
+  safeHandle,
   lastSentenceAsks,
   needsYouNotice,
+  nextProgressEvent,
   safeLabel,
   summarizeUpdates,
   type ConductorUpdate
@@ -36,28 +39,8 @@ export const CONDUCTOR_EXPIRE_MS = 6 * 60 * 60_000
 export const CONDUCTOR_MAX_TRACKED = 30
 // Why throttled: a reply check reads the agent's transcript file.
 export const CONDUCTOR_REPLY_CHECK_MS = 6_000
-// Why: a progress line every 5 minutes per job; "started" only when it comes
-// well after the send, so ADAM does not echo his own dispatch.
-export const CONDUCTOR_PROGRESS_EVERY_MS = 5 * 60_000
-export const CONDUCTOR_STARTED_AFTER_MS = 20_000
 const CONTEXT_MAX_LINES = 6
 const UNSEEN_MAX = 50
-
-/** A handle as ADAM's context may carry it (Dobius+ makes them; checked anyway). */
-function safeHandle(handle: string): string {
-  return handle.replace(/[^A-Za-z0-9_:.-]/g, '').slice(0, 80) || 'unknown'
-}
-
-/** A reply stamped after ADAM's send is new work, whatever the baseline read saw. */
-function isNewWork(read: ConductorRead | null, sentAt: number): boolean {
-  const reply = read?.reply
-  return Boolean(reply && reply.at !== null && reply.at >= sentAt && reply.text.trim())
-}
-
-/** Identifies one reply, so "a new reply since ADAM's message" can be told apart. */
-function replyKey(read: ConductorRead | null): string | null {
-  return read?.reply ? `${read.reply.at ?? ''}|${read.reply.text.slice(0, 300)}` : null
-}
 
 /**
  * Watches the terminals ADAM sent work to. Untracks a terminal once it is
@@ -209,20 +192,29 @@ export class AdamConductor {
     }
   }
 
-  /** A reply newer than the one there when ADAM sent the work: the agent did work. */
-  private async newReplySinceDispatch(entry: Tracked, now: number): Promise<boolean> {
+  /** The agent's latest reply, read at most every REPLY_CHECK (undefined = not this time). */
+  private async readSometimes(
+    entry: Tracked,
+    now: number
+  ): Promise<ConductorRead | null | undefined> {
     if (now - entry.replyCheckedAt < CONDUCTOR_REPLY_CHECK_MS) {
-      return false
+      return undefined
     }
     entry.replyCheckedAt = now
-    const read = await this.deps.read(entry.handle).catch(() => null)
-    if (isNewWork(read, entry.sentAt)) {
-      return true
-    }
+    return this.deps.read(entry.handle).catch(() => null)
+  }
+
+  /** A reply newer than the one there when ADAM sent the work: the agent did work. */
+  private async newReplySinceDispatch(entry: Tracked, now: number): Promise<boolean> {
+    const read = await this.readSometimes(entry, now)
     // Why a baseline only for untimed replies: a timed one is judged by its time,
     // however late the baseline read came back.
     const key = read?.reply?.at === null ? replyKey(read) : null
-    return key !== null && entry.baselineReply !== undefined && key !== entry.baselineReply
+    return (
+      read !== undefined &&
+      (isNewWork(read, entry.sentAt) ||
+        (key !== null && entry.baselineReply !== undefined && key !== entry.baselineReply))
+    )
   }
 
   private async checkOne(entry: Tracked): Promise<void> {
@@ -251,11 +243,15 @@ export class AdamConductor {
     }
     entry.sawWorking = true
     const kind: ConductorNoticeKind | null =
-      status === 'permission'
-        ? 'needs-you'
-        : status === 'idle' || !isRunningAgent
-          ? 'done'
-          : null
+      status === 'permission' ? 'needs-you' : status === 'idle' || !isRunningAgent ? 'done' : null
+    // Why: after "needs you", the agent may answer and finish between two
+    // polls, never seen working; a reply stamped after the ask shows it did.
+    const askedAt = entry.askedAt
+    if (kind === 'done' && askedAt !== null) {
+      const read = await this.readSometimes(entry, now)
+      entry.askedAt =
+        read && entry.askedAt === askedAt && isNewWork(read, askedAt) ? null : entry.askedAt
+    }
     // Why askedAt blocks both: once Carson was asked, nothing more is said
     // until he answers and the agent works again.
     if (!kind || entry.askedAt !== null) {
@@ -277,15 +273,7 @@ export class AdamConductor {
 
   /** "Juniper started working." once, then "still working, N minutes in." every 5 minutes. */
   private async maybeProgress(entry: Tracked, now: number): Promise<void> {
-    let event: ConductorProgress['event'] | null = null
-    if (entry.workingSince === null) {
-      entry.workingSince = now
-      entry.progressAt = now
-      event = now - entry.sentAt > CONDUCTOR_STARTED_AFTER_MS ? 'started' : null
-    } else if (now - entry.progressAt >= CONDUCTOR_PROGRESS_EVERY_MS) {
-      entry.progressAt = now
-      event = 'progress'
-    }
+    const event = nextProgressEvent(entry, now)
     if (!event || !this.deps.progress || !this.progressOn()) {
       return
     }
@@ -294,7 +282,7 @@ export class AdamConductor {
       return
     }
     const name = speakableName(identity?.agentName, identity?.project)
-    const minutes = Math.max(1, Math.round((now - entry.workingSince) / 60_000))
+    const minutes = Math.max(1, Math.round((now - (entry.workingSince ?? now)) / 60_000))
     this.deps.progress({
       event,
       handle: entry.handle,
@@ -314,7 +302,9 @@ export class AdamConductor {
     // Why status last, after the slow reads: work that resumed during them must
     // cancel the notice. Also rechecked: ADAM may have sent new work (this entry
     // was replaced), or reports were turned off.
-    const after = this.isCurrent(entry) ? await this.deps.status(entry.handle).catch(() => null) : null
+    const after = this.isCurrent(entry)
+      ? await this.deps.status(entry.handle).catch(() => null)
+      : null
     const stillSettled =
       after !== null &&
       (settled === 'needs-you'

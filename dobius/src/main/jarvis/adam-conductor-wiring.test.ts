@@ -53,7 +53,8 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.useRealTimers()
   setAdamConductor(null)
-  await rm(directory, { recursive: true, force: true })
+  // Why retries: the thread store may still be finishing a write when a test ends.
+  await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 })
 })
 
 describe('startAdamConductor', () => {

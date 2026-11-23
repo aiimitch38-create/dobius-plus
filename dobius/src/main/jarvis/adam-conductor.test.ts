@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   AdamConductor,
   CONDUCTOR_EXPIRE_MS,
-  CONDUCTOR_PROGRESS_EVERY_MS,
   CONDUCTOR_REPLY_CHECK_MS,
   CONDUCTOR_SETTLE_MS,
   setAdamConductor
 } from './adam-conductor'
 import {
+  CONDUCTOR_PROGRESS_EVERY_MS,
   doneNotice,
   firstSentence,
   needsYouNotice,
@@ -155,7 +155,10 @@ describe('AdamConductor', () => {
     h.conductor.noteDispatch('h1', 'deploy it', 'cli')
     await h.advance(1_000)
     h.set('h1', 'permission')
-    h.reads.set('h1', { reply: null, screen: ['Bash: rm -rf dist', 'Do you want to proceed?', '❯ 1. Yes'] })
+    h.reads.set('h1', {
+      reply: null,
+      screen: ['Bash: rm -rf dist', 'Do you want to proceed?', '❯ 1. Yes']
+    })
     await h.advance(1_000)
     await h.advance(CONDUCTOR_SETTLE_MS)
     await h.advance(CONDUCTOR_SETTLE_MS)
@@ -317,7 +320,7 @@ describe('AdamConductor: review fixes', () => {
     expect(h.notices.map((n) => n.kind)).toEqual(['needs-you'])
   })
 
-  it('does not hand an unsubmitted follow-up the last task\'s work', async () => {
+  it("does not hand an unsubmitted follow-up the last task's work", async () => {
     const h = harness()
     h.set('h1', 'working')
     h.conductor.noteDispatch('h1', 'first task', 'cli')
@@ -423,6 +426,43 @@ describe('AdamConductor: review round 2', () => {
     expect(h.notices.map((n) => n.display)).toEqual(["Juniper says it's done: Fixed it fast."])
   })
 
+  it('reports the finish after "needs you" when the agent resumed and ended between polls', async () => {
+    const h = harness()
+    h.set('h1', 'working')
+    h.conductor.noteDispatch('h1', 'deploy', 'cli')
+    await h.advance(1_000)
+    h.set('h1', 'permission')
+    await h.advance(1_000)
+    await h.advance(CONDUCTOR_SETTLE_MS)
+    expect(h.notices.map((n) => n.kind)).toEqual(['needs-you'])
+    // Carson answers; the agent works and finishes between two polls (never seen working).
+    h.clock.now += 500
+    h.reads.set('h1', { reply: { text: 'Deployed.', at: h.clock.now }, screen: [] })
+    h.set('h1', 'idle')
+    await h.advance(CONDUCTOR_REPLY_CHECK_MS)
+    await h.advance(CONDUCTOR_SETTLE_MS)
+    expect(h.notices.map((n) => [n.kind, n.display])).toEqual([
+      ['needs-you', expect.any(String)],
+      ['done', "Juniper says it's done: Deployed."]
+    ])
+    expect(h.conductor.isTracking('h1')).toBe(false)
+  })
+
+  it('stays quiet after "needs you" while no newer reply shows', async () => {
+    const h = harness()
+    h.set('h1', 'working')
+    h.conductor.noteDispatch('h1', 'plan', 'cli')
+    await h.advance(1_000)
+    h.set('h1', 'idle')
+    h.reads.set('h1', { reply: { text: 'Which option?', at: h.clock.now }, screen: [] })
+    await h.advance(1_000)
+    await h.advance(CONDUCTOR_SETTLE_MS)
+    for (let i = 0; i < 5; i += 1) {
+      await h.advance(CONDUCTOR_REPLY_CHECK_MS)
+    }
+    expect(h.notices.map((n) => n.kind)).toEqual(['needs-you'])
+  })
+
   it('drops a finish when work resumes while the slow reads are in flight', async () => {
     const h = harness()
     h.set('h1', 'working')
@@ -490,7 +530,12 @@ describe('AdamConductor: progress lines', () => {
     await h.advance(CONDUCTOR_PROGRESS_EVERY_MS - 10_000)
     expect(h.progress).toHaveLength(1)
     await h.advance(10_000)
-    expect(h.progress.at(-1)).toEqual({ event: 'progress', handle: 'h1', name: 'Juniper', minutes: 5 })
+    expect(h.progress.at(-1)).toEqual({
+      event: 'progress',
+      handle: 'h1',
+      name: 'Juniper',
+      minutes: 5
+    })
     await h.advance(CONDUCTOR_PROGRESS_EVERY_MS)
     expect(h.progress.map((p) => p.minutes)).toEqual([undefined, 5, 10])
   })
@@ -589,7 +634,10 @@ describe('dispatch tracking from quick hands', () => {
 
   it('tracks a terminal ADAM typed into, and not one that refused', async () => {
     const h = harness()
-    const hands = trackedQuickHands(base(async () => undefined), () => h.conductor)
+    const hands = trackedQuickHands(
+      base(async () => undefined),
+      () => h.conductor
+    )
     await hands.typeInto('h1', 'fix the bug', () => true)
     expect(h.conductor.isTracking('h1')).toBe(true)
 

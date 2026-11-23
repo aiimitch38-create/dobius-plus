@@ -1,6 +1,11 @@
 // The words of a conductor notice: plain, short, and never a secret.
 import { lastOutputLine, looksSecret } from './live-voice-terminal-text'
-import type { ConductorRead, ConductorStatus } from './adam-conductor-types'
+import type {
+  ConductorProgress,
+  ConductorRead,
+  ConductorStatus,
+  Tracked
+} from './adam-conductor-types'
 
 export const CONDUCTOR_NOTICE_MAX_CHARS = 200
 const LABEL_MAX_CHARS = 40
@@ -61,7 +66,10 @@ export function doneNotice(label: string, read: ConductorRead | null, sentAt: nu
   const fresh = freshReply(read, sentAt) ?? ''
   const sentence = fresh ? firstSentence(fresh) : ''
   if (!sentence) {
-    return clip(`${label} looks finished, but I could not read what it said.`, CONDUCTOR_NOTICE_MAX_CHARS)
+    return clip(
+      `${label} looks finished, but I could not read what it said.`,
+      CONDUCTOR_NOTICE_MAX_CHARS
+    )
   }
   // Why the whole reply: a key past the first sentence would still be shown in part elsewhere.
   if (looksSecret(fresh) || looksSecret(sentence)) {
@@ -122,5 +130,43 @@ export function summarizeUpdates(updates: ConductorUpdate[], max: number): strin
   const names = [...new Set(rest.map((update) => update.label))]
   const shown = names.slice(0, 8).join(', ')
   const others = names.length > 8 ? ', and others' : ''
-  return [...kept.map((update) => update.text), `And ${rest.length} more updates: ${shown}${others}.`]
+  return [
+    ...kept.map((update) => update.text),
+    `And ${rest.length} more updates: ${shown}${others}.`
+  ]
+}
+
+/** A handle as ADAM's context may carry it (Dobius+ makes them; checked anyway). */
+export function safeHandle(handle: string): string {
+  return handle.replace(/[^A-Za-z0-9_:.-]/g, '').slice(0, 80) || 'unknown'
+}
+
+/** A reply stamped after ADAM's send is new work, whatever the baseline read saw. */
+export function isNewWork(read: ConductorRead | null, sentAt: number): boolean {
+  const reply = read?.reply
+  return Boolean(reply && reply.at !== null && reply.at >= sentAt && reply.text.trim())
+}
+
+/** Identifies one reply, so "a new reply since ADAM's message" can be told apart. */
+export function replyKey(read: ConductorRead | null): string | null {
+  return read?.reply ? `${read.reply.at ?? ''}|${read.reply.text.slice(0, 300)}` : null
+}
+
+// Why: a progress line every 5 minutes per job; "started" only when it comes
+// well after the send, so ADAM does not echo his own dispatch.
+export const CONDUCTOR_PROGRESS_EVERY_MS = 5 * 60_000
+export const CONDUCTOR_STARTED_AFTER_MS = 20_000
+
+/** Moves the job's progress clock; the line due now, if any. */
+export function nextProgressEvent(entry: Tracked, now: number): ConductorProgress['event'] | null {
+  if (entry.workingSince === null) {
+    entry.workingSince = now
+    entry.progressAt = now
+    return now - entry.sentAt > CONDUCTOR_STARTED_AFTER_MS ? 'started' : null
+  }
+  if (now - entry.progressAt >= CONDUCTOR_PROGRESS_EVERY_MS) {
+    entry.progressAt = now
+    return 'progress'
+  }
+  return null
 }
