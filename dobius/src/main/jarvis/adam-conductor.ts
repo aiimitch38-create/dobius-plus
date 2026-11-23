@@ -48,6 +48,12 @@ function safeHandle(handle: string): string {
   return handle.replace(/[^A-Za-z0-9_:.-]/g, '').slice(0, 80) || 'unknown'
 }
 
+/** A reply stamped after ADAM's send is new work, whatever the baseline read saw. */
+function isNewWork(read: ConductorRead | null, sentAt: number): boolean {
+  const reply = read?.reply
+  return Boolean(reply && reply.at !== null && reply.at >= sentAt && reply.text.trim())
+}
+
 /** Identifies one reply, so "a new reply since ADAM's message" can be told apart. */
 function replyKey(read: ConductorRead | null): string | null {
   return read?.reply ? `${read.reply.at ?? ''}|${read.reply.text.slice(0, 300)}` : null
@@ -113,7 +119,7 @@ export class AdamConductor {
     // as a reply newer than this one.
     void this.deps
       .read(handle)
-      .then((read) => replyKey(read))
+      .then((read) => (isNewWork(read, entry.sentAt) ? null : replyKey(read)))
       .catch(() => null)
       .then((key) => {
         entry.baselineReply = key
@@ -205,12 +211,18 @@ export class AdamConductor {
 
   /** A reply newer than the one there when ADAM sent the work: the agent did work. */
   private async newReplySinceDispatch(entry: Tracked, now: number): Promise<boolean> {
-    if (entry.baselineReply === undefined || now - entry.replyCheckedAt < CONDUCTOR_REPLY_CHECK_MS) {
+    if (now - entry.replyCheckedAt < CONDUCTOR_REPLY_CHECK_MS) {
       return false
     }
     entry.replyCheckedAt = now
-    const key = replyKey(await this.deps.read(entry.handle).catch(() => null))
-    return key !== null && key !== entry.baselineReply
+    const read = await this.deps.read(entry.handle).catch(() => null)
+    if (isNewWork(read, entry.sentAt)) {
+      return true
+    }
+    // Why a baseline only for untimed replies: a timed one is judged by its time,
+    // however late the baseline read came back.
+    const key = read?.reply?.at === null ? replyKey(read) : null
+    return key !== null && entry.baselineReply !== undefined && key !== entry.baselineReply
   }
 
   private async checkOne(entry: Tracked): Promise<void> {
@@ -295,13 +307,14 @@ export class AdamConductor {
     // Why claimed before the awaits: a poke during the reads must not announce twice.
     entry.askedAt = this.now()
     entry.settling = null
-    const [identity, read, after] = await Promise.all([
+    const [identity, read] = await Promise.all([
       this.deps.identify(entry.handle).catch(() => null),
-      this.deps.read(entry.handle).catch(() => null),
-      this.deps.status(entry.handle).catch(() => null)
+      this.deps.read(entry.handle).catch(() => null)
     ])
-    // Why rechecked: during the reads ADAM may have sent new work (this entry
-    // was replaced), the agent may have started again, or reports were turned off.
+    // Why status last, after the slow reads: work that resumed during them must
+    // cancel the notice. Also rechecked: ADAM may have sent new work (this entry
+    // was replaced), or reports were turned off.
+    const after = this.isCurrent(entry) ? await this.deps.status(entry.handle).catch(() => null) : null
     const stillSettled =
       after !== null &&
       (settled === 'needs-you'

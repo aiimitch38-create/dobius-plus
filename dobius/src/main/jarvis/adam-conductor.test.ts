@@ -37,6 +37,8 @@ type Harness = {
   cleared: ReturnType<typeof vi.fn>
   progress: ConductorProgress[]
   progressOn: { on: boolean }
+  /** When set, every read waits for it: a slow transcript read. */
+  slowRead: { until: Promise<void> | null }
 }
 
 const named = (agentName: string | null, title: string | null = null): ConductorIdentity => ({
@@ -58,6 +60,7 @@ function harness(): Harness {
   const cleared = vi.fn()
   const progress: ConductorProgress[] = []
   const progressOn = { on: true }
+  const slowRead: { until: Promise<void> | null } = { until: null }
   const conductor = new AdamConductor({
     status: async (handle) => {
       const status = statuses.get(handle)
@@ -66,7 +69,10 @@ function harness(): Harness {
       }
       return status
     },
-    read: async (handle) => reads.get(handle) ?? { reply: null, screen: [] },
+    read: async (handle) => {
+      await slowRead.until
+      return reads.get(handle) ?? { reply: null, screen: [] }
+    },
     identify: (handle) => ids.of(handle),
     report: (notice) => notices.push(notice),
     progress: (update) => progress.push(update),
@@ -95,7 +101,8 @@ function harness(): Harness {
     ids,
     cleared,
     progress,
-    progressOn
+    progressOn,
+    slowRead
   }
 }
 
@@ -400,6 +407,42 @@ describe('AdamConductor: review fixes', () => {
     expect(h.conductor.takeContext()).toEqual([])
     expect(h.conductor.size).toBe(0)
     expect(h.cleared).toHaveBeenCalled()
+  })
+})
+
+describe('AdamConductor: review round 2', () => {
+  it('reports a fast finish even when the baseline read already sees the new reply', async () => {
+    const h = harness()
+    h.set('h1', 'idle')
+    // The agent finished before the baseline read resolved: its reply is stamped after the send.
+    h.reads.set('h1', { reply: { text: 'Fixed it fast.', at: h.clock.now + 100 }, screen: [] })
+    h.conductor.noteDispatch('h1', 'quick fix', 'cli')
+    await h.conductor.check()
+    await h.advance(CONDUCTOR_REPLY_CHECK_MS)
+    await h.advance(CONDUCTOR_SETTLE_MS)
+    expect(h.notices.map((n) => n.display)).toEqual(["Juniper says it's done: Fixed it fast."])
+  })
+
+  it('drops a finish when work resumes while the slow reads are in flight', async () => {
+    const h = harness()
+    h.set('h1', 'working')
+    h.conductor.noteDispatch('h1', 'task', 'cli')
+    await h.advance(1_000)
+    h.set('h1', 'idle')
+    await h.advance(1_000)
+    h.clock.now += CONDUCTOR_SETTLE_MS
+    let release: () => void = () => undefined
+    h.slowRead.until = new Promise((resolve) => (release = resolve))
+    const pending = h.conductor.check()
+    await Promise.resolve()
+    await Promise.resolve()
+    // Status would still read idle here; the agent starts again before the reads finish.
+    h.set('h1', 'working')
+    h.slowRead.until = null
+    release()
+    await pending
+    expect(h.notices).toEqual([])
+    expect(h.conductor.isTracking('h1')).toBe(true)
   })
 })
 

@@ -62,16 +62,45 @@ function capitalized(sentence: string): string {
   return sentence.charAt(0).toUpperCase() + sentence.slice(1)
 }
 
-/** "A", "A and B", "A, B and C"; past six: "A, B, C, D and 3 more <rest verb>: E, F, G". */
-function namesThen(names: string[], verb: string, plural: string): string {
-  if (names.length > MAX_NAMED) {
+// Why a budget: the live call cuts a message at 1,000 characters, so a long
+// batch is built to fit (names stop, "and N more" ends it) instead of being cut.
+export const CONDUCTOR_SPEECH_MAX_CHARS = 900
+const SUFFIX_ROOM = 50
+
+function listOf(names: string[]): string {
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+}
+
+/**
+ * "A", "A and B", "A, B and C"; past six: "A, B, C, D <verb>, and 3 more <verb>: E, F, G".
+ * Never longer than `budget`: names that do not fit become "and N more".
+ */
+function namesThen(names: string[], verb: string, plural: string, budget: number): string {
+  if (names.length <= MAX_NAMED) {
+    const line = `${listOf(names)} ${names.length === 1 ? verb : plural}.`
+    if (line.length <= budget) {
+      return line
+    }
+  } else {
     const head = names.slice(0, MAX_NAMED - 2)
     const rest = names.slice(MAX_NAMED - 2)
-    return `${head.join(', ')} ${plural}, and ${rest.length} more ${plural}: ${rest.join(', ')}.`
+    const line = `${head.join(', ')} ${plural}, and ${rest.length} more ${plural}: ${rest.join(', ')}.`
+    if (line.length <= budget) {
+      return line
+    }
   }
-  const list =
-    names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
-  return `${list} ${names.length === 1 ? verb : plural}.`
+  const shown: string[] = []
+  for (const name of names) {
+    const next = [...shown, name]
+    const line = `${next.join(', ')} ${plural}, and ${names.length - next.length} more.`
+    if (next.length >= names.length || next.length > MAX_NAMED || line.length > budget) {
+      break
+    }
+    shown.push(name)
+  }
+  return shown.length === 0
+    ? `${names.length} terminals ${plural}.`
+    : `${shown.join(', ')} ${plural}, and ${names.length - shown.length} more.`
 }
 
 function minutesText(minutes: number): string {
@@ -95,20 +124,22 @@ export function conductorSentences(updates: ConductorSpoken[]): string[] {
   const done = of('done')
   const unclear = of('unclear')
   const needs = of('needs-you')
+  const groups = [done, unclear, needs].filter((names) => names.length > 0).length || 2
+  const budget = Math.floor(CONDUCTOR_SPEECH_MAX_CHARS / groups) - SUFFIX_ROOM
   if (done.length > 0) {
-    lines.push(namesThen(done, 'finished', 'finished'))
+    lines.push(namesThen(done, 'finished', 'finished', budget))
   }
   if (unclear.length > 0) {
     const one = unclear.length === 1
     lines.push(
-      namesThen(unclear, 'finished', 'finished').replace(
+      namesThen(unclear, 'finished', 'finished', budget).replace(
         /\.$/,
         `, but I could not tell if ${one ? 'it' : 'they'} worked.`
       )
     )
   }
   if (needs.length > 0) {
-    lines.push(namesThen(needs, 'needs you', 'need you'))
+    lines.push(namesThen(needs, 'needs you', 'need you', budget))
   }
   if (lines.length > 0) {
     return lines.map(capitalized)
@@ -116,13 +147,13 @@ export function conductorSentences(updates: ConductorSpoken[]): string[] {
   const started = of('started')
   const working = safe.filter((update) => update.event === 'progress')
   if (started.length > 0) {
-    lines.push(namesThen(started, 'started working', 'started working'))
+    lines.push(namesThen(started, 'started working', 'started working', budget))
   }
   const workingNames = [...new Set(working.map((update) => update.name))]
   if (workingNames.length === 1 && typeof working[0]?.minutes === 'number') {
     lines.push(`${workingNames[0]} is still working, ${minutesText(working[0].minutes)} in.`)
   } else if (workingNames.length > 0) {
-    lines.push(namesThen(workingNames, 'is still working', 'are still working'))
+    lines.push(namesThen(workingNames, 'is still working', 'are still working', budget))
   }
   return lines.map(capitalized)
 }
