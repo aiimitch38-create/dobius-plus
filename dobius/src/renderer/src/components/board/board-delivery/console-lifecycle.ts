@@ -6,10 +6,7 @@ import { getAgentLabel } from '@/lib/agent-catalog'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { useAppStore } from '@/store'
 import { flushBoardPersistence, getBoard, type BoardCardOf } from '@/store/slices/board'
-import {
-  bugFixClaudeArgs,
-  isBugFixWorktreePath
-} from '../../../../../shared/bug-fix-agent-profile'
+import { bugFixClaudeArgs, isBugFixWorktreePath } from '../../../../../shared/bug-fix-agent-profile'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import type { TuiAgent } from '../../../../../shared/types'
 import { boardSpawnRects } from '../board-canvas/board-spawn-placement'
@@ -23,6 +20,7 @@ import { clearBoardConsoleEnded, isBoardConsoleEnded } from '../console-card/boa
 import { isShellProcessName } from '../console-card/console-card-status'
 import { resolvePinnedAgentCommand } from '../console-card/console-account-launch'
 import { markConsolePaused } from './board-pause'
+import { consoleTitleForTab } from '../board-route/console-agent-title'
 
 type Console = BoardCardOf<'console'>
 
@@ -74,7 +72,11 @@ export function spawnConsoles(input: {
     const card = {
       kind: 'console' as const,
       ...rect,
-      title: `${label} ${existing + i + 1}`,
+      title: consoleTitleForTab(
+        useAppStore.getState(),
+        launched.tabId,
+        `${label} ${existing + i + 1}`
+      ),
       tabId: launched.tabId,
       agentKind: input.agent,
       ...(input.role ? { role: input.role } : {})
@@ -110,7 +112,9 @@ function restrictedLaunchFor(worktreeId: string): RestrictedLaunch | null {
   // older, wider one; the current shared profile always wins.
   const state = useAppStore.getState()
   const worktree = state.allWorktrees?.().find((entry) => entry.id === worktreeId)
-  return isBugFixWorktreePath(worktree?.path) ? { command: 'claude', args: bugFixClaudeArgs() } : null
+  return isBugFixWorktreePath(worktree?.path)
+    ? { command: 'claude', args: bugFixClaudeArgs() }
+    : null
 }
 
 export function restartConsole(
@@ -123,7 +127,16 @@ export function restartConsole(
   // the Settings default args (which skip permissions) or another agent.
   const restricted = restrictedLaunchFor(worktreeId)
   if (restricted) {
-    return relaunchInNewTab(worktreeId, card, 'claude', restricted.command, restricted.args, undefined) !== null
+    return (
+      relaunchInNewTab(
+        worktreeId,
+        card,
+        'claude',
+        restricted.command,
+        restricted.args,
+        undefined
+      ) !== null
+    )
   }
   const next = agent ?? agentOrDefault(card.agentKind)
   // Why: a plain restart of a pinned console must stay on its account; falling
@@ -147,7 +160,10 @@ export function restartConsole(
     return true
   }
   const accountId = launch?.agentCommandOverride ? (launch.accountId ?? undefined) : undefined
-  return relaunchInNewTab(worktreeId, card, next, launch?.agentCommandOverride, undefined, accountId) !== null
+  return (
+    relaunchInNewTab(worktreeId, card, next, launch?.agentCommandOverride, undefined, accountId) !==
+    null
+  )
 }
 
 export type RestartAndWaitOptions = {

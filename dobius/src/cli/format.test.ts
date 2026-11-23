@@ -197,6 +197,31 @@ describe('formatAutomationShow', () => {
 })
 
 describe('formatTerminalList', () => {
+  it('prints the agent name before the title only when the terminal has one', () => {
+    const base = {
+      ptyId: 'pty-1',
+      worktreeId: 'wt-1',
+      worktreePath: '/repo',
+      branch: 'main',
+      leafId: 'leaf-1',
+      connected: true,
+      writable: true,
+      lastOutputAt: null,
+      preview: ''
+    }
+    const output = formatTerminalList({
+      terminals: [
+        { ...base, handle: 'term_named', tabId: 'tab-1', title: 'Fix login bug', name: 'Juniper' },
+        { ...base, handle: 'term_legacy', tabId: 'tab-2', title: 'Terminal 2' }
+      ],
+      totalCount: 2,
+      truncated: false
+    })
+    expect(output).toContain('term_named  name=Juniper  Fix login bug  connected')
+    expect(output).toContain('term_legacy  Terminal 2  connected')
+    expect(output).not.toContain('term_legacy  name=')
+  })
+
   it('prints visual split groups and nested terminal panes', () => {
     const output = formatTerminalList({
       terminals: [

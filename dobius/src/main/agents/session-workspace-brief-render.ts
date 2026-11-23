@@ -126,6 +126,7 @@ export function renderSessionWorkspaceBrief(
     `- Upstream as of ${asOf}: ${describeUpstream(facts.upstream)}`,
     `- Execution gate (Pause crew) as of ${asOf}: ${describeGate(facts.gate)}`,
     '- Board console identity: if `DOBIUS_BOARD_CARD_ID` is set in your shell, you are that Board console card on board `DOBIUS_BOARD_ID`. Route by the card id, which is unique: others reach you with `dobius board send --card "$DOBIUS_BOARD_CARD_ID"`. `DOBIUS_BOARD_CARD_TITLE` is for display only (titles can repeat). `dobius board consoles --json` lists your neighbours with their ids.',
+    '- Your name: if `DOBIUS_AGENT_NAME` is set in your shell, that is your name in Dobius+. Carson and ADAM call you by it, and `dobius terminal list --json` shows it as `name`.',
     '',
     ...(facts.isDobiusRepo ? dobiusSections() : genericSections(facts)),
     '',

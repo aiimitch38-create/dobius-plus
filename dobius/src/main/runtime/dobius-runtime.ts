@@ -131,10 +131,7 @@ import type {
 } from '../../shared/runtime-client-events'
 import type { AgentCursorEvent } from '../../shared/agent-cursor'
 import { toRuntimeActivateWorktreeEvent } from '../../shared/runtime-client-events'
-import type {
-  BoardCardActionReply,
-  BoardCardActionRequest
-} from '../../shared/board-card-actions'
+import type { BoardCardActionReply, BoardCardActionRequest } from '../../shared/board-card-actions'
 import type { TabSnoozeCliReply, TabSnoozeCliRequest } from '../../shared/tab-snooze-cli'
 import type {
   LinearCurrentIssueContextHints,
@@ -6272,7 +6269,11 @@ export class DobiusRuntimeService {
     let cached = state.snapshotCache
     if (!cached || cached.key !== cacheKey) {
       const snapshot = state.emulator.getSnapshot({ scrollbackRows })
-      cached = { key: cacheKey, snapshot, data: snapshot.rehydrateSequences + snapshot.snapshotAnsi }
+      cached = {
+        key: cacheKey,
+        snapshot,
+        data: snapshot.rehydrateSequences + snapshot.snapshotAnsi
+      }
       state.snapshotCache = cached
     }
     const { snapshot, data } = cached
@@ -12347,7 +12348,8 @@ export class DobiusRuntimeService {
       return {
         ...detectedWorktree,
         visible: true,
-        ownership: detectedWorktree.ownership === 'dobius-managed' ? 'dobius-managed' : 'unknown-legacy'
+        ownership:
+          detectedWorktree.ownership === 'dobius-managed' ? 'dobius-managed' : 'unknown-legacy'
       } satisfies DetectedWorktree
     })
     return {
@@ -18507,6 +18509,7 @@ export class DobiusRuntimeService {
       tabId: leaf.tabId,
       leafId: leaf.leafId,
       title: getLatestLeafTitle(leaf, tab?.title ?? null),
+      ...terminalNameField(tab?.agentName),
       connected: leaf.connected,
       writable: leaf.writable,
       lastOutputAt: leaf.lastOutputAt,
@@ -19658,6 +19661,7 @@ export class DobiusRuntimeService {
       leafId: `pty:${pty.ptyId}`,
       originTabId: pty.tabId,
       title: getLatestPtyTitle(pty),
+      ...terminalNameField(pty.tabId ? this.tabs.get(pty.tabId)?.agentName : null),
       connected: pty.connected,
       writable: pty.connected,
       lastOutputAt: pty.lastOutputAt,
@@ -21475,7 +21479,9 @@ export class DobiusRuntimeService {
           'linear_invalid_parent',
           'The reply target is not a comment on this issue.',
           {
-            nextSteps: ['Run `dobius linear issue <id> --comments --json` to list valid comment ids.']
+            nextSteps: [
+              'Run `dobius linear issue <id> --comments --json` to list valid comment ids.'
+            ]
           }
         )
       }
@@ -24397,6 +24403,13 @@ function getLatestPtyTitle(pty: RuntimePtyWorktreeRecord): string | null {
     { title: pty.title, updatedAt: pty.titleUpdatedAt },
     { title: pty.lastOscTitle, updatedAt: pty.lastOscTitleAt }
   )
+}
+
+// Why: omitted (not null) for unnamed tabs so the summary stays byte-identical
+// for terminals created before agent names existed.
+function terminalNameField(agentName: string | null | undefined): { name?: string } {
+  const name = agentName?.trim()
+  return name ? { name } : {}
 }
 
 function getLatestLeafTitle(leaf: RuntimeLeafRecord, tabTitle: string | null): string | null {

@@ -65,6 +65,7 @@ import {
 } from '@/lib/workspace-session-host-persistence'
 import { getForegroundTerminalTabIds } from '@/lib/foreground-terminal-tabs'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { pickAgentName } from '../../../../shared/agent-names'
 import { getFolderWorkspaceConnectionId } from '@/lib/folder-workspace-connection'
 import { hasWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
 import { sanitizeTerminalLayoutPaneTitles } from '@/lib/terminal-pane-title-sanitization'
@@ -79,21 +80,30 @@ import {
   type AgentStatusWorktreeShutdownReason
 } from './agent-status'
 
-function getNextTerminalOrdinal(tabs: TerminalTab[]): number {
-  const usedOrdinals = new Set<number>()
-  for (const tab of tabs) {
-    const match = /^Terminal (\d+)$/.exec(tab.defaultTitle ?? tab.title)
-    if (!match) {
-      continue
+// Why: names must be unique across every open terminal in every project (the
+// renderer store holds all of them), and must not repeat a name Carson typed
+// for a tab or a Board console card, or a spoken "Juniper" would be ambiguous.
+export function collectUsedAgentNames(
+  state: Pick<AppState, 'tabsByWorktree'> & Partial<Pick<AppState, 'boardsByWorktree'>>
+): string[] {
+  const used: string[] = []
+  for (const tabs of Object.values(state.tabsByWorktree)) {
+    for (const tab of tabs) {
+      for (const label of [tab.agentName, tab.defaultTitle, tab.customTitle]) {
+        if (label?.trim()) {
+          used.push(label)
+        }
+      }
     }
-    usedOrdinals.add(Number(match[1]))
   }
-
-  let nextOrdinal = 1
-  while (usedOrdinals.has(nextOrdinal)) {
-    nextOrdinal += 1
+  for (const board of Object.values(state.boardsByWorktree ?? {})) {
+    for (const card of board?.cards ?? []) {
+      if (card.kind === 'console' && card.title?.trim()) {
+        used.push(card.title)
+      }
+    }
   }
-  return nextOrdinal
+  return used
 }
 
 function isRemoteRuntimePtyId(ptyId: string | null | undefined): boolean {
@@ -494,6 +504,9 @@ export type TerminalSlice = {
        *  bar can show the provider icon before the agent's first hook event. */
       launchAgent?: TuiAgent
       quickCommandLabel?: string | null
+      /** Agent name already chosen for this terminal (e.g. baked into a
+       *  main-spawned PTY's env). Omitted: a fresh unused name is picked. */
+      agentName?: string
       /** Initial native-chat view mode for the unified tab. When the
        *  `openAgentTabsInChatByDefault` setting is on, agent launches pass
        *  `'chat'` so the tab opens in the native chat view; omitted otherwise
@@ -867,8 +880,8 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       }
       const id = hintedId !== undefined && !idCollides ? hintedId : createBrowserUuid()
       const shouldActivate = options?.activate !== false
-      const nextOrdinal = getNextTerminalOrdinal(existing)
-      const defaultTitle = `Terminal ${nextOrdinal}`
+      const agentName = options?.agentName?.trim() || pickAgentName(collectUsedAgentNames(s))
+      const defaultTitle = agentName
       const quickCommandLabel = options?.quickCommandLabel?.trim()
       const startupCwd = options?.startupCwd
       const remoteConnectionId = getRemoteConnectionIdForWorktree(s, worktreeId)
@@ -896,11 +909,9 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         // one later should attach the pane instead of spawning a duplicate.
         ptyId: options?.initialPtyId ?? null,
         worktreeId,
-        // Why: users expect terminal labels to reflect the currently open set,
-        // not a monotonic creation counter. Reusing the lowest free ordinal
-        // keeps a lone fresh terminal at "Terminal 1" after older tabs close.
         title: defaultTitle,
         defaultTitle,
+        agentName,
         ...(quickCommandLabel ? { quickCommandLabel } : {}),
         customTitle: null,
         color: null,
@@ -980,6 +991,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         ...(tab.quickCommandLabel?.trim()
           ? { quickCommandLabel: tab.quickCommandLabel.trim() }
           : {}),
+        agentName,
         customLabel: tab.customTitle,
         color: tab.color,
         sortOrder: cleanedGroupOrder.length,

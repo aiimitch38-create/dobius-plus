@@ -1521,6 +1521,54 @@ describe('DobiusRuntimeService', () => {
     expect(shown.ptyId).toBe('pty-1')
   })
 
+  it('reports the tab agent name as an additive name field, leaving title alone', async () => {
+    const runtime = new DobiusRuntimeService(store)
+
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, {
+      tabs: [
+        {
+          tabId: 'tab-named',
+          worktreeId: 'repo-1::/tmp/worktree-a',
+          title: 'Fix login bug',
+          agentName: 'Juniper',
+          activeLeafId: 'pane:1',
+          layout: null
+        },
+        {
+          tabId: 'tab-legacy',
+          worktreeId: 'repo-1::/tmp/worktree-a',
+          title: 'Terminal 2',
+          activeLeafId: 'pane:2',
+          layout: null
+        }
+      ],
+      leaves: [
+        {
+          tabId: 'tab-named',
+          worktreeId: 'repo-1::/tmp/worktree-a',
+          leafId: 'pane:1',
+          paneRuntimeId: 1,
+          ptyId: 'pty-named'
+        },
+        {
+          tabId: 'tab-legacy',
+          worktreeId: 'repo-1::/tmp/worktree-a',
+          leafId: 'pane:2',
+          paneRuntimeId: 2,
+          ptyId: 'pty-legacy'
+        }
+      ]
+    })
+
+    const { terminals } = await runtime.listTerminals('branch:feature/foo')
+    const named = terminals.find((terminal) => terminal.tabId === 'tab-named')
+    const legacy = terminals.find((terminal) => terminal.tabId === 'tab-legacy')
+    expect(named).toMatchObject({ name: 'Juniper', title: 'Fix login bug' })
+    expect(legacy).toMatchObject({ title: 'Terminal 2' })
+    expect(legacy && 'name' in legacy).toBe(false)
+  })
+
   it('surfaces stale terminal handles for stranded panes and recovers after same-pane wake', async () => {
     const runtime = new DobiusRuntimeService(store)
     const tabId = 'tab-1'
@@ -6003,9 +6051,10 @@ describe('DobiusRuntimeService', () => {
       scrollbackRows: expect.any(Number),
       altScreenForcesZeroRows: true
     })
-    await expect(
-      parseHeadlessSnapshotLines(snapshot!, { cols: 80, rows: 24 })
-    ).resolves.toEqual(['restored scrollback', 'agent reply'])
+    await expect(parseHeadlessSnapshotLines(snapshot!, { cols: 80, rows: 24 })).resolves.toEqual([
+      'restored scrollback',
+      'agent reply'
+    ])
 
     // Later live output lands on top of the seed, and the seed runs only once.
     runtime.onPtyData('pty-1', 'more output\r\n', 200)
@@ -11108,7 +11157,11 @@ describe('DobiusRuntimeService', () => {
 
   it('isCursorAgentTerminal uses the push-on-idle Cursor titles (board: relay skips Enter)', async () => {
     const runtime = new DobiusRuntimeService(store)
-    runtime.setPtyController({ write: vi.fn().mockReturnValue(true), kill: vi.fn(), getForegroundProcess: async () => null })
+    runtime.setPtyController({
+      write: vi.fn().mockReturnValue(true),
+      kill: vi.fn(),
+      getForegroundProcess: async () => null
+    })
     syncSinglePty(runtime)
     const [terminal] = (await runtime.listTerminals()).terminals
     expect(runtime.isCursorAgentTerminal(terminal.handle)).toBe(false)
@@ -23147,12 +23200,14 @@ describe('DobiusRuntimeService', () => {
       realpath: vi.fn().mockResolvedValue('/remote/mobile-codex-draft'),
       // Real missing-file shape: relay stat() throws ENOENT, relay dispatcher
       // forwards err.code, ssh-channel-multiplexer sets it on the rejected Error.
-      readFile: vi.fn().mockRejectedValue(
-        Object.assign(
-          new Error("ENOENT: no such file or directory, stat '/home/dev/.codex/config.toml'"),
-          { code: 'ENOENT' }
-        )
-      ),
+      readFile: vi
+        .fn()
+        .mockRejectedValue(
+          Object.assign(
+            new Error("ENOENT: no such file or directory, stat '/home/dev/.codex/config.toml'"),
+            { code: 'ENOENT' }
+          )
+        ),
       createDir: vi.fn().mockResolvedValue(undefined),
       writeFile: vi.fn().mockResolvedValue(undefined)
     }
@@ -23267,12 +23322,14 @@ describe('DobiusRuntimeService', () => {
       realpath: vi.fn().mockResolvedValue('/remote/mobile-codex-command'),
       // Real missing-file shape: relay stat() throws ENOENT, relay dispatcher
       // forwards err.code, ssh-channel-multiplexer sets it on the rejected Error.
-      readFile: vi.fn().mockRejectedValue(
-        Object.assign(
-          new Error("ENOENT: no such file or directory, stat '/home/dev/.codex/config.toml'"),
-          { code: 'ENOENT' }
-        )
-      ),
+      readFile: vi
+        .fn()
+        .mockRejectedValue(
+          Object.assign(
+            new Error("ENOENT: no such file or directory, stat '/home/dev/.codex/config.toml'"),
+            { code: 'ENOENT' }
+          )
+        ),
       createDir: vi.fn().mockResolvedValue(undefined),
       writeFile: vi.fn().mockResolvedValue(undefined)
     }

@@ -28,6 +28,7 @@ import {
   handoffSummaryRequest,
   splitForward
 } from './forward-digest'
+import { consoleTitleForTab } from '../board-route/console-agent-title'
 
 // Why: the reference waits about four minutes for the brief before spawning anyway.
 const HANDOFF_WAIT_MS = 4 * 60 * 1000
@@ -225,7 +226,7 @@ async function runHandoff(
     return
   }
   const title = translate('board.handoff.title', '{{agent}} (from {{name}})', {
-    agent: getAgentLabel(agent),
+    agent: consoleTitleForTab(useAppStore.getState(), launched.tabId, getAgentLabel(agent)),
     name: source.title
   })
   useAppStore.getState().addCard(worktreeId, {

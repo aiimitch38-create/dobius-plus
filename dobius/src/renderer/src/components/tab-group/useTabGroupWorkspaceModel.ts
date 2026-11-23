@@ -140,12 +140,14 @@ export function useTabGroupWorkspaceModel({
               {
                 ...item,
                 quickCommandLabel: item.quickCommandLabel ?? terminalTab?.quickCommandLabel,
-                generatedLabel: item.generatedLabel ?? terminalTab?.generatedTitle
+                generatedLabel: item.generatedLabel ?? terminalTab?.generatedTitle,
+                agentName: terminalTab?.agentName ?? item.agentName
               },
               worktreeState.generatedTabTitlesEnabled,
               item.label
             ),
             defaultTitle: terminalTab?.defaultTitle,
+            agentName: terminalTab?.agentName ?? item.agentName,
             quickCommandLabel: terminalTab?.quickCommandLabel ?? item.quickCommandLabel ?? null,
             generatedTitle: terminalTab?.generatedTitle ?? item.generatedLabel ?? null,
             customTitle: item.customLabel ?? terminalTab?.customTitle ?? null,

@@ -73,6 +73,11 @@ function hydrateUnifiedFormat(
         .filter((tab) => tab.quickCommandLabel?.trim())
         .map((tab) => [tab.id, tab.quickCommandLabel!.trim()])
     )
+    const agentNameByTerminalId = new Map(
+      (session.tabsByWorktree[worktreeId] ?? [])
+        .filter((tab) => tab.agentName?.trim())
+        .map((tab) => [tab.id, tab.agentName!.trim()])
+    )
     tabsByWorktree[worktreeId] = [...tabs]
       .map((tab) => ({
         ...tab,
@@ -86,9 +91,11 @@ function hydrateUnifiedFormat(
           ? tab.quickCommandLabel.trim()
           : quickCommandLabelByTerminalId.get(tab.entityId)
         const generatedLabel = generatedTitleByTerminalId.get(tab.entityId)
+        const agentName = agentNameByTerminalId.get(tab.entityId)
         return {
           ...tab,
           ...(quickCommandLabel ? { quickCommandLabel } : {}),
+          ...(agentName ? { agentName } : {}),
           ...(!tab.generatedLabel?.trim() && generatedLabel ? { generatedLabel } : {})
         }
       })
@@ -219,6 +226,7 @@ function hydrateLegacyFormat(
         label: tt.title,
         ...(tt.quickCommandLabel?.trim() ? { quickCommandLabel: tt.quickCommandLabel.trim() } : {}),
         ...(tt.generatedTitle?.trim() ? { generatedLabel: tt.generatedTitle.trim() } : {}),
+        ...(tt.agentName?.trim() ? { agentName: tt.agentName.trim() } : {}),
         customLabel: tt.customTitle,
         color: tt.color,
         sortOrder: tt.sortOrder,

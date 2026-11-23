@@ -790,6 +790,9 @@ export type Tab = {
   label: string // display title (auto-derived from PTY or filename)
   generatedLabel?: string | null
   quickCommandLabel?: string | null
+  /** Terminal tabs only: the backing terminal's generated agent name. Mirrored
+   *  from TerminalTab.agentName in memory (not persisted on the unified tab). */
+  agentName?: string
   customLabel: string | null
   color: string | null
   sortOrder: number
@@ -831,6 +834,10 @@ export type TerminalTab = {
   generatedTitle?: string | null
   /** Stable label from the tab-bar Quick Command that created this terminal. */
   quickCommandLabel?: string | null
+  /** Stable, unique name from the agent-names library ("Juniper"), assigned at
+   *  creation so Carson and ADAM can target this terminal by name. Shown before
+   *  the live topic; a manual rename (customTitle) replaces it. Older tabs omit it. */
+  agentName?: string
   customTitle: string | null
   color: string | null
   /** Pinned tabs survive "close others"; host-persisted for remote servers. */
