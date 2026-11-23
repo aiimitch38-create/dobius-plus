@@ -259,7 +259,7 @@ describe('delegation bridge', () => {
     peer().channel.emit({ type: 'session.delegation.created', delegation_id: 'd1' })
     expect(call.getSnapshot().state).toBe('thinking')
     await vi.advanceTimersByTimeAsync(600)
-    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'What is running?', callLines: [], callToken: 'call-1' })
+    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'What is running?', callLines: [], callToken: 'call-1', delegationId: 'd1' })
     delegateReply.resolve({ ok: true, kind: 'answer', speak: 'Two agents are running.' })
     await vi.advanceTimersByTimeAsync(0)
     expect(peer().channel.sent.at(-1)).toEqual({
@@ -278,7 +278,7 @@ describe('delegation bridge', () => {
     await vi.advanceTimersByTimeAsync(300)
     peer().channel.emit({ type: 'session.input_transcript.delta', delta: ' build' })
     await vi.advanceTimersByTimeAsync(700)
-    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'Check the build', callLines: [], callToken: 'call-1' })
+    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'Check the build', callLines: [], callToken: 'call-1', delegationId: 'd2' })
   })
 
   it('"stop" while ADAM works cancels the ADAM turn', async () => {
@@ -358,7 +358,8 @@ describe('transcripts in the ADAM thread', () => {
     expect(api.liveDelegate).toHaveBeenCalledWith({
       request: 'What is running?',
       callLines: ['Carson: Can you hear me?', "ADAM's voice: Loud and clear."],
-      callToken: 'call-1'
+      callToken: 'call-1',
+      delegationId: null
     })
     delegateReply.resolve({ ok: true, kind: 'answer', speak: 'Two.' })
     await vi.advanceTimersByTimeAsync(0)
@@ -642,7 +643,7 @@ describe('reconnect edge cases', () => {
     peer().channel.emit({ type: 'session.output_transcript.delta', delta: 'On it.' })
     peer().channel.emit({ type: 'session.input_transcript.delta', delta: ' build' })
     await vi.advanceTimersByTimeAsync(700)
-    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'Check the build', callLines: [], callToken: 'call-1' })
+    expect(api.liveDelegate).toHaveBeenCalledWith({ request: 'Check the build', callLines: [], callToken: 'call-1', delegationId: null })
   })
 })
 

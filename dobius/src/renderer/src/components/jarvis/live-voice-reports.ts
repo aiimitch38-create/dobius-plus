@@ -42,7 +42,7 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
   private lastHeardInputAt = Number.NEGATIVE_INFINITY
   private lastProgressAt = Number.NEGATIVE_INFINITY
   private timer: number | null = null
-  private readonly progressNotes = new LiveProgressNotes()
+  private readonly progressNotes: LiveProgressNotes
   private readonly setTimer: (handler: () => void, ms: number) => number
   private readonly clearTimer: (timer: number) => void
 
@@ -50,15 +50,20 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
     // Why a tap: the call reads its data channel itself; this hears the same
     // transcript events so a pause between Carson's words is not "quiet".
     const tap = { heard: (_data: unknown): void => undefined }
-    super(tapLiveMessages(deps, (data) => tap.heard(data)), onChange)
+    const notes = new LiveProgressNotes()
+    super(
+      tapLiveMessages({ ...deps, api: notes.track(deps.api) }, (data) => tap.heard(data)),
+      onChange
+    )
     tap.heard = (data) => this.heard(data)
+    this.progressNotes = notes
     this.setTimer = deps.setTimeout ?? ((handler, ms) => window.setTimeout(handler, ms))
     this.clearTimer = deps.clearTimeout ?? ((timer) => window.clearTimeout(timer))
   }
 
   override notice(notice: LiveVoiceNotice): void {
     if (notice.kind === 'adam-progress') {
-      const note = this.active ? this.progressNotes.note(notice.step) : null
+      const note = this.active ? this.progressNotes.note(notice) : null
       if (note) {
         this.send(note)
       }
@@ -123,7 +128,6 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
   /** Any transcript, from Carson or the voice, restarts the quiet window. */
   private heard(data: unknown): void {
     const event = parseLiveEvent(data)
-    this.progressNotes.seen(event)
     if (event?.type === 'input' || event?.type === 'output') {
       this.quietSince = null
     }

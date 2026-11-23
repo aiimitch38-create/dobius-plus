@@ -10,14 +10,20 @@ import type {
 } from '../../shared/speech-types'
 import type { AdamProgressStep } from '../../shared/adam-progress'
 import type { AdamAskOptions } from './adam-conversation'
-import { AdamProgressThrottle } from './adam-progress'
+import { liveProgressThrottle, type AdamProgressThrottle } from './adam-progress'
 import { logLiveVoiceProblem } from './live-voice-log'
 import type { QuickHandsDeps } from './live-voice-quick-hands'
 import { LiveQuickTurns } from './live-voice-quick-turns'
 import { LIVE_METER_TICK_MS, type LiveVoiceMeter } from './live-voice-meter'
 import { liveVoiceFailure } from './openai-live-session'
 import { spokenFor } from './live-voice-spoken'
-import { callLinesOf, LIVE_CALL_LINES_MAX, liveVoiceMessage } from './live-voice-message'
+import {
+  callLinesOf,
+  delegationIdOf,
+  LIVE_CALL_LINES_MAX,
+  type LiveDelegation,
+  liveVoiceMessage
+} from './live-voice-message'
 
 export { LIVE_SPOKEN_MAX_CHARS, LIVE_WORD_FOR_WORD_LEAD, speakableReply } from './live-voice-spoken'
 export { callLinesOf, liveVoiceMessage } from './live-voice-message'
@@ -87,7 +93,7 @@ export type LiveVoiceCallsDeps = {
 export class LiveVoiceCalls {
   private ownerId: number | null = null
   private timer: unknown = null
-  private delegation: { ownerId: number; token: symbol } | null = null
+  private delegation: LiveDelegation | null = null
   private warnedDay: string | null = null
   // Why a token per call: transcript row ids are `live:<call>:<item>:<role>`,
   // stable within a call so a resent line is saved once.
@@ -104,12 +110,7 @@ export class LiveVoiceCalls {
 
   constructor(private readonly deps: LiveVoiceCallsDeps) {
     this.log = deps.log ?? logLiveVoiceProblem
-    // Why the check at send time: a step held back by the throttle must not
-    // land after the request ended or Carson said stop.
-    this.progressNotes = new AdamProgressThrottle({
-      send: (step) => this.delegation && deps.notify({ kind: 'adam-progress', text: '', step }),
-      now: deps.now
-    })
+    this.progressNotes = liveProgressThrottle(deps.notify, () => this.delegation, deps.now)
     this.quickTurns = deps.quickHands
       ? new LiveQuickTurns({
           hands: deps.quickHands,
@@ -274,7 +275,8 @@ export class LiveVoiceCalls {
         return { ok: true, kind: 'error', speak: LIVE_STILL_WORKING_TEXT }
       }
       token = Symbol('live-delegation')
-      this.delegation = { ownerId, token }
+      const delegationId = delegationIdOf(raw.delegationId)
+      this.delegation = { ownerId, token, delegationId, callToken }
       this.progressNotes.reset()
       const adamStart = clock()
       const lines =
@@ -304,9 +306,9 @@ export class LiveVoiceCalls {
     }
   }
 
-  /** ADAM's progress on his running turn: passed on only while it is this call's request. */
+  /** ADAM's progress on his running turn: passed on only while it is this call's named request. */
   progress(step: AdamProgressStep): void {
-    if (this.delegation !== null && this.delegation.ownerId === this.ownerId) {
+    if (this.delegation?.delegationId && this.delegation.ownerId === this.ownerId) {
       this.progressNotes.offer(step)
     }
   }

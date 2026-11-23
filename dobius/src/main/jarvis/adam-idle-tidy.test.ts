@@ -3,7 +3,10 @@ import {
   ADAM_IDLE_TIDY_AFTER_MS,
   ADAM_IDLE_TIDY_MIN_PERCENT,
   AdamIdleTidy,
-  compactNow
+  compactNow,
+  noteAdamActivity,
+  startAdamIdleTidy,
+  withAdamActivity
 } from './adam-idle-tidy'
 import type { HermesRpc } from './hermes-desktop-rpc'
 
@@ -76,6 +79,36 @@ describe('AdamIdleTidy', () => {
     t.advance(ADAM_IDLE_TIDY_AFTER_MS)
     t.watcher.tick()
     expect(t.tidy).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('idle tidy follows real lifecycle edges (7.13 review)', () => {
+  it('a turn that starts and ends between two polls restarts the quiet stretch', async () => {
+    let now = 0
+    const tidy = vi.fn(async () => true)
+    const watcher = startAdamIdleTidy({
+      busy: () => false,
+      contextPercent: () => 80,
+      tidy,
+      now: () => now,
+      setInterval: vi.fn(() => 1),
+      log: vi.fn()
+    })
+    now = ADAM_IDLE_TIDY_AFTER_MS - 1_000
+    await withAdamActivity(async () => {
+      now += 500
+    })
+    now = ADAM_IDLE_TIDY_AFTER_MS + 1_000
+    watcher.tick()
+    expect(tidy).not.toHaveBeenCalled()
+    now += ADAM_IDLE_TIDY_AFTER_MS
+    watcher.tick()
+    expect(tidy).toHaveBeenCalledTimes(1)
+    // After a tidy, a call (or turn) edge opens a new stretch with its own try.
+    noteAdamActivity()
+    now += ADAM_IDLE_TIDY_AFTER_MS
+    watcher.tick()
+    expect(tidy).toHaveBeenCalledTimes(2)
   })
 })
 

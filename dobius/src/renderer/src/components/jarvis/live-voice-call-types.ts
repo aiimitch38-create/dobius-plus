@@ -101,6 +101,8 @@ export type LiveVoiceApi = {
     request: string
     callLines: string[]
     callToken: string
+    /** The voice model's delegation id, so ADAM's progress notes name it. */
+    delegationId?: string | null
   }) => Promise<LiveDelegateResult>
   liveCancel: (payload: { callToken: string }) => Promise<{ ok: boolean }>
   /** Writes a failure to the voice error log in main; optional so test doubles may omit it. */

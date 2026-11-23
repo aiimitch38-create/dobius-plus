@@ -12,6 +12,7 @@ import type { AdamProgressStep } from '../../shared/adam-progress'
 import type { AdamConversation } from './adam-conversation'
 import type { ConductorJob } from './adam-conductor-types'
 import type { AdamThreadStore } from './adam-thread-store'
+import { noteAdamActivity } from './adam-idle-tidy'
 import { LiveVoiceCalls } from './live-voice-calls'
 import { LiveVoiceMeter } from './live-voice-meter'
 import { logLiveVoiceProblem } from './live-voice-log'
@@ -161,6 +162,8 @@ let activeLiveSession: {
 } | null = null
 
 function clearActiveLiveSession(): void {
+  // A call ending (or starting, below) restarts the idle tidy's quiet stretch.
+  noteAdamActivity()
   const current = activeLiveSession
   activeLiveSession = null
   current?.unwatch()
@@ -172,6 +175,7 @@ function clearActiveLiveSession(): void {
 }
 
 function setActiveLiveSession(owner: LiveSender, sessionId: string | null, callToken: string): void {
+  // Also the call's start edge for the idle tidy (clearActiveLiveSession notes it).
   clearActiveLiveSession()
   const unwatch = watchOwnerGone(owner, () => {
     if (activeLiveSession?.owner === owner) {

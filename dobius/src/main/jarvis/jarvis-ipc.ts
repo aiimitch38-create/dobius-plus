@@ -21,7 +21,7 @@ import {
 import { AdamHermesVoice } from './adam-hermes-voice'
 import { registerElevenLabsAgentHandlers } from './elevenlabs-agent-ipc'
 import { isLiveCallOpen, registerLiveVoiceIpc, sendLiveProgress } from './live-voice-ipc'
-import { startAdamIdleTidy } from './adam-idle-tidy'
+import { startAdamIdleTidy, withAdamActivity } from './adam-idle-tidy'
 import { createRuntimeQuickHands, type QuickHandsRuntime } from './live-voice-quick-hands-runtime'
 import { adamConductor } from './adam-conductor'
 import { trackedQuickHands, type ConductorRuntime } from './adam-conductor-runtime'
@@ -128,7 +128,10 @@ export function askAdam(text: string, options: AdamAskOptions): ReturnType<AdamC
   if (!adamConversation) {
     const broadcast = createBroadcastPort()
     adamConversation = new AdamConversation(
-      { ask: (prompt) => getAdamVoice().ask(prompt), isCompacting: () => adamCompacting },
+      {
+        ask: (prompt) => withAdamActivity(() => getAdamVoice().ask(prompt)),
+        isCompacting: () => adamCompacting
+      },
       async (event) => {
         // Spoken turns are in the thread before any window hears of the turn.
         const row = voiceTurnRow(event)

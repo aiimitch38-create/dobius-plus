@@ -1,6 +1,7 @@
 // Hermes turn events as progress steps for the live voice (7.13). Only the
 // step leaves this file; the phrase is fixed (shared/adam-progress.ts).
 import type { AdamProgressStep } from '../../shared/adam-progress'
+import type { LiveVoiceNotice } from '../../shared/speech-types'
 import type { HermesDesktopEvent } from './hermes-desktop-rpc'
 
 /** At most one progress note per this long (Carson's spec, 2026-11-22). */
@@ -150,4 +151,27 @@ export class AdamProgressThrottle {
     this.lastAt = now
     this.deps.send(step)
   }
+}
+
+/**
+ * The live call's throttle: each note names the call and the delegation it
+ * belongs to. Why read at send time: a step held back by the throttle must
+ * not land after the request ended, after Carson said stop, or under a
+ * request that has no delegation id to name.
+ */
+export function liveProgressThrottle(
+  notify: (notice: LiveVoiceNotice) => void,
+  current: () => { callToken: string; delegationId: string | null } | null,
+  now?: () => number
+): AdamProgressThrottle {
+  return new AdamProgressThrottle({
+    send: (step) => {
+      const request = current()
+      if (request?.delegationId) {
+        const { callToken, delegationId } = request
+        notify({ kind: 'adam-progress', text: '', step, callToken, delegationId })
+      }
+    },
+    now
+  })
 }

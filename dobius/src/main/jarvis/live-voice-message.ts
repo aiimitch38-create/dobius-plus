@@ -7,6 +7,20 @@ const LIVE_CALL_LINE_MAX_CHARS = 300
 const encodeUntrusted = (value: unknown): string =>
   JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
 
+/** The ADAM turn a live call is waiting on. */
+export type LiveDelegation = {
+  ownerId: number
+  token: symbol
+  /** The voice model's id for this request and the call's token: progress notes name both. */
+  delegationId: string | null
+  callToken: string
+}
+
+/** The voice model's delegation id from a delegate request, or null when absent or malformed. */
+export function delegationIdOf(value: unknown): string | null {
+  return typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value) ? value : null
+}
+
 /** Lines of the call that never reached ADAM (small talk the voice model answered itself). */
 export function callLinesOf(value: unknown): string[] {
   if (!Array.isArray(value)) {

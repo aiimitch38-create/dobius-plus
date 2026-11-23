@@ -190,7 +190,14 @@ export type LiveVoiceNotice =
    * the window rebuilds the fixed phrase (shared/adam-progress.ts). Quiet
    * context for the voice (thinking.append), never spoken on its own.
    */
-  | { kind: 'adam-progress'; text: ''; step: AdamProgressStep }
+  | {
+      kind: 'adam-progress'
+      text: ''
+      step: AdamProgressStep
+      /** The call and the delegation this progress belongs to; the window checks both. */
+      callToken: string
+      delegationId: string
+    }
 
 /** Session events the window reports to main's spend meter. */
 export type LiveVoiceSessionReport = {

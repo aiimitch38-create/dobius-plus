@@ -118,3 +118,18 @@ export function startAdamIdleTidy(deps: AdamIdleTidyDeps): AdamIdleTidy {
   }
   return running
 }
+
+/**
+ * A real lifecycle edge (an ADAM turn or a live call starting or ending): the
+ * quiet stretch starts over. Why not only the poll: a turn shorter than one
+ * poll would go unseen, and a tidy could start right after it.
+ */
+export function noteAdamActivity(): void {
+  running?.activity()
+}
+
+/** Runs one ADAM turn with its start and its end counted as activity. */
+export function withAdamActivity<T>(work: () => Promise<T>): Promise<T> {
+  noteAdamActivity()
+  return work().finally(noteAdamActivity)
+}

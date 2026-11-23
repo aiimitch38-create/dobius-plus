@@ -1,4 +1,5 @@
 import type { JarvisAskResult } from '../../shared/speech-types'
+import { estimateTokens, fitTokens, LIVE_COMMENTARY_TOKEN_BUDGET } from './live-voice-tokens'
 
 // What the live voice may say out loud, shared by ADAM's answers and the quick hands.
 
@@ -41,6 +42,11 @@ export function spokenFor(result: JarvisAskResult, wordForWord: boolean): string
   if (result.kind === 'cancelled') {
     return ''
   }
-  const spoken = speakableReply(result.text)
-  return wordForWord && result.kind === 'answer' && spoken ? LIVE_WORD_FOR_WORD_LEAD + spoken : spoken
+  // Why the budget covers the lead-in too: the cap is on the whole commentary.
+  const lead = wordForWord && result.kind === 'answer' ? LIVE_WORD_FOR_WORD_LEAD : ''
+  const spoken = fitTokens(
+    speakableReply(result.text),
+    LIVE_COMMENTARY_TOKEN_BUDGET - estimateTokens(lead)
+  )
+  return spoken ? lead + spoken : spoken
 }

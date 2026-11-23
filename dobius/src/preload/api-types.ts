@@ -3425,6 +3425,8 @@ export type PreloadApi = {
       request: string
       callLines: string[]
       callToken: string
+      /** The voice model's delegation id, so ADAM's progress notes name it. */
+      delegationId?: string | null
     }) => Promise<LiveDelegateResult>
     /** Carson said stop: cancel the ADAM turn this call started. */
     liveLog: (payload: { text: string }) => Promise<{ ok: boolean }>

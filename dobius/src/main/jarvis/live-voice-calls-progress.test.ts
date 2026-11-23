@@ -44,13 +44,15 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }))
 describe('live progress notes (7.13)', () => {
   it("forwards ADAM's steps only while the call's own request runs", async () => {
     const calls = makeCalls()
-    calls.callStarted(7)
     calls.progress('reading')
     expect(progress()).toEqual([])
-    const answer = calls.delegate(7, { request: 'check the build' })
+    const token = calls.callStarted(7)
+    const answer = calls.delegate(7, { request: 'check the build', delegationId: 'd1' })
     await vi.waitFor(() => expect(finish).not.toBeNull())
     calls.progress('dobius-command')
-    expect(progress()).toEqual([{ kind: 'adam-progress', text: '', step: 'dobius-command' }])
+    expect(progress()).toEqual([
+      { kind: 'adam-progress', text: '', step: 'dobius-command', callToken: token, delegationId: 'd1' }
+    ])
     finish?.({ kind: 'answer', text: 'All green.' })
     await answer
     calls.progress('editing')
@@ -60,10 +62,34 @@ describe('live progress notes (7.13)', () => {
   it('sends no step after Carson says stop', async () => {
     const calls = makeCalls()
     calls.callStarted(7)
-    const answer = calls.delegate(7, { request: 'check the build' })
+    const answer = calls.delegate(7, { request: 'check the build', delegationId: 'd1' })
     await vi.waitFor(() => expect(finish).not.toBeNull())
     calls.cancelDelegation(7)
     calls.progress('reading')
+    await answer
+    expect(progress()).toEqual([])
+  })
+})
+
+describe('progress names its delegation (7.13 review)', () => {
+  it('sends nothing for a request that carries no delegation id to name', async () => {
+    const calls = makeCalls()
+    calls.callStarted(7)
+    const answer = calls.delegate(7, { request: 'check the build' })
+    await vi.waitFor(() => expect(finish).not.toBeNull())
+    calls.progress('reading')
+    finish?.({ kind: 'answer', text: 'ok' })
+    await answer
+    expect(progress()).toEqual([])
+  })
+
+  it('ignores a malformed delegation id', async () => {
+    const calls = makeCalls()
+    calls.callStarted(7)
+    const answer = calls.delegate(7, { request: 'check', delegationId: '<script>' })
+    await vi.waitFor(() => expect(finish).not.toBeNull())
+    calls.progress('reading')
+    finish?.({ kind: 'answer', text: 'ok' })
     await answer
     expect(progress()).toEqual([])
   })
