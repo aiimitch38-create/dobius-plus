@@ -14266,8 +14266,6 @@
     "adam": {
       "thinking": "ADAM is thinking…",
       "stillThinking": "ADAM is still working on your last message. Wait for his reply, then send this again.",
-      "waitingForCompaction": "ADAM 正在整理记忆，大约一两分钟。完成后会把这条消息发给他：“{{text}}”",
-      "waitingReplaced": "ADAM 正在整理记忆，大约一两分钟。完成后只会发送你最新的这条消息：“{{text}}”",
       "failed": "ADAM could not answer. {{reason}} To send work straight to a console instead, type its name first, for example “@Codex 1 run the tests”.",
       "unreachable": "This window could not reach ADAM’s Hermes connection. Quit and reopen Dobius+, then send your message again.",
       "cancelled": "ADAM’s answer was stopped before it finished. Send your message again.",

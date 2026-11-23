@@ -245,9 +245,11 @@ describe('useBoardPlanner: one message at a time', () => {
 })
 
 describe('useBoardPlanner: a message sent while ADAM tidies his memory', () => {
-  it('waits in one slot (newest wins) and goes to ADAM once his turn is done', async () => {
-    const answers: ((result: JarvisAskResult) => void)[] = []
-    askAdamText.mockImplementation(() => new Promise((resolve) => answers.push(resolve)))
+  it('goes to main even mid-turn, and a queued result adds no reply row (main writes those)', async () => {
+    let answer: (result: JarvisAskResult) => void = () => {}
+    askAdamText
+      .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+      .mockResolvedValueOnce({ kind: 'queued', text: 'held' })
     mount()
     let first: Promise<void> = Promise.resolve()
     await act(async () => {
@@ -255,33 +257,16 @@ describe('useBoardPlanner: a message sent while ADAM tidies his memory', () => {
       await vi.waitFor(() => expect(askAdamText).toHaveBeenCalledTimes(1))
     })
     setAdamCompactingForTest(true)
+    await act(() => run('two'))
+    expect(askAdamText).toHaveBeenCalledTimes(2)
+    expect(askAdamText.mock.calls[1][0]).toContain('"two"')
+    expect(rows.map((row) => row.text)).toEqual(['one', 'two'])
     await act(async () => {
-      await run('two')
-      await run('three')
-    })
-    expect(askAdamText).toHaveBeenCalledTimes(1)
-    expect(rows.slice(1).map((row) => row.text)).toEqual([
-      expect.stringContaining('Your message will go to him when he is done: “two”'),
-      expect.stringContaining('Only your newest message will go to him when he is done: “three”')
-    ])
-    setAdamCompactingForTest(false)
-    await act(async () => {
-      answers[0]({ kind: 'answer', text: 'Done.' })
+      answer({ kind: 'answer', text: 'Done.' })
       await first
     })
-    await act(async () => {
-      await vi.waitFor(() => expect(askAdamText).toHaveBeenCalledTimes(2))
-    })
-    const sent = askAdamText.mock.calls[1][0]
-    expect(sent).toContain('"three"')
-    expect(sent).not.toContain('"two"')
-    await act(async () => {
-      answers[1]({ kind: 'answer', text: 'Three done.' })
-      await vi.waitFor(() => expect(rows.at(-1)?.text).toBe('Three done.'))
-    })
+    expect(rows.map((row) => row.text)).toEqual(['one', 'two', 'Done.'])
     expect(busy).toBe(false)
-    expect(askAdamText).toHaveBeenCalledTimes(2)
-    expect(rows.at(-1)).toEqual({ role: 'assistant', text: 'Three done.' })
   })
 })
 
