@@ -8,6 +8,7 @@ import type { BoardConductor } from '../board-route/use-board-conductor'
 import type { BoardRouteData } from '../board-route/use-board-route-data'
 import { BOARD } from './plan-fixtures.test-support'
 import { useBoardPlanner } from './use-board-planner'
+import { setAdamCompactingForTest } from './adam-status'
 
 const mocks = vi.hoisted(() => ({
   executePlan: vi.fn(async () => [{ ok: true, text: 'Paused 3 consoles.' }])
@@ -101,6 +102,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  setAdamCompactingForTest(false)
   act(() => root.unmount())
   container.remove()
 })
@@ -239,6 +241,32 @@ describe('useBoardPlanner: one message at a time', () => {
     expect(busy).toBe(false)
     expect(askAdamText).toHaveBeenCalledTimes(1)
     expect(rows.at(-1)).toEqual({ role: 'assistant', text: 'Done.' })
+  })
+})
+
+describe('useBoardPlanner: a message sent while ADAM tidies his memory', () => {
+  it('goes to main even mid-turn, and a queued result adds no reply row (main writes those)', async () => {
+    let answer: (result: JarvisAskResult) => void = () => {}
+    askAdamText
+      .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+      .mockResolvedValueOnce({ kind: 'queued', text: 'held' })
+    mount()
+    let first: Promise<void> = Promise.resolve()
+    await act(async () => {
+      first = run('one')
+      await vi.waitFor(() => expect(askAdamText).toHaveBeenCalledTimes(1))
+    })
+    setAdamCompactingForTest(true)
+    await act(() => run('two'))
+    expect(askAdamText).toHaveBeenCalledTimes(2)
+    expect(askAdamText.mock.calls[1][0]).toContain('"two"')
+    expect(rows.map((row) => row.text)).toEqual(['one', 'two'])
+    await act(async () => {
+      answer({ kind: 'answer', text: 'Done.' })
+      await first
+    })
+    expect(rows.map((row) => row.text)).toEqual(['one', 'two', 'Done.'])
+    expect(busy).toBe(false)
   })
 })
 

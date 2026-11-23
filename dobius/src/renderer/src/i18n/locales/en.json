@@ -12754,7 +12754,8 @@
       "placeholderAsk": "Hold space to speak · ask “what can you do?”",
       "statusSpeaking": "Speaking…",
       "statusThinking": "Thinking…",
-      "statusWorking": "Working…"
+      "statusWorking": "Working…",
+      "statusCompacting": "Tidying memory…"
     },
     "group": {
       "deleteTitle": "Delete {{name}}?",

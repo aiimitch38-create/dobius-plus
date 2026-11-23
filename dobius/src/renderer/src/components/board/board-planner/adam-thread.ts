@@ -184,7 +184,7 @@ function failed(reason: string): NewMessage {
 /** One thread row for whatever came back from ADAM; never throws. */
 export function adamReplyMessage(
   outcome: { ok: true; result: JarvisAskResult } | { ok: false }
-): NewMessage {
+): NewMessage | null {
   if (!outcome.ok) {
     return failed(
       translate(
@@ -194,6 +194,10 @@ export function adamReplyMessage(
     )
   }
   const { result } = outcome
+  // Main holds it while ADAM tidies his memory and writes its waiting and reply rows.
+  if (result.kind === 'queued') {
+    return null
+  }
   const text = result.text.trim()
   if (result.kind === 'cancelled') {
     return {
@@ -251,5 +255,8 @@ export async function talkToAdam(input: {
   } finally {
     done()
   }
-  append(adamReplyMessage(outcome))
+  const reply = adamReplyMessage(outcome)
+  if (reply) {
+    append(reply)
+  }
 }

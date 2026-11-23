@@ -2,10 +2,12 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AdamTurnEvent } from '../../shared/speech-types'
+import type { AdamTurnEvent, JarvisAskResult } from '../../shared/speech-types'
 import { adamThreadRowOf } from './adam-thread-store'
 import {
   ADAM_BUSY_TEXT,
+  ADAM_COMPACTING_TEXT,
+  ADAM_WAITING_TEXT,
   AdamConversation,
   lookingAtOf,
   voiceMessage,
@@ -68,7 +70,7 @@ describe('AdamConversation: voice and the thread are one conversation', () => {
       { session_id: 'live-1', text: 'and in the other project?' }
     ])
     expect(request.mock.calls.filter(([method]) => method === 'session.create')).toHaveLength(1)
-    expect(events.map((e) => [e.source, e.phase, e.phase === 'asked' ? e.text : e.result.text])).toEqual([
+    expect(events.map((e) => [e.source, e.phase, e.phase === 'asked' ? e.text : e.phase === 'answered' ? e.result.text : e.phase])).toEqual([
       ['voice', 'asked', 'what is running'],
       ['voice', 'answered', 'Two consoles.'],
       ['thread', 'asked', 'and in the other project?'],
@@ -94,6 +96,133 @@ describe('AdamConversation: voice and the thread are one conversation', () => {
     const next = adam.ask('hey adam', { source: 'voice' })
     await reply('Here.', 2)
     await expect(next).resolves.toEqual({ kind: 'answer', text: 'Here.' })
+  })
+
+  it('says ADAM is tidying his memory when a message arrives during a compaction', async () => {
+    let finish: (result: { kind: 'answer'; text: string }) => void = () => {}
+    let compacting = false
+    const adam = new AdamConversation(
+      {
+        ask: () => new Promise((resolve) => (finish = resolve)),
+        isCompacting: () => compacting
+      },
+      (event) => void events.push(event)
+    )
+    const first = adam.ask('long question', { source: 'thread' })
+    await vi.waitFor(() => expect(events).toHaveLength(1))
+    compacting = true
+    await expect(adam.ask('hello?', { source: 'voice' })).resolves.toEqual({
+      kind: 'error',
+      text: ADAM_COMPACTING_TEXT
+    })
+    compacting = false
+    await expect(adam.ask('hello?', { source: 'voice' })).resolves.toEqual({
+      kind: 'error',
+      text: ADAM_BUSY_TEXT
+    })
+    finish({ kind: 'answer', text: 'Done.' })
+    await expect(first).resolves.toEqual({ kind: 'answer', text: 'Done.' })
+  })
+
+  describe('the one waiting slot while ADAM compacts', () => {
+    let finishers: ((result: JarvisAskResult) => void)[]
+    let compacting: boolean
+    let asked: string[]
+    let adam: AdamConversation
+    const phases = (): string[] =>
+      events.map((e) =>
+        e.phase === 'dropped' ? `dropped:${e.reason}` : `${e.source}:${e.phase}${e.queued ? ':q' : ''}`
+      )
+    beforeEach(() => {
+      finishers = []
+      compacting = false
+      asked = []
+      adam = new AdamConversation(
+        {
+          ask: (text) => {
+            asked.push(text)
+            return new Promise((resolve) => finishers.push(resolve))
+          },
+          isCompacting: () => compacting
+        },
+        (event) => void events.push(event)
+      )
+    })
+    // Why boxed: an async function returning a promise would wait for it.
+    const startCompactingTurn = async (
+      source: 'voice' | 'thread'
+    ): Promise<{ first: Promise<unknown> }> => {
+      const first = adam.ask('first', { source })
+      await vi.waitFor(() => expect(finishers).toHaveLength(1))
+      compacting = true
+      return { first }
+    }
+
+    it('holds a thread message while a voice turn compacts, and runs it exactly once after', async () => {
+      const { first } = await startCompactingTurn('voice')
+      await expect(adam.ask('second', { source: 'thread' })).resolves.toEqual({
+        kind: 'queued',
+        text: ADAM_WAITING_TEXT
+      })
+      // Voice is still refused, not held.
+      await expect(adam.ask('spoken', { source: 'voice' })).resolves.toEqual({
+        kind: 'error',
+        text: ADAM_COMPACTING_TEXT
+      })
+      compacting = false
+      finishers[0]({ kind: 'answer', text: 'One.' })
+      await first
+      await vi.waitFor(() => expect(finishers).toHaveLength(2))
+      finishers[1]({ kind: 'answer', text: 'Two.' })
+      await vi.waitFor(() => expect(phases()).toContain('thread:answered:q'))
+      expect(asked).toEqual(['first', 'second'])
+      expect(phases()).toEqual([
+        'voice:asked',
+        'thread:waiting:q',
+        'voice:answered',
+        'thread:answered:q'
+      ])
+      const answered = events.at(-1)!
+      expect(voiceTurnRow(answered)).toMatchObject({ role: 'assistant', text: 'Two.' })
+      expect(voiceTurnRow(events[1])).toMatchObject({ role: 'system', text: ADAM_WAITING_TEXT })
+      expect(adam.isBusy()).toBe(false)
+    })
+
+    it('keeps only the newest waiting message', async () => {
+      const { first } = await startCompactingTurn('thread')
+      await adam.ask('older', { source: 'thread' })
+      await adam.ask('newer', { source: 'thread' })
+      finishers[0]({ kind: 'answer', text: 'One.' })
+      await first
+      await vi.waitFor(() => expect(finishers).toHaveLength(2))
+      expect(asked).toEqual(['first', 'newer'])
+      expect(phases()).toContain('dropped:replaced')
+      finishers[1]({ kind: 'answer', text: 'Two.' })
+    })
+
+    it('an explicit stop clears the slot and says the message was not sent', async () => {
+      const { first } = await startCompactingTurn('thread')
+      await adam.ask('second', { source: 'thread' })
+      adam.cancel()
+      finishers[0]({ kind: 'cancelled', text: '' })
+      await first
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(asked).toEqual(['first'])
+      expect(phases()).toContain('dropped:stopped')
+      const dropped = events.find((e) => e.phase === 'dropped')!
+      expect(voiceTurnRow(dropped)).toMatchObject({ role: 'system', tone: 'error' })
+    })
+
+    it('a failed or timed-out turn clears the slot', async () => {
+      const { first } = await startCompactingTurn('thread')
+      await adam.ask('second', { source: 'thread' })
+      finishers[0]({ kind: 'error', text: 'timed out' })
+      await first
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(asked).toEqual(['first'])
+      expect(phases()).toContain('dropped:failed')
+      expect(adam.isBusy()).toBe(false)
+    })
   })
 
   it('announces a failed turn and frees ADAM for the next one', async () => {

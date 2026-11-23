@@ -12,6 +12,7 @@ import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { adamProjectDirectory } from '../adam-connection'
 import {
+  ADAM_STATUS_CHANNEL,
   ADAM_TURN_CHANNEL,
   AdamConversation,
   lookingAtOf,
@@ -83,10 +84,20 @@ function getAdamThread(): AdamThreadStore {
   return adamThread
 }
 
+// Why kept here as well as sent: a window that opens mid-compaction asks for it.
+let adamCompacting = false
+
 function getAdamVoice(): AdamHermesVoice {
   if (!adamVoice) {
     adamVoice = new AdamHermesVoice({
       sessionFile: join(getUserDataRoot(), 'adam-voice-session.json'),
+      onCompacting: (compacting) => {
+        adamCompacting = compacting
+        const host = jarvisHostWindow
+        if (host && !host.isDestroyed()) {
+          host.webContents.send(ADAM_STATUS_CHANNEL, { compacting })
+        }
+      },
       approve: async (command, description) => {
         app.focus({ steal: true })
         const { response } = await dialog.showMessageBox({
@@ -119,7 +130,7 @@ export function askAdam(text: string, options: AdamAskOptions): ReturnType<AdamC
   if (!adamConversation) {
     const broadcast = createBroadcastPort()
     adamConversation = new AdamConversation(
-      { ask: (prompt) => getAdamVoice().ask(prompt) },
+      { ask: (prompt) => getAdamVoice().ask(prompt), isCompacting: () => adamCompacting },
       async (event) => {
         // Spoken turns are in the thread before any window hears of the turn.
         const row = voiceTurnRow(event)
@@ -189,7 +200,8 @@ function createJarvisDeps(store: Store): JarvisServiceDeps {
         source: 'voice',
         said: utterance
       }),
-    cancelAgent: () => adamVoice?.cancel(),
+    // Why the whole turn, not only the voice: a stop must also drop a waiting thread message.
+    cancelAgent: cancelAdamTurn,
     lookingAt: () => lastLookingAt
   }
 }
@@ -274,6 +286,10 @@ function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.handle('jarvis:adamThreadGet', (event) =>
     trustedLiveSender(event) ? getAdamThread().get() : []
   )
+  ipcMain.removeHandler('jarvis:adamStatusGet')
+  ipcMain.handle('jarvis:adamStatusGet', (event) => ({
+    compacting: trustedLiveSender(event) ? adamCompacting : false
+  }))
   ipcMain.removeHandler('jarvis:adamThreadAppend')
   ipcMain.handle('jarvis:adamThreadAppend', async (event, raw: unknown) => {
     const row = trustedLiveSender(event) ? adamThreadRowOf(raw) : null

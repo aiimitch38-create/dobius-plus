@@ -50,6 +50,7 @@ import { BoardFocusPill } from './board-route/BoardFocusPill'
 import { BoardShortcutSheet } from './board-route/BoardShortcutSheet'
 import { BoardEmptyStart } from './board-empty/BoardEmptyStart'
 import { useBoardEmptyStart } from './board-empty/use-board-empty-start'
+import { isAdamCompacting } from './board-planner/adam-status'
 
 type PickerState = { request: BoardAgentPickerRequest; world: BoardPoint; group?: boolean }
 
@@ -164,7 +165,7 @@ export default function BoardRoute(): React.JSX.Element {
   const ptt = useBoardPushToTalk(inputRef, () => {
     const text = draftRef.current.trim()
     // Why: a spoken message waits in the box while ADAM is busy, as a typed one does.
-    if (text && !(threadBusyRef.current && !text.startsWith('@'))) {
+    if (text && !(threadBusyRef.current && !isAdamCompacting() && !text.startsWith('@'))) {
       onCommand(text)
       setDraft('')
     }

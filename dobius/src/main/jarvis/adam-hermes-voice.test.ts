@@ -2,7 +2,11 @@ import { mkdtemp, rm, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AdamHermesVoice } from './adam-hermes-voice'
+import {
+  ADAM_COMPACTION_TIMEOUT_TEXT,
+  ADAM_TURN_TIMEOUT_TEXT,
+  AdamHermesVoice
+} from './adam-hermes-voice'
 import type { AdamHermesRuntime } from './adam-hermes-runtime'
 import {
   HermesDesktopRpc,
@@ -226,6 +230,102 @@ describe('Adam Hermes voice session', () => {
       })
     )
     expect(approve).toHaveBeenCalledWith('test command', 'Review this action')
+    complete()
+    await pending
+  })
+})
+
+describe('Adam Hermes voice: context compaction', () => {
+  const status = (kind: string, text = 'x'): void =>
+    emit({ type: 'status.update', session_id: 'voice-1', payload: { kind, text } })
+  const interrupts = (): unknown[] =>
+    request.mock.calls.filter(([method]) => method === 'session.interrupt')
+
+  it('never times out or interrupts a turn while Hermes compacts, and resumes the turn budget after', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const onCompacting = vi.fn()
+    client = new AdamHermesVoice({
+      sessionFile,
+      runtime: () => runtime,
+      connect,
+      turnTimeoutMs: 1_000,
+      compactionTimeoutMs: 60_000,
+      onCompacting
+    })
+    const pending = client.ask('hello')
+    await submitted()
+    status('compacting', '📦 Preflight compression: ~98,027 tokens >= 96,000 threshold.')
+    expect(client.compacting).toBe(true)
+    expect(onCompacting).toHaveBeenLastCalledWith(true)
+    // Far past the turn budget, as the 2–3 minute summary call is.
+    await vi.advanceTimersByTimeAsync(30_000)
+    status('compacting', '🗜️ Compacting context — still summarizing…')
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(interrupts()).toHaveLength(0)
+    status('compacted', '✓ Context compaction complete — continuing turn...')
+    expect(client.compacting).toBe(false)
+    expect(onCompacting).toHaveBeenLastCalledWith(false)
+    // A fresh turn budget, not what was left before compacting.
+    await vi.advanceTimersByTimeAsync(900)
+    complete('After the tidy')
+    await expect(pending).resolves.toEqual({ kind: 'answer', text: 'After the tidy' })
+    expect(interrupts()).toHaveLength(0)
+    expect(onCompacting).toHaveBeenCalledTimes(2)
+  })
+
+  it('still times out a compaction that runs past its own budget, saying so plainly', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const onCompacting = vi.fn()
+    client = new AdamHermesVoice({
+      sessionFile,
+      runtime: () => runtime,
+      connect,
+      turnTimeoutMs: 1_000,
+      compactionTimeoutMs: 5_000,
+      onCompacting
+    })
+    const pending = client.ask('hello')
+    await submitted()
+    status('compacting')
+    await vi.advanceTimersByTimeAsync(5_001)
+    await expect(pending).resolves.toEqual({ kind: 'error', text: ADAM_COMPACTION_TIMEOUT_TEXT })
+    expect(onCompacting).toHaveBeenLastCalledWith(false)
+    vi.useRealTimers()
+    await client.close()
+    expect(interrupts()).toHaveLength(1)
+  })
+
+  it('times out an ordinary turn with plain words', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    client = new AdamHermesVoice({ sessionFile, runtime: () => runtime, connect, turnTimeoutMs: 1_000 })
+    const pending = client.ask('hello')
+    await submitted()
+    await vi.advanceTimersByTimeAsync(1_001)
+    await expect(pending).resolves.toEqual({ kind: 'error', text: ADAM_TURN_TIMEOUT_TEXT })
+  })
+
+  it('an explicit stop during compaction still interrupts the session', async () => {
+    const onCompacting = vi.fn()
+    client = new AdamHermesVoice({ sessionFile, runtime: () => runtime, connect, onCompacting })
+    const pending = client.ask('hello')
+    await submitted()
+    status('compacting')
+    client.cancel()
+    await expect(pending).resolves.toEqual({ kind: 'cancelled', text: '' })
+    await client.close()
+    expect(request).toHaveBeenCalledWith('session.interrupt', { session_id: 'voice-1' }, 1_000)
+    expect(onCompacting).toHaveBeenLastCalledWith(false)
+  })
+
+  it('ignores status lines that are not compaction, and a streamed reply ends compaction', async () => {
+    client = new AdamHermesVoice({ sessionFile, runtime: () => runtime, connect })
+    const pending = client.ask('hello')
+    await submitted()
+    status('loop', 'loop notice')
+    expect(client.compacting).toBe(false)
+    status('compacting')
+    emit({ type: 'message.delta', session_id: 'voice-1', payload: { text: 'Hi' } })
+    expect(client.compacting).toBe(false)
     complete()
     await pending
   })

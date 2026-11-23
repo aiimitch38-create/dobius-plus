@@ -12738,7 +12738,8 @@
       "placeholderAsk": "Hold space to speak · ask “what can you do?”",
       "statusSpeaking": "말하는 중…",
       "statusThinking": "생각하는 중…",
-      "statusWorking": "작업 중…"
+      "statusWorking": "작업 중…",
+      "statusCompacting": "기억 정리 중…"
     },
     "group": {
       "deleteTitle": "Delete {{name}}?",

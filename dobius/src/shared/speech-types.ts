@@ -189,6 +189,8 @@ export type JarvisAskResult =
   | { kind: 'answer'; text: string }
   | { kind: 'job'; text: string; jobId?: string }
   | { kind: 'error'; text: string }
+  /** Held in main's one waiting slot while ADAM tidies his memory; main writes its rows. */
+  | { kind: 'queued'; text: string }
 
 /** The project on Carson's screen when he started talking or typing; tells ADAM what "this project" means. */
 export type AdamLookingAt = { project: string; workspace: string; folder: string | null }
@@ -212,10 +214,17 @@ export type AdamTurnEvent = {
   turnId: string
   source: AdamTurnSource
   at: number
+  /** A message held while ADAM tidied his memory: main writes its thread rows, even for the thread. */
+  queued?: true
 } & (
   | { phase: 'asked'; text: string }
   | { phase: 'answered'; result: JarvisAskResult }
+  | { phase: 'waiting' }
+  | { phase: 'dropped'; reason: AdamDropReason }
 )
+
+/** Why a waiting message never reached ADAM. */
+export type AdamDropReason = 'replaced' | 'stopped' | 'failed'
 
 export type JarvisSpeakOutcome = {
   played: boolean

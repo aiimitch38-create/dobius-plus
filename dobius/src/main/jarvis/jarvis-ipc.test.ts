@@ -306,6 +306,44 @@ describe('Adam Hermes voice routing', () => {
   })
 })
 
+describe('an explicit stop drops the waiting thread message', () => {
+  it('⌘T / cancelAsk during a compacting voice turn clears the slot and writes the not-sent row', async () => {
+    const { store } = fakeStore(true)
+    const main = fakeWindow()
+    const frame = { name: 'main' }
+    Object.assign(main.webContents, { mainFrame: frame, isDestroyed: () => false })
+    const top = { sender: main.webContents, senderFrame: frame }
+    electron.windows = [main]
+    await register(store, main)
+    let answer: (result: { kind: 'answer'; text: string }) => void = () => {}
+    adam.ask.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+    const spoken = electron.handlers.get('jarvis:ask')?.(top, 'hello Adam') as Promise<unknown>
+    await vi.waitFor(() => expect(adam.ask).toHaveBeenCalledTimes(1))
+    const options = adam.created.mock.calls[0][0] as { onCompacting: (on: boolean) => void }
+    options.onCompacting(true)
+    await expect(
+      electron.handlers.get('jarvis:askAdamText')?.(top, 'typed while tidying', 'thread')
+    ).resolves.toMatchObject({ kind: 'queued' })
+    await electron.handlers.get('jarvis:cancelAsk')?.(top)
+    expect(adam.cancel).toHaveBeenCalledTimes(1)
+    // The Hermes turn still lands an answer (the voice cancel is mocked): nothing may drain.
+    options.onCompacting(false)
+    answer({ kind: 'answer', text: 'late' })
+    await spoken
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(adam.ask).toHaveBeenCalledTimes(1)
+    const turns = main.webContents.send.mock.calls
+      .filter(([channel]) => channel === 'jarvis:adam-turn')
+      .map(([, data]) => (data.phase === 'dropped' ? `dropped:${data.reason}` : data.phase))
+    expect(turns).toContain('waiting')
+    expect(turns).toContain('dropped:stopped')
+    const rows = (await electron.handlers.get('jarvis:adamThreadGet')?.(top)) as { text: string }[]
+    expect(rows.map((row) => row.text)).toContain(
+      'Your waiting message was not sent to ADAM because his turn was stopped. Send it again.'
+    )
+  })
+})
+
 describe('OpenAI Live session IPC', () => {
   function liveStore(voice: Record<string, unknown>): Store {
     return { getSettings: () => ({ voice }), updateSettings: vi.fn() } as unknown as Store

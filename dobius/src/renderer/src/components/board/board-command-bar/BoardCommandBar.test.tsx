@@ -14,7 +14,12 @@ import {
   publishVoiceOrbPresentation,
   setAdamVoiceHangUp
 } from '@/components/dictation/voice-orb-live-level'
-import { BoardCommandBar, type BoardCommandBarProps } from './BoardCommandBar'
+import {
+  BoardCommandBar,
+  boardCommandBarStatus,
+  type BoardCommandBarProps
+} from './BoardCommandBar'
+import { setAdamCompactingForTest } from '../board-planner/adam-status'
 import type { BoardThreadMessage } from './BoardThread'
 
 const character = vi.hoisted(() => ({ render: vi.fn() }))
@@ -348,6 +353,20 @@ describe('BoardCommandBar status', () => {
   it('shows Working while a typed command is being handled', () => {
     draw(true)
     expect(status()).toBe('Working…')
+  })
+
+  it('shows Tidying memory while Hermes compacts ADAM, ahead of Thinking, and lets a message wait', () => {
+    draw(true)
+    act(() => publishVoiceOrbPresentation({ state: 'thinking', activitySource: 'preview' }))
+    act(() => setAdamCompactingForTest(true))
+    expect(status()).toBe('Tidying memory…')
+    act(() => publishVoiceOrbPresentation({ state: 'speaking', activitySource: 'output' }))
+    expect(status()).toBe('Speaking…')
+    act(() => setAdamCompactingForTest(false))
+    act(() => publishVoiceOrbPresentation({ state: 'idle', activitySource: 'preview' }))
+    expect(status()).toBe('Working…')
+    expect(boardCommandBarStatus('idle', true, true)).toBe('Tidying memory…')
+    expect(boardCommandBarStatus('idle', false, false)).toBeNull()
   })
 
   it('shows Thinking and then Speaking for the voice turn, with the thread closed', () => {

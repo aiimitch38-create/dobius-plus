@@ -3447,6 +3447,9 @@ export type PreloadApi = {
     onAdamThread: (callback: (rows: AdamThreadRow[]) => void) => () => void
     /** Main could not save a row it wrote itself (a spoken turn). */
     onAdamThreadUnsaved: (callback: () => void) => () => void
+    /** Whether Hermes is tidying (compacting) ADAM's context inside the running turn. */
+    adamStatusGet: () => Promise<{ compacting: boolean }>
+    onAdamStatus: (callback: (status: { compacting: boolean }) => void) => () => void
     /** Tells main which project is on screen, for turns that start there (the wake word). */
     reportLookingAt: (lookingAt: AdamLookingAt | null) => Promise<void>
     /** Every accepted ADAM turn, voice or typed: the words asked, then the reply. */

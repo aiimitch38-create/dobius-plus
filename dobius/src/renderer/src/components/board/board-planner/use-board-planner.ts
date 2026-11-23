@@ -12,6 +12,7 @@ import {
   talkToAdam,
   type AdamThreadContext
 } from './adam-thread'
+import { isAdamCompacting } from './adam-status'
 import { missionReport } from './mission-report'
 import { builtInCommand } from './plan-builtin'
 import { concernText } from './plan-concern-text'
@@ -205,6 +206,12 @@ export function useBoardPlanner(input: {
       // Why checked before any await: two submits in one tick must not both reach ADAM,
       // who runs one Hermes turn at a time.
       if (running.current) {
+        // Why straight through while compacting: main holds one waiting message for
+        // ADAM (adam-conversation.ts) and writes its rows; this composer only sends it.
+        if (isAdamCompacting()) {
+          await handle(text)
+          return
+        }
         append({
           role: 'system',
           text: translate(

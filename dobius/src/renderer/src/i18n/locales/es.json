@@ -12738,7 +12738,8 @@
       "placeholderAsk": "Hold space to speak · ask “what can you do?”",
       "statusSpeaking": "Hablando…",
       "statusThinking": "Pensando…",
-      "statusWorking": "Trabajando…"
+      "statusWorking": "Trabajando…",
+      "statusCompacting": "Ordenando la memoria…"
     },
     "group": {
       "deleteTitle": "Delete {{name}}?",

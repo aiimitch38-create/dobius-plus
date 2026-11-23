@@ -25,6 +25,7 @@ import {
   type BoardCommandHistoryCursor
 } from './board-command-history'
 import { onCommandBarPrefill } from './board-command-prefill'
+import { useAdamCompacting } from '../board-planner/adam-status'
 import { BoardThread, type BoardThreadMessage } from './BoardThread'
 import { BoardVoiceCaption } from './BoardVoiceCaption'
 
@@ -50,10 +51,15 @@ export type BoardCommandBarProps = {
 /** What ADAM is doing, shown beside the input so it reads with the thread closed. */
 export function boardCommandBarStatus(
   voiceState: ReturnType<typeof getVoiceOrbPresentation>['state'],
-  busy: boolean
+  busy: boolean,
+  compacting = false
 ): string | null {
   if (voiceState === 'speaking') {
     return translate('board.commandBar.statusSpeaking', 'Speaking…')
+  }
+  // Why before thinking: a compaction is the slow part of the turn, and says why he is quiet.
+  if (compacting) {
+    return translate('board.commandBar.statusCompacting', 'Tidying memory…')
   }
   if (voiceState === 'thinking') {
     return translate('board.commandBar.statusThinking', 'Thinking…')
@@ -85,7 +91,8 @@ export function BoardCommandBar({
     subscribeVoiceOrbPresentation,
     () => getVoiceOrbPresentation().state
   )
-  const status = boardCommandBarStatus(voiceState, busy)
+  const compacting = useAdamCompacting()
+  const status = boardCommandBarStatus(voiceState, busy, compacting)
   // Why: Esc folds the thread like the other board panels, but not while a menu
   // or dialog is stacked on top (that one takes the Esc).
   useEffect(() => {
@@ -186,7 +193,8 @@ export function BoardCommandBar({
   const adamAwake = useAppStore((s) => s.adamAwake)
   const text = draft.trim()
   // Why "@" passes: an order typed straight at a console never waits on ADAM.
-  const blocked = busy && !text.startsWith('@')
+  // While he tidies his memory a message may be sent: it waits for him (use-board-planner).
+  const blocked = busy && !compacting && !text.startsWith('@')
   const submit = (): void => {
     if (!text || blocked) {
       return
