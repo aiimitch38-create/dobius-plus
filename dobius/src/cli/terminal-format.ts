@@ -117,7 +117,67 @@ export function formatTerminalRead(result: { terminal: RuntimeTerminalRead }): s
     ...(terminal.truncated ? ['warning: older output is no longer retained'] : []),
     ...(limitedWarning ? [limitedWarning] : [])
   ]
-  return [...header, '', ...terminal.tail].join('\n')
+  return [
+    ...header,
+    '',
+    ...terminal.tail,
+    ...formatTerminalScreenSection(terminal.screen),
+    ...formatTerminalTranscriptSection(terminal.transcript)
+  ].join('\n')
+}
+
+function formatTerminalScreenSection(screen: RuntimeTerminalRead['screen']): string[] {
+  if (!screen) {
+    return []
+  }
+  if (!screen.available) {
+    return ['', `--- screen: unavailable (${screen.reason}) ---`]
+  }
+  const notes = [
+    `size: ${screen.cols}x${screen.rows}${screen.alternateScreen ? ' (alternate screen)' : ''}`,
+    `scrollback rows retained: ${screen.scrollbackRowsRetained} of ${screen.scrollbackCapacity}`,
+    ...(screen.limited ? ['warning: more retained scrollback exists; raise --limit'] : []),
+    ...(screen.scrollbackMayBeEvicted
+      ? ['warning: scrollback is at capacity; older rows have been evicted']
+      : []),
+    ...(screen.historyIncomplete ? [`warning: ${screen.historyIncomplete}`] : [])
+  ]
+  return [
+    '',
+    '--- scrollback ---',
+    ...notes,
+    '',
+    ...screen.scrollback,
+    '',
+    '--- screen ---',
+    ...screen.screen
+  ]
+}
+
+function formatTerminalTranscriptSection(transcript: RuntimeTerminalRead['transcript']): string[] {
+  if (!transcript) {
+    return []
+  }
+  if (!transcript.available) {
+    return ['', `--- transcript: unavailable (${transcript.reason}) ---`]
+  }
+  const lines = [
+    '',
+    `--- transcript (${transcript.agent}${transcript.sessionId ? ` ${transcript.sessionId}` : ''}) ---`,
+    `path: ${transcript.path}`,
+    ...(transcript.olderMessagesOmitted ? ['note: older messages omitted'] : [])
+  ]
+  for (const message of transcript.messages) {
+    lines.push(
+      '',
+      `[${message.role}]${message.clipped ? ` (clipped from ${message.chars} chars)` : ''}`
+    )
+    lines.push(message.text)
+  }
+  if (transcript.messages.length === 0) {
+    lines.push('', '(no text messages found in the scanned part of the transcript)')
+  }
+  return lines
 }
 
 function formatTerminalReadLimitedWarning(terminal: RuntimeTerminalRead): string | null {

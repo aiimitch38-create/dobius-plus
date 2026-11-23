@@ -207,17 +207,30 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['terminal', 'read'],
     summary: 'Read bounded terminal output',
-    usage: 'dobius terminal read [--terminal <handle>] [--cursor <n>] [--limit <n>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'terminal', 'cursor', 'limit'],
+    usage:
+      'dobius terminal read [--terminal <handle>] [--cursor <n>] [--limit <n>] [--screen] [--transcript] [--transcript-limit <n>] [--json]',
+    allowedFlags: [
+      ...GLOBAL_FLAGS,
+      'terminal',
+      'cursor',
+      'limit',
+      'screen',
+      'transcript',
+      'transcript-limit'
+    ],
     notes: [
       'Omit --terminal to target the active terminal in the current worktree.',
       'Use --cursor with the nextCursor value from a previous read to get only new output since that read.',
       'Use --limit to request more retained lines for long agent responses; output reports oldestCursor when older lines were dropped.',
-      'Useful for capturing the response to a command: read before sending, then read --cursor <prev> after waiting.'
+      'Useful for capturing the response to a command: read before sending, then read --cursor <prev> after waiting.',
+      'The default output is a raw line log of the PTY stream. Full-screen agent TUIs (Claude Code, Codex) redraw in place, so that log can collapse to a few status rows.',
+      '--screen adds what the terminal actually shows: the rendered screen plus retained scrollback (up to --limit lines), with redraws resolved. It reports when scrollback was evicted or never captured.',
+      "--transcript adds the agent's recent user/assistant text messages from its own session transcript (default 10, max 200 via --transcript-limit). Tool calls, tool output and reasoning are excluded. It says why when no transcript is known."
     ],
     examples: [
       'dobius terminal read --json',
-      'dobius terminal read --terminal term_abc123 --cursor 42 --limit 1000 --json'
+      'dobius terminal read --terminal term_abc123 --cursor 42 --limit 1000 --json',
+      'dobius terminal read --terminal term_abc123 --screen --transcript --limit 200 --json'
     ]
   },
   {

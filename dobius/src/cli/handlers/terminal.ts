@@ -74,10 +74,15 @@ export const TERMINAL_HANDLERS: Record<string, CommandHandler> = {
     if (cursorFlag !== undefined && cursor === undefined) {
       throw new RuntimeClientError('invalid_argument', '--cursor must be a non-negative integer')
     }
+    const transcriptLimit = getOptionalPositiveIntegerFlag(flags, 'transcript-limit')
+    const transcript = flags.get('transcript') === true || transcriptLimit !== undefined
     const result = await client.call<{ terminal: RuntimeTerminalRead }>('terminal.read', {
       terminal: await getTerminalHandle(flags, cwd, client),
       ...(cursor !== undefined ? { cursor } : {}),
-      limit: getOptionalPositiveIntegerFlag(flags, 'limit')
+      limit: getOptionalPositiveIntegerFlag(flags, 'limit'),
+      ...(flags.get('screen') === true ? { screen: true } : {}),
+      ...(transcript ? { transcript: true } : {}),
+      ...(transcriptLimit !== undefined ? { transcriptLimit } : {})
     })
     printResult(result, json, formatTerminalRead)
   },

@@ -455,7 +455,81 @@ export type RuntimeTerminalRead = {
   nextCursor: string | null
   latestCursor?: string
   returnedLineCount?: number
+  /** Present only when the read asked for `screen`. Rendered terminal model;
+   *  `tail` above stays the raw line log for backward compatibility. */
+  screen?: RuntimeTerminalScreenRead
+  /** Present only when the read asked for `transcript`. */
+  transcript?: RuntimeTerminalTranscriptRead
 }
+
+/** What the terminal shows, resolved through a headless xterm mirror fed with
+ *  the same PTY bytes as the visible pane. TUI redraws (CR, cursor moves,
+ *  line/screen erases) are applied, so spinner frames do not pile up. */
+export type RuntimeTerminalScreenRead =
+  | {
+      available: true
+      source: 'headless-emulator'
+      cols: number
+      rows: number
+      /** True while a full-screen TUI owns the alternate screen. Its scrollback
+       *  is then empty by definition; earlier shell output sits behind it. */
+      alternateScreen: boolean
+      /** Older retained logical lines, oldest first. Soft-wrapped rows are rejoined. */
+      scrollback: string[]
+      /** Visible screen, top to bottom, trailing blank rows below the content trimmed. */
+      screen: string[]
+      /** More retained scrollback exists than was returned (raise --limit). */
+      limited: boolean
+      /** Rows the mirror currently retains before the visible screen. */
+      scrollbackRowsRetained: number
+      /** Mirror scrollback capacity in rows. Rows older than this are evicted. */
+      scrollbackCapacity: number
+      /** The mirror is at capacity, so older rows have very likely been evicted. */
+      scrollbackMayBeEvicted: boolean
+      /** Why history before some point is missing even though capacity allows it. */
+      historyIncomplete?: string
+    }
+  | {
+      available: false
+      source: 'headless-emulator'
+      reason: string
+    }
+
+export type RuntimeTerminalTranscriptMessage = {
+  role: 'user' | 'assistant'
+  text: string
+  /** Epoch ms, or null when the record carried no timestamp. */
+  timestamp: number | null
+  /** The text was shortened for the read; `chars` is the full length. */
+  clipped: boolean
+  chars: number
+}
+
+/** The agent's own conversation log (Claude Code / Codex JSONL), which is the
+ *  reliable source for what the agent said; the screen only shows what fits. */
+export type RuntimeTerminalTranscriptRead =
+  | {
+      available: true
+      source: 'transcript'
+      agent: string
+      sessionId: string | null
+      path: string
+      /** Most recent text messages, oldest first. Tool calls/results and
+       *  reasoning are excluded. */
+      messages: RuntimeTerminalTranscriptMessage[]
+      /** Older messages exist (in the file or beyond the scanned tail window). */
+      olderMessagesOmitted: boolean
+      fileBytes: number
+      scannedBytes: number
+    }
+  | {
+      available: false
+      source: 'transcript'
+      reason: string
+      agent?: string
+      sessionId?: string | null
+      path?: string
+    }
 
 export type RuntimeTerminalRename = {
   handle: string

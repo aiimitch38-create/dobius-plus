@@ -6,7 +6,7 @@ import {
   defineStreamingMethod,
   type RpcAnyMethod
 } from '../core'
-import { OptionalFiniteNumber, OptionalString, requiredString } from '../schemas'
+import { OptionalBoolean, OptionalFiniteNumber, OptionalString, requiredString } from '../schemas'
 import type { DriverState, DobiusRuntimeService } from '../../dobius-runtime'
 import {
   TerminalStreamOpcode,
@@ -773,7 +773,12 @@ const TerminalRead = TerminalHandle.extend({
         })
     )
     .optional(),
-  limit: OptionalFiniteNumber
+  limit: OptionalFiniteNumber,
+  // Why opt-in: `tail` keeps its raw-line-log meaning for existing callers;
+  // these add the rendered screen and the agent transcript as separate fields.
+  screen: OptionalBoolean,
+  transcript: OptionalBoolean,
+  transcriptLimit: OptionalFiniteNumber
 })
 
 // Why: the legacy handler allowed `title: string | null` and rejected every
@@ -1027,7 +1032,10 @@ export const TERMINAL_METHODS: RpcAnyMethod[] = [
     handler: async (params, { runtime }) => ({
       terminal: await runtime.readTerminal(params.terminal, {
         cursor: params.cursor,
-        limit: params.limit
+        limit: params.limit,
+        ...(params.screen ? { screen: true } : {}),
+        ...(params.transcript ? { transcript: true } : {}),
+        ...(params.transcriptLimit !== undefined ? { transcriptLimit: params.transcriptLimit } : {})
       })
     })
   }),

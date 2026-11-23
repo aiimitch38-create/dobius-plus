@@ -6003,9 +6003,10 @@ describe('DobiusRuntimeService', () => {
       scrollbackRows: expect.any(Number),
       altScreenForcesZeroRows: true
     })
-    await expect(
-      parseHeadlessSnapshotLines(snapshot!, { cols: 80, rows: 24 })
-    ).resolves.toEqual(['restored scrollback', 'agent reply'])
+    await expect(parseHeadlessSnapshotLines(snapshot!, { cols: 80, rows: 24 })).resolves.toEqual([
+      'restored scrollback',
+      'agent reply'
+    ])
 
     // Later live output lands on top of the seed, and the seed runs only once.
     runtime.onPtyData('pty-1', 'more output\r\n', 200)
@@ -11108,7 +11109,11 @@ describe('DobiusRuntimeService', () => {
 
   it('isCursorAgentTerminal uses the push-on-idle Cursor titles (board: relay skips Enter)', async () => {
     const runtime = new DobiusRuntimeService(store)
-    runtime.setPtyController({ write: vi.fn().mockReturnValue(true), kill: vi.fn(), getForegroundProcess: async () => null })
+    runtime.setPtyController({
+      write: vi.fn().mockReturnValue(true),
+      kill: vi.fn(),
+      getForegroundProcess: async () => null
+    })
     syncSinglePty(runtime)
     const [terminal] = (await runtime.listTerminals()).terminals
     expect(runtime.isCursorAgentTerminal(terminal.handle)).toBe(false)
@@ -23147,12 +23152,14 @@ describe('DobiusRuntimeService', () => {
       realpath: vi.fn().mockResolvedValue('/remote/mobile-codex-draft'),
       // Real missing-file shape: relay stat() throws ENOENT, relay dispatcher
       // forwards err.code, ssh-channel-multiplexer sets it on the rejected Error.
-      readFile: vi.fn().mockRejectedValue(
-        Object.assign(
-          new Error("ENOENT: no such file or directory, stat '/home/dev/.codex/config.toml'"),
-          { code: 'ENOENT' }
-        )
-      ),
+      readFile: vi
+        .fn()
+        .mockRejectedValue(
+          Object.assign(
+            new Error("ENOENT: no such file or directory, stat '/home/dev/.codex/config.toml'"),
+            { code: 'ENOENT' }
+          )
+        ),
       createDir: vi.fn().mockResolvedValue(undefined),
       writeFile: vi.fn().mockResolvedValue(undefined)
     }
@@ -23267,12 +23274,14 @@ describe('DobiusRuntimeService', () => {
       realpath: vi.fn().mockResolvedValue('/remote/mobile-codex-command'),
       // Real missing-file shape: relay stat() throws ENOENT, relay dispatcher
       // forwards err.code, ssh-channel-multiplexer sets it on the rejected Error.
-      readFile: vi.fn().mockRejectedValue(
-        Object.assign(
-          new Error("ENOENT: no such file or directory, stat '/home/dev/.codex/config.toml'"),
-          { code: 'ENOENT' }
-        )
-      ),
+      readFile: vi
+        .fn()
+        .mockRejectedValue(
+          Object.assign(
+            new Error("ENOENT: no such file or directory, stat '/home/dev/.codex/config.toml'"),
+            { code: 'ENOENT' }
+          )
+        ),
       createDir: vi.fn().mockResolvedValue(undefined),
       writeFile: vi.fn().mockResolvedValue(undefined)
     }
@@ -26325,5 +26334,153 @@ describe('DobiusRuntimeService', () => {
       // The pre-daemon provider must not have been consulted for the kill.
       expect(preDaemonProvider.shutdown).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('readTerminal screen + transcript views', () => {
+  const leafId = '11111111-1111-4111-8111-111111111111'
+  const paneKey = makePaneKey('tab-1', leafId)
+  let transcriptDir: string | null = null
+
+  afterEach(async () => {
+    if (transcriptDir) {
+      await rm(transcriptDir, { recursive: true, force: true })
+      transcriptDir = null
+    }
+  })
+
+  function createRuntime(snapshot: () => unknown[] = () => []): DobiusRuntimeService {
+    const runtime = new DobiusRuntimeService(store, undefined, {
+      getAgentStatusSnapshot: snapshot as never
+    })
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, {
+      tabs: [
+        {
+          tabId: 'tab-1',
+          worktreeId: TEST_WORKTREE_ID,
+          title: 'Claude',
+          activeLeafId: leafId,
+          layout: null
+        }
+      ],
+      leaves: [
+        {
+          tabId: 'tab-1',
+          worktreeId: TEST_WORKTREE_ID,
+          leafId,
+          paneRuntimeId: 1,
+          ptyId: 'pty-1'
+        }
+      ]
+    })
+    return runtime
+  }
+
+  function claudeRedrawStream(): string {
+    let out = ''
+    for (let index = 1; index <= 30; index += 1) {
+      out += `⏺ answer line ${index}\r\n`
+    }
+    out += '✻ Waddling… (1s)\r\n\r\n│ > Build ADAM quick hands'
+    // Why this shape: a differential TUI renderer jumps back to the top of its
+    // live region and walks rows with cursor-down instead of newlines. The raw
+    // line log treats cursor-up as "delete everything below" and ignores
+    // cursor-down, so rows merge and history vanishes.
+    for (let seconds = 2; seconds <= 43; seconds += 1) {
+      out +=
+        `\u001b[2A\r\u001b[2K✻ Waddling… (${seconds}s)` +
+        `\u001b[1B\r\u001b[2K` +
+        `\u001b[1B\r\u001b[2K│ > Build ADAM quick hands`
+    }
+    return out
+  }
+
+  it('keeps tail unchanged by default and adds the rendered screen on request', async () => {
+    const runtime = createRuntime()
+    runtime.onPtyData('pty-1', claudeRedrawStream(), 1)
+    const [terminal] = (await runtime.listTerminals()).terminals
+
+    const plain = await runtime.readTerminal(terminal.handle, { limit: 60 })
+    expect(plain.screen).toBeUndefined()
+    expect(plain.transcript).toBeUndefined()
+
+    const read = await runtime.readTerminal(terminal.handle, { limit: 60, screen: true })
+    expect(read.tail).toEqual(plain.tail)
+    expect(read.screen).toMatchObject({ available: true, source: 'headless-emulator' })
+    if (!read.screen?.available) {
+      throw new Error('expected screen')
+    }
+    const all = [...read.screen.scrollback, ...read.screen.screen]
+    expect(all).toEqual([
+      ...Array.from({ length: 30 }, (_, index) => `⏺ answer line ${index + 1}`),
+      '✻ Waddling… (43s)',
+      '',
+      '│ > Build ADAM quick hands'
+    ])
+    // The raw line log cannot model these redraws (see root cause above).
+    expect(plain.tail).not.toEqual(all)
+    // Documents the reported bug: 32 lines were counted but the line log keeps
+    // only the last redraw row, so a 60-line read returns almost nothing.
+    expect(plain.tail.length).toBeLessThan(5)
+    expect(plain.latestCursor).toBe('32')
+  })
+
+  it('returns recent transcript messages for the agent session bound to the pane', async () => {
+    transcriptDir = await mkdtemp(join(tmpdir(), 'runtime-terminal-transcript-'))
+    const transcriptPath = join(transcriptDir, 'abc.jsonl')
+    await writeFile(
+      transcriptPath,
+      [
+        JSON.stringify({ type: 'user', message: { content: 'status?' } }),
+        JSON.stringify({
+          type: 'assistant',
+          message: { id: 'm1', content: [{ type: 'text', text: 'All green.' }] }
+        })
+      ].join('\n')
+    )
+    const runtime = createRuntime(() => [
+      {
+        paneKey,
+        state: 'done',
+        prompt: '',
+        agentType: 'claude',
+        connectionId: null,
+        receivedAt: Date.now(),
+        stateStartedAt: Date.now(),
+        tabId: 'tab-1',
+        worktreeId: TEST_WORKTREE_ID,
+        providerSession: { key: 'session_id', id: 'abc', transcriptPath }
+      }
+    ])
+    runtime.onPtyData('pty-1', 'hello\r\n', 1)
+    const [terminal] = (await runtime.listTerminals()).terminals
+    const read = await runtime.readTerminal(terminal.handle, { transcript: true })
+    expect(read.transcript).toMatchObject({
+      available: true,
+      agent: 'claude',
+      sessionId: 'abc',
+      path: transcriptPath,
+      messages: [
+        { role: 'user', text: 'status?' },
+        { role: 'assistant', text: 'All green.' }
+      ]
+    })
+  })
+
+  it('says why when no transcript is known for the terminal', async () => {
+    const runtime = createRuntime()
+    runtime.onPtyData('pty-1', 'hello\r\n', 1)
+    const [terminal] = (await runtime.listTerminals()).terminals
+    const read = await runtime.readTerminal(terminal.handle, { transcript: true })
+    expect(read.transcript).toMatchObject({ available: false, source: 'transcript' })
+    expect(read.transcript && !read.transcript.available && read.transcript.reason).toMatch(
+      /no agent session/
+    )
   })
 })

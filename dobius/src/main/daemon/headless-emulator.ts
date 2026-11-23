@@ -198,6 +198,42 @@ export class HeadlessEmulator {
     return lines
   }
 
+  /** The newest `maxRows` rendered rows of the active buffer (oldest first),
+   *  each with xterm's soft-wrap flag so readers can rejoin wrapped rows.
+   *  Unlike the raw PTY line log, cursor moves, erases and in-place redraws are
+   *  already resolved here. Row indexes are absolute buffer indexes: rows below
+   *  `firstScreenRow` are scrollback, the rest are the visible screen. */
+  getRenderedRows(maxRows: number): {
+    rows: { text: string; wrapped: boolean }[]
+    firstReturnedRow: number
+    totalRows: number
+    firstScreenRow: number
+    cursorRow: number
+    cols: number
+    screenRows: number
+    alternateScreen: boolean
+    scrollbackCapacity: number
+  } {
+    const buffer = this.terminal.buffer.active
+    const start = Math.max(0, buffer.length - Math.max(1, Math.floor(maxRows)))
+    const rows: { text: string; wrapped: boolean }[] = []
+    for (let index = start; index < buffer.length; index += 1) {
+      const line = buffer.getLine(index)
+      rows.push({ text: line?.translateToString(true) ?? '', wrapped: line?.isWrapped ?? false })
+    }
+    return {
+      rows,
+      firstReturnedRow: start,
+      totalRows: buffer.length,
+      firstScreenRow: buffer.baseY,
+      cursorRow: buffer.baseY + buffer.cursorY,
+      cols: this.terminal.cols,
+      screenRows: this.terminal.rows,
+      alternateScreen: buffer.type === 'alternate',
+      scrollbackCapacity: this.terminal.options.scrollback ?? DEFAULT_SCROLLBACK
+    }
+  }
+
   getCwd(): string | null {
     return this.cwd
   }

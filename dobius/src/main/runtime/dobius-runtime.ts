@@ -131,10 +131,7 @@ import type {
 } from '../../shared/runtime-client-events'
 import type { AgentCursorEvent } from '../../shared/agent-cursor'
 import { toRuntimeActivateWorktreeEvent } from '../../shared/runtime-client-events'
-import type {
-  BoardCardActionReply,
-  BoardCardActionRequest
-} from '../../shared/board-card-actions'
+import type { BoardCardActionReply, BoardCardActionRequest } from '../../shared/board-card-actions'
 import type { TabSnoozeCliReply, TabSnoozeCliRequest } from '../../shared/tab-snooze-cli'
 import type {
   LinearCurrentIssueContextHints,
@@ -263,6 +260,8 @@ import type {
   RuntimeGraphStatus,
   RuntimeRepoSearchRefs,
   RuntimeTerminalRead,
+  RuntimeTerminalScreenRead,
+  RuntimeTerminalTranscriptRead,
   RuntimeTerminalRename,
   RuntimeTerminalAgentStatus,
   RuntimeTerminalSend,
@@ -682,6 +681,9 @@ import { invalidateAuthorizedRootsCache } from '../ipc/filesystem-auth'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import { closeLocalWatcherForWorktreePath } from '../ipc/filesystem-watcher'
 import { HeadlessEmulator, type HeadlessEmulatorOptions } from '../daemon/headless-emulator'
+import { buildRenderedScreenRead, screenReadRowBudget } from './terminal-read-views'
+import { readAgentTranscriptTail } from './terminal-transcript-read'
+import { resolveSessionFilePath } from '../native-chat/session-file-resolver'
 import type { TerminalSnapshot } from '../daemon/types'
 import { killAllProcessesForWorktree } from './worktree-teardown'
 import { MOBILE_SUBSCRIBE_SCROLLBACK_ROWS } from './scrollback-limits'
@@ -6272,7 +6274,11 @@ export class DobiusRuntimeService {
     let cached = state.snapshotCache
     if (!cached || cached.key !== cacheKey) {
       const snapshot = state.emulator.getSnapshot({ scrollbackRows })
-      cached = { key: cacheKey, snapshot, data: snapshot.rehydrateSequences + snapshot.snapshotAnsi }
+      cached = {
+        key: cacheKey,
+        snapshot,
+        data: snapshot.rehydrateSequences + snapshot.snapshotAnsi
+      }
       state.snapshotCache = cached
     }
     const { snapshot, data } = cached
@@ -8812,26 +8818,169 @@ export class DobiusRuntimeService {
 
   async readTerminal(
     handle: string,
-    opts: { cursor?: number; limit?: number } = {}
+    opts: {
+      cursor?: number
+      limit?: number
+      /** Also return the rendered screen + scrollback (TUI redraws resolved). */
+      screen?: boolean
+      /** Also return the agent's recent transcript messages, when one is known. */
+      transcript?: boolean
+      transcriptLimit?: number
+    } = {}
   ): Promise<RuntimeTerminalRead> {
     const pty = this.getLivePtyForHandle(handle)
+    let ptyId: string | null
+    let read: RuntimeTerminalRead
     if (pty) {
-      const read = this.readPtyTerminal(handle, pty.pty, opts)
-      return this.withVisibleSnapshotFallback(pty.pty.ptyId, read, opts)
+      ptyId = pty.pty.ptyId
+      read = await this.withVisibleSnapshotFallback(
+        pty.pty.ptyId,
+        this.readPtyTerminal(handle, pty.pty, opts),
+        opts
+      )
+    } else {
+      const { leaf } = this.getLiveLeafForHandle(handle)
+      ptyId = leaf.ptyId
+      const tailRead = readTerminalTail({
+        handle,
+        status: getTerminalState(leaf),
+        completedLines: leaf.tailBuffer,
+        partialLine: leaf.tailPartialLine,
+        completedLineCount: leaf.tailLinesTotal,
+        bufferTruncated: leaf.tailTruncated,
+        cursor: opts.cursor,
+        limit: opts.limit
+      })
+      read = leaf.ptyId
+        ? await this.withVisibleSnapshotFallback(leaf.ptyId, tailRead, opts)
+        : tailRead
     }
+    if (!opts.screen && !opts.transcript) {
+      return read
+    }
+    const [screen, transcript] = await Promise.all([
+      opts.screen ? this.readTerminalRenderedScreen(ptyId, opts.limit) : undefined,
+      opts.transcript ? this.readTerminalAgentTranscript(handle, opts.transcriptLimit) : undefined
+    ])
+    return {
+      ...read,
+      ...(screen ? { screen } : {}),
+      ...(transcript ? { transcript } : {})
+    }
+  }
 
-    const { leaf } = this.getLiveLeafForHandle(handle)
-    const read = readTerminalTail({
-      handle,
-      status: getTerminalState(leaf),
-      completedLines: leaf.tailBuffer,
-      partialLine: leaf.tailPartialLine,
-      completedLineCount: leaf.tailLinesTotal,
-      bufferTruncated: leaf.tailTruncated,
-      cursor: opts.cursor,
-      limit: opts.limit
+  // Why: the raw `tail` log cannot model a full-screen redraw (cursor-up wipes
+  // the rows below it, absolute moves are ignored), so Claude Code collapses to
+  // a few merged status rows. The headless mirror already receives every PTY
+  // byte for mobile snapshots; reading its buffer gives the true screen.
+  private async readTerminalRenderedScreen(
+    ptyId: string | null,
+    limit: number | undefined
+  ): Promise<RuntimeTerminalScreenRead> {
+    if (!ptyId) {
+      return {
+        available: false,
+        source: 'headless-emulator',
+        reason: 'terminal has no PTY attached'
+      }
+    }
+    const state = this.headlessTerminals.get(ptyId)
+    if (!state) {
+      return {
+        available: false,
+        source: 'headless-emulator',
+        reason: 'no rendered mirror for this terminal yet (no output since Dobius+ started)'
+      }
+    }
+    if (state.awaitingRendererHydration) {
+      this.maybeHydrateHeadlessFromRenderer(ptyId)
+    }
+    try {
+      await state.writeChain
+      const rendered = state.emulator.getRenderedRows(screenReadRowBudget(limit))
+      return buildRenderedScreenRead(rendered, {
+        limit,
+        historyIncomplete: state.awaitingRendererHydration
+          ? 'mirror holds only output received since Dobius+ began tracking this PTY; earlier output was not seeded'
+          : undefined
+      })
+    } catch (err) {
+      return {
+        available: false,
+        source: 'headless-emulator',
+        reason: `rendered mirror unreadable: ${err instanceof Error ? err.message : String(err)}`
+      }
+    }
+  }
+
+  private findAgentSessionForTerminalHandle(handle: string): {
+    agent: string
+    sessionId: string | null
+    transcriptPath: string | null
+  } | null {
+    const paneKey = this.getPaneKeyForTerminalHandle(handle)
+    let best: { agent: string; sessionId: string | null; transcriptPath: string | null } | null =
+      null
+    let bestAt = -1
+    for (const entry of this.getAgentStatusSnapshotFn?.() ?? []) {
+      if (entry.terminalHandle !== handle && (!paneKey || entry.paneKey !== paneKey)) {
+        continue
+      }
+      const session = entry.providerSession
+      if (!session || !entry.agentType || entry.receivedAt < bestAt) {
+        continue
+      }
+      bestAt = entry.receivedAt
+      best = {
+        agent: entry.agentType,
+        sessionId: session.id || null,
+        transcriptPath: session.transcriptPath ?? null
+      }
+    }
+    return best
+  }
+
+  private async readTerminalAgentTranscript(
+    handle: string,
+    limit: number | undefined
+  ): Promise<RuntimeTerminalTranscriptRead> {
+    const session = this.findAgentSessionForTerminalHandle(handle)
+    if (!session) {
+      return {
+        available: false,
+        source: 'transcript',
+        reason:
+          'no agent session is known for this terminal (no agent hook has reported a session id for it)'
+      }
+    }
+    if (session.agent !== 'claude' && session.agent !== 'codex') {
+      return {
+        available: false,
+        source: 'transcript',
+        agent: session.agent,
+        sessionId: session.sessionId,
+        reason: `transcript reading is not supported for agent "${session.agent}"`
+      }
+    }
+    const path = await resolveSessionFilePath(session.agent, session.sessionId ?? '', {
+      transcriptPath: session.transcriptPath ?? undefined
     })
-    return leaf.ptyId ? this.withVisibleSnapshotFallback(leaf.ptyId, read, opts) : read
+    if (!path) {
+      return {
+        available: false,
+        source: 'transcript',
+        agent: session.agent,
+        sessionId: session.sessionId,
+        ...(session.transcriptPath ? { path: session.transcriptPath } : {}),
+        reason: 'transcript file not found on this host'
+      }
+    }
+    return readAgentTranscriptTail({
+      agent: session.agent,
+      path,
+      sessionId: session.sessionId,
+      limit
+    })
   }
 
   async sendTerminal(
@@ -12347,7 +12496,8 @@ export class DobiusRuntimeService {
       return {
         ...detectedWorktree,
         visible: true,
-        ownership: detectedWorktree.ownership === 'dobius-managed' ? 'dobius-managed' : 'unknown-legacy'
+        ownership:
+          detectedWorktree.ownership === 'dobius-managed' ? 'dobius-managed' : 'unknown-legacy'
       } satisfies DetectedWorktree
     })
     return {
@@ -21475,7 +21625,9 @@ export class DobiusRuntimeService {
           'linear_invalid_parent',
           'The reply target is not a comment on this issue.',
           {
-            nextSteps: ['Run `dobius linear issue <id> --comments --json` to list valid comment ids.']
+            nextSteps: [
+              'Run `dobius linear issue <id> --comments --json` to list valid comment ids.'
+            ]
           }
         )
       }
