@@ -23,7 +23,7 @@ import { AdamHermesVoice } from './adam-hermes-voice'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
 import { registerLiveVoiceIpc } from './live-voice-ipc'
-import { createRuntimeQuickHands, type QuickHandsRuntime } from './live-voice-quick-hands'
+import { createRuntimeQuickHands, type QuickHandsRuntime } from './live-voice-quick-hands-runtime'
 
 export { forceEndLiveCallForTest, getActiveLiveSessionForTest } from './live-voice-ipc'
 import { migrateElevenLabsKeyOutOfSettings, resolveElevenLabsApiKey } from './elevenlabs-key-store'

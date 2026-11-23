@@ -3,28 +3,38 @@
 // patterns: a request that only looks simple must still reach ADAM, so every
 // doubt (odd phrasing, no terminal or several terminals by that name) returns
 // null and the request goes to him unchanged. Nothing here closes, switches
-// or changes settings; the only write is typing text the request spelled out.
-import { checkExecutionAdmission } from '../agents/execution-gate'
-import type { RuntimeTerminalRead, RuntimeTerminalSummary } from '../../shared/runtime-types'
-import { usageSummaryForRuntime } from '../ipc/usage-access'
+// or changes settings, and nothing is ever submitted: the only write is typing
+// text the request spelled out, and Enter is never pressed.
 
 export type QuickTerminal = { handle: string; name: string }
+export type QuickTerminalList = { terminals: QuickTerminal[]; truncated: boolean }
+
+/** Thrown when nothing reached the terminal: ADAM may take the request instead. */
+export class QuickHandRefused extends Error {}
+/** Thrown when the call ended before anything reached the terminal. */
+export class QuickHandCancelled extends Error {}
 
 export type QuickHandsDeps = {
-  listTerminals: () => Promise<QuickTerminal[]>
-  /** Types the text; presses Enter only when `enter` is true. */
-  typeInto: (handle: string, text: string, enter: boolean) => Promise<void>
+  listTerminals: () => Promise<QuickTerminalList>
+  /**
+   * Types the text and never presses Enter. Throws QuickHandRefused or
+   * QuickHandCancelled when nothing was written; any other error means part
+   * of the text may have been written.
+   */
+  typeInto: (handle: string, text: string, isCurrent: () => boolean) => Promise<void>
   /** The terminal's most recent output lines, oldest first. */
   readTail: (handle: string) => Promise<string[]>
   /** Claude's estimated spend over the last 7 days from the local usage scan; null when unknown. */
   weekUsage?: () => Promise<{ costUsd: number; sessions: number } | null>
 }
 
-export type QuickHandResult = { name: string; speak: string }
+export type QuickHandResult =
+  | { name: string; speak: string; cancelled?: false }
+  | { name: string; speak: ''; cancelled: true }
 
 export type QuickIntent =
   | { hand: 'list-terminals' }
-  | { hand: 'type'; text: string; target: string; enter: boolean }
+  | { hand: 'type'; text: string; target: string }
   | { hand: 'read-terminal'; target: string; exact: boolean }
   | { hand: 'usage'; today: boolean }
 
@@ -53,16 +63,31 @@ const NOT_A_NAME = new Set([
   'the tab'
 ])
 
-/** Lowercased, without a leading wake word or politeness and without end punctuation. */
-export function normalizeRequest(request: string): string {
-  let text = request.trim().replace(/\s+/g, ' ')
-  text = text.replace(/[.!?]+$/, '').trim()
-  const lead = /^(?:(?:hey|ok|okay)\s+adam|adam|hey|ok|okay|so|please|can you|could you|would you|will you)\s*,?\s+/i
-  for (let i = 0; i < 4 && lead.test(text); i += 1) {
-    text = text.replace(lead, '')
+const LEAD =
+  /^(?:(?:hey|ok|okay)\s+adam|adam|hey|ok|okay|so|please|can you|could you|would you|will you)\s*,?\s+/i
+const TRAIL = /(?:,?\s+(?:please|for me|thanks|thank you))?[.!?]*$/i
+
+/**
+ * The request without a leading wake word or politeness and without end
+ * punctuation, as a slice of the original (casing and spacing kept), so a
+ * typed payload can be cut from it by offsets.
+ */
+export function coreOfRequest(request: string): string {
+  let text = request.trim()
+  for (let i = 0; i < 4; i += 1) {
+    const lead = LEAD.exec(text)
+    if (!lead) {
+      break
+    }
+    text = text.slice(lead[0].length)
   }
-  text = text.replace(/,?\s+(?:please|for me|thanks|thank you)$/i, '')
-  return text
+  const trail = TRAIL.exec(text)
+  return (trail ? text.slice(0, trail.index) : text).trim()
+}
+
+/** Lowercased core with single spaces, for matching only. */
+export function normalizeRequest(request: string): string {
+  return coreOfRequest(request).replace(/\s+/g, ' ').toLowerCase()
 }
 
 const LIST_PATTERNS = [
@@ -78,7 +103,12 @@ const USAGE_PATTERNS = [
   /^(?:check|tell me)\s+(?:my|our)\s+(?:claude\s+)?(?:usage|spend|spending)(?:\s+(?:today|so far|this week))?$/
 ]
 
-const ENTER_SUFFIX = /\s*,?\s+(?:and|then)\s+(?:send it|press enter|hit enter|press return|hit return)$/
+// Why only these: "how much have I spent" alone may mean money anywhere; the
+// local scan only knows Claude.
+const USAGE_WORDS = /\b(?:claude|ai|tokens?|usage)\b/
+
+// Any ask to submit what was typed: quick hands never press Enter.
+const SUBMIT_ASK = /\b(?:send it|send that|press (?:enter|return)|hit (?:enter|return)|enter key|submit|run it|run that|execute)\b/i
 
 /** The spoken name of a terminal, without "the" and a trailing "terminal" or "tab". */
 function cleanTarget(raw: string): string | null {
@@ -96,38 +126,42 @@ function cleanTarget(raw: string): string | null {
   return target
 }
 
+const QUOTES: Record<string, string> = { '"': '"', "'": "'", '“': '”', '‘': '’' }
+
+/** Drops one pair of quotes around the whole payload; everything else is kept as said. */
 function unquote(text: string): string {
-  const quoted = /^["'“‘](.*)["'”’]$/.exec(text.trim())
-  return (quoted ? quoted[1] : text).trim()
+  const close = QUOTES[text[0] ?? '']
+  return close && text.length >= 2 && text.endsWith(close) ? text.slice(1, -1) : text
 }
 
-function matchType(text: string): Extract<QuickIntent, { hand: 'type' }> | null {
-  if (!/^type\s/.test(text)) {
+/**
+ * "type <text> into|in <terminal>", cut from the original request by offsets
+ * so the typed text is exactly what was said.
+ */
+function matchType(request: string): Extract<QuickIntent, { hand: 'type' }> | null {
+  const core = coreOfRequest(request)
+  const lowered = core.replace(/\s+/g, ' ').toLowerCase()
+  if (!/^type\s/i.test(core) || SUBMIT_ASK.test(core)) {
     return null
   }
-  let body = text.slice(5).trim()
   // "type up a plan", "type out the steps": writing, not typing into a terminal.
-  if (/^(?:up|out|in|something|a\s+(?:plan|summary|note|message|list|description))\b/.test(body)) {
+  if (/^type (?:up|out|in|something|a (?:plan|summary|note|message|list|description))\b/.test(lowered)) {
     return null
   }
-  const enter = ENTER_SUFFIX.test(body)
-  body = body.replace(ENTER_SUFFIX, '')
   // Why the LAST " into " (else the last " in "): the typed text may itself say "in".
-  let at = body.lastIndexOf(' into ')
-  let sepLength = 6
-  if (at < 0) {
-    at = body.lastIndexOf(' in ')
-    sepLength = 4
-  }
-  if (at <= 0) {
+  const split =
+    /^type\s+([\s\S]*\S)\s+into\s+(\S[\s\S]*)$/i.exec(core) ??
+    /^type\s+([\s\S]*\S)\s+in\s+(\S[\s\S]*)$/i.exec(core)
+  if (!split) {
     return null
   }
-  const typed = unquote(body.slice(0, at))
-  const target = cleanTarget(body.slice(at + sepLength))
-  if (!typed || !target || typed.length > MAX_TYPED_CHARS) {
+  const typed = unquote(split[1])
+  const target = cleanTarget(split[2].replace(/\s+/g, ' ').toLowerCase())
+  // oxlint-disable-next-line no-control-regex -- a control character could submit or escape; refuse it
+  if (!typed.trim() || /[\u0000-\u001F\u007F]/.test(typed) || !target || typed.length > MAX_TYPED_CHARS) {
     return null
   }
-  return { hand: 'type', text: typed, target, enter }
+  return { hand: 'type', text: typed, target }
 }
 
 function matchRead(text: string): QuickIntent | null {
@@ -157,28 +191,20 @@ function matchRead(text: string): QuickIntent | null {
 
 /** Which quick hand a request asks for, or null when ADAM should handle it. */
 export function matchQuickHand(request: string): QuickIntent | null {
-  const text = normalizeRequest(request).toLowerCase()
+  const text = normalizeRequest(request)
   if (!text || text.length > MAX_TYPED_CHARS + 80) {
     return null
   }
   if (LIST_PATTERNS.some((pattern) => pattern.test(text))) {
     return { hand: 'list-terminals' }
   }
-  if (USAGE_PATTERNS.some((pattern) => pattern.test(text))) {
+  if (USAGE_WORDS.test(text) && USAGE_PATTERNS.some((pattern) => pattern.test(text))) {
     return { hand: 'usage', today: /\btoday\b/.test(text) }
   }
-  const typed = matchType(text)
-  if (typed) {
-    // The typed text keeps Carson's casing; only the matching was lowercased.
-    return { ...typed, text: originalCase(request, typed.text) }
+  if (/^type\s/.test(text)) {
+    return matchType(request)
   }
   return matchRead(text)
-}
-
-/** The same span of the original request, so "type ls -A" keeps its capital. */
-function originalCase(request: string, lowered: string): string {
-  const at = request.toLowerCase().indexOf(lowered)
-  return at >= 0 ? request.slice(at, at + lowered.length) : lowered
 }
 
 function words(text: string): string {
@@ -220,50 +246,105 @@ export function lastSpokenLine(lines: string[]): string | null {
   return null
 }
 
-/**
- * Keeps typed text on one line with no control characters. Why: a newline
- * or carriage return would submit it, and Enter is pressed only when asked.
- */
-function typeable(text: string): string {
-  // oxlint-disable-next-line no-control-regex -- removing control characters is the point
-  return text.replace(/[\u0000-\u001F\u007F]+/g, ' ').trim()
+// Why so broad: a read line is spoken aloud and lands in the thread; a git
+// hash refused now and then costs less than a key read out on a call.
+const SECRET_SHAPED = [
+  /\bsk-[A-Za-z0-9_-]{6,}/,
+  /\bek_[A-Za-z0-9_-]{6,}/,
+  /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{6,}/,
+  /\bgithub_pat_[A-Za-z0-9_]{6,}/,
+  /\bxox[bpas]-[A-Za-z0-9-]{6,}/,
+  /\bAKIA[0-9A-Z]{12,}/,
+  /\bbearer\s+[A-Za-z0-9._~+/=-]{8,}/i,
+  /[A-Za-z0-9+/=_-]{32,}/,
+  /\b(?:password|passwd|secret|token|api[\s_-]?key)s?\s*[:=]/i
+]
+
+/** True when a line holds anything that looks like a key, token or password. */
+export function looksSecret(line: string): boolean {
+  return SECRET_SHAPED.some((pattern) => pattern.test(line))
 }
 
 function money(usd: number): string {
   return usd >= 100 ? `$${Math.round(usd)}` : `$${usd.toFixed(2)}`
 }
 
-async function runIntent(intent: QuickIntent, deps: QuickHandsDeps): Promise<string | null> {
+const CANCELLED = Symbol('cancelled')
+
+async function runIntent(
+  intent: QuickIntent,
+  deps: QuickHandsDeps,
+  isCurrent: () => boolean
+): Promise<string | typeof CANCELLED | null> {
   switch (intent.hand) {
     case 'list-terminals': {
-      const terminals = await deps.listTerminals()
+      const { terminals, truncated } = await deps.listTerminals()
+      if (!isCurrent()) {
+        return CANCELLED
+      }
       if (terminals.length === 0) {
         return 'No terminals are open.'
       }
       const names = terminals.slice(0, MAX_NAMED).map((terminal) => terminal.name)
-      const more = terminals.length > MAX_NAMED ? `, and ${terminals.length - MAX_NAMED} more` : ''
-      const count = terminals.length === 1 ? 'One terminal is open' : `${terminals.length} terminals are open`
+      const extra = terminals.length - names.length
+      const more = extra > 0 ? `, and ${extra} more` : ''
+      const total = truncated ? `At least ${terminals.length}` : `${terminals.length}`
+      const count =
+        terminals.length === 1 && !truncated ? 'One terminal is open' : `${total} terminals are open`
       return `${count}: ${names.join(', ')}${more}.`
     }
     case 'type': {
-      const text = typeable(intent.text)
-      const terminal = findTerminal(await deps.listTerminals(), intent.target)
-      if (!text || !terminal) {
+      const list = await deps.listTerminals()
+      if (!isCurrent()) {
+        return CANCELLED
+      }
+      // Why exact and complete: typing goes to one terminal only, so the
+      // spoken name must be that terminal's whole label, and a cut-off list
+      // could hide a second terminal with the same label.
+      const terminal = list.truncated ? null : findTerminal(list.terminals, intent.target, true)
+      if (!terminal) {
         return null
       }
-      await deps.typeInto(terminal.handle, text, intent.enter)
-      return intent.enter ? `Typed it into ${terminal.name} and pressed Enter.` : `Typed it into ${terminal.name}.`
+      try {
+        await deps.typeInto(terminal.handle, intent.text, isCurrent)
+      } catch (error) {
+        if (error instanceof QuickHandCancelled) {
+          return CANCELLED
+        }
+        if (error instanceof QuickHandRefused) {
+          throw error
+        }
+        // Why not ADAM: some text may already be in the terminal, and a retry
+        // would type it twice.
+        return `I may have typed part of that into ${terminal.name}; check it.`
+      }
+      return `Typed it into ${terminal.name}.`
     }
     case 'read-terminal': {
-      const terminal = findTerminal(await deps.listTerminals(), intent.target, intent.exact)
+      const { terminals } = await deps.listTerminals()
+      if (!isCurrent()) {
+        return CANCELLED
+      }
+      const terminal = findTerminal(terminals, intent.target, intent.exact)
       if (!terminal) {
         return null
       }
       const line = lastSpokenLine(await deps.readTail(terminal.handle))
-      return line ? `${terminal.name} last showed: ${line}` : `${terminal.name} has no output yet.`
+      if (!isCurrent()) {
+        return CANCELLED
+      }
+      if (!line) {
+        return `${terminal.name} has no output yet.`
+      }
+      return looksSecret(line)
+        ? `${terminal.name}'s last line looks like it has a secret, so I won't read it out.`
+        : `${terminal.name} last showed: ${line}`
     }
     case 'usage': {
       const usage = deps.weekUsage ? await deps.weekUsage() : null
+      if (!isCurrent()) {
+        return CANCELLED
+      }
       if (!usage) {
         return null
       }
@@ -274,100 +355,23 @@ async function runIntent(intent: QuickIntent, deps: QuickHandsDeps): Promise<str
   }
 }
 
-/** Answers the request with a quick hand, or null so ADAM handles it. */
+/**
+ * Answers the request with a quick hand, or null so ADAM handles it.
+ * `isCurrent` is false once the call that asked has ended: then nothing is
+ * written and the result is `cancelled`, never a hand-off to ADAM.
+ */
 export async function runQuickHand(
   request: string,
-  deps: QuickHandsDeps
+  deps: QuickHandsDeps,
+  isCurrent: () => boolean = () => true
 ): Promise<QuickHandResult | null> {
   const intent = matchQuickHand(request)
   if (!intent) {
     return null
   }
-  const speak = await runIntent(intent, deps)
+  const speak = await runIntent(intent, deps, isCurrent)
+  if (speak === CANCELLED) {
+    return { name: intent.hand, speak: '', cancelled: true }
+  }
   return speak ? { name: intent.hand, speak } : null
-}
-
-/** The runtime calls the quick hands use; the same ones `dobius terminal list/send/read` serve. */
-export type QuickHandsRuntime = {
-  listTerminals: () => Promise<{ terminals: RuntimeTerminalSummary[] }>
-  readTerminal: (handle: string, opts?: { limit?: number }) => Promise<RuntimeTerminalRead>
-  sendTerminal: (
-    handle: string,
-    action: { text?: string; enter?: boolean },
-    options?: { beforeWrite?: (ptyId: string) => void | Promise<void> }
-  ) => Promise<unknown>
-  getDriver: (ptyId: string) => { kind: string }
-  getTerminalAgentStatus: (
-    handle: string
-  ) => Promise<{ isRunningAgent: boolean; status: string | null }>
-}
-
-const READ_TAIL_LINES = 40
-// Why a pause: matches the Board loop's paste-then-submit pacing, so a TUI
-// sees the text before the Enter.
-const SUBMIT_DELAY_MS = 50
-
-/** Quick hands backed by the live runtime and the Claude usage store. */
-export function createRuntimeQuickHands(
-  getRuntime: () => QuickHandsRuntime | null,
-  wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-): QuickHandsDeps {
-  const runtime = (): QuickHandsRuntime => {
-    const current = getRuntime()
-    if (!current) {
-      throw new Error('runtime not ready')
-    }
-    return current
-  }
-  // Why refuse: while a phone drives the terminal, desktop input is locked
-  // (the same rule terminal.send applies to desktop callers).
-  const notPhoneDriven = (ptyId: string): void => {
-    if (runtime().getDriver(ptyId).kind === 'mobile') {
-      throw new Error('terminal is driven from the phone')
-    }
-  }
-  return {
-    listTerminals: async () =>
-      (await runtime().listTerminals()).terminals.map((terminal) => ({
-        handle: terminal.handle,
-        name: terminal.title?.trim() || terminal.branch || 'terminal'
-      })),
-    typeInto: async (handle, text, enter) => {
-      // Why these guards: a misheard request must never answer a permission
-      // prompt, run a shell command, or act while the crew is paused. A throw
-      // hands the request to ADAM, whose own gates decide.
-      const agent = await runtime().getTerminalAgentStatus(handle)
-      if (agent.status === 'permission') {
-        throw new Error('terminal is waiting on a permission prompt')
-      }
-      if (enter) {
-        if (!agent.isRunningAgent) {
-          throw new Error('Enter is only pressed for agent terminals, never a plain shell')
-        }
-        if (!checkExecutionAdmission('board-relay').allowed) {
-          throw new Error('the crew is paused')
-        }
-      }
-      await runtime().sendTerminal(handle, { text }, { beforeWrite: notPhoneDriven })
-      if (enter) {
-        await wait(SUBMIT_DELAY_MS)
-        await runtime().sendTerminal(handle, { enter: true }, { beforeWrite: notPhoneDriven })
-      }
-    },
-    readTail: async (handle) => (await runtime().readTerminal(handle, { limit: READ_TAIL_LINES })).tail,
-    weekUsage: async () => {
-      // Why no rescan (fresh = false): the last scan answers at once; a
-      // rescan reads every session log and could take seconds.
-      const result = await usageSummaryForRuntime('claude', 'all', '7d', false)
-      const summary = result.summary as {
-        estimatedCostUsd?: number | null
-        sessions?: number
-        hasAnyClaudeData?: boolean
-      }
-      if (!summary.hasAnyClaudeData || typeof summary.estimatedCostUsd !== 'number') {
-        return null
-      }
-      return { costUsd: summary.estimatedCostUsd, sessions: summary.sessions ?? 0 }
-    }
-  }
 }

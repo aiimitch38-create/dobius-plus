@@ -10,14 +10,14 @@ import type {
 } from '../../shared/speech-types'
 import type { AdamAskOptions } from './adam-conversation'
 import { logLiveVoiceProblem } from './live-voice-log'
-import { runQuickHand, type QuickHandsDeps } from './live-voice-quick-hands'
+import type { QuickHandsDeps } from './live-voice-quick-hands'
+import { LiveQuickTurns } from './live-voice-quick-turns'
 import { LIVE_METER_TICK_MS, type LiveVoiceMeter } from './live-voice-meter'
 import { liveVoiceFailure } from './openai-live-session'
+import { speakableReply } from './live-voice-spoken'
 
-// Why ~900 characters: the Live API caps session.commentary.append at 500
-// tokens (design doc section 1.3). 900 characters is roughly 225 tokens, which
-// leaves room for the model's own wrapping and is about 45 seconds of speech.
-export const LIVE_SPOKEN_MAX_CHARS = 900
+export { LIVE_SPOKEN_MAX_CHARS, speakableReply } from './live-voice-spoken'
+
 const LIVE_REQUEST_MAX_CHARS = 4_000
 const LIVE_CALL_LINES_MAX = 8
 const LIVE_CALL_LINE_MAX_CHARS = 300
@@ -89,31 +89,6 @@ export function liveVoiceMessage(
   ].join('\n')
 }
 
-/**
- * ADAM's reply, made fit to be spoken: no code, no markdown, no raw links,
- * and short enough for one commentary event. The full reply stays in the thread.
- */
-export function speakableReply(text: string): string {
-  const plain = text
-    .replace(/```[\s\S]*?```/g, ' (the code is in the thread) ')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/https?:\/\/\S+/g, 'a link')
-    .replace(/`([^`]*)`/g, '$1')
-    .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, '')
-    .replace(/[*_~|]+/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  if (plain.length <= LIVE_SPOKEN_MAX_CHARS) {
-    return plain
-  }
-  const tail = ' The rest is in the thread.'
-  const budget = LIVE_SPOKEN_MAX_CHARS - tail.length
-  const cut = plain.slice(0, budget)
-  const sentenceEnd = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '))
-  const kept = sentenceEnd > budget / 3 ? cut.slice(0, sentenceEnd + 1) : `${cut.trimEnd()}…`
-  return `${kept}${tail}`
-}
-
 function spokenFor(result: JarvisAskResult): string {
   return result.kind === 'cancelled' ? '' : speakableReply(result.text)
 }
@@ -158,8 +133,19 @@ export class LiveVoiceCalls {
   private reserved: { seconds: number; day: string } | null = null
   private capReachedAt: number | null = null
   private forceAttempts = 0
+  private readonly quickTurns: LiveQuickTurns | null
+  private readonly log: (source: string, text: string) => void
 
-  constructor(private readonly deps: LiveVoiceCallsDeps) {}
+  constructor(private readonly deps: LiveVoiceCallsDeps) {
+    this.log = deps.log ?? logLiveVoiceProblem
+    this.quickTurns = deps.quickHands
+      ? new LiveQuickTurns({
+          hands: deps.quickHands,
+          appendThread: deps.appendThread,
+          log: this.log
+        })
+      : null
+  }
 
   get activeOwnerId(): number | null {
     return this.ownerId
@@ -203,6 +189,7 @@ export class LiveVoiceCalls {
     }
     this.ownerId = ownerId
     this.callToken = randomUUID()
+    this.quickTurns?.reset()
     this.capReachedAt = null
     this.forceAttempts = 0
     this.deps.meter.start(this.reserved?.seconds ?? 0)
@@ -283,48 +270,53 @@ export class LiveVoiceCalls {
     }
     const clock = this.deps.now ?? Date.now
     const startedAt = clock()
-    const log = this.deps.log ?? logLiveVoiceProblem
-    // Why before the busy check: a quick hand never touches ADAM's turn, so it
-    // may answer while he works on something else.
-    if (this.deps.quickHands) {
-      try {
-        const quick = await runQuickHand(request, this.deps.quickHands)
-        if (quick) {
-          log('timing', `quick:${quick.name} ${clock() - startedAt}ms`)
-          return this.ownerId === ownerId
-            ? { ok: true, kind: 'answer', speak: speakableReply(quick.speak) }
-            : { ok: true, kind: 'cancelled', speak: '' }
-        }
-      } catch (error) {
-        // Falls through: ADAM gets the request as if no quick hand existed.
-        log('quick-hand', error instanceof Error ? error.message : String(error))
-      }
-    }
-    // Why refuse here, before asking: a second spoken request while ADAM
-    // works (or while a typed Board turn runs) must not cancel or queue.
-    if (this.delegation || this.deps.isAdamBusy()) {
-      return { ok: true, kind: 'error', speak: LIVE_STILL_WORKING_TEXT }
-    }
-    const token = Symbol('live-delegation')
-    this.delegation = { ownerId, token }
+    const callToken = this.callToken
+    const isCurrent = (): boolean => this.ownerId === ownerId && this.callToken === callToken
+    const timing = { outcome: 'error', quickMs: null as number | null, adamMs: null as number | null }
+    let token: symbol | null = null
     try {
+      // Why before the busy check: a quick hand never touches ADAM's turn, so it
+      // may answer while he works on something else.
+      if (this.quickTurns) {
+        const quickStart = clock()
+        const quick = await this.quickTurns.tryAnswer(request, callToken, isCurrent)
+        timing.quickMs = clock() - quickStart
+        if (quick) {
+          timing.outcome = quick.outcome
+          return quick.result
+        }
+      }
+      // Why refuse here, before asking: a second spoken request while ADAM
+      // works (or while a typed Board turn runs) must not cancel or queue.
+      if (this.delegation || this.deps.isAdamBusy()) {
+        timing.outcome = 'busy'
+        return { ok: true, kind: 'error', speak: LIVE_STILL_WORKING_TEXT }
+      }
+      token = Symbol('live-delegation')
+      this.delegation = { ownerId, token }
+      const adamStart = clock()
+      const lines = [...callLinesOf(raw.callLines), ...(this.quickTurns?.recentLines() ?? [])]
       const result = await this.deps.ask(
-        liveVoiceMessage(request, this.deps.lookingAt(), callLinesOf(raw.callLines)),
+        liveVoiceMessage(request, this.deps.lookingAt(), lines.slice(-LIVE_CALL_LINES_MAX)),
         { source: 'voice', said: request }
       )
+      timing.adamMs = clock() - adamStart
+      timing.outcome = 'adam'
       // Why re-check after the await: a hang-up or a new call while ADAM
       // worked means nobody is listening for this answer any more.
       // A "stop" clears the token: even an answer that finished meanwhile
       // must not be spoken.
-      log('timing', `adam ${clock() - startedAt}ms`)
       if (this.ownerId !== ownerId || this.delegation?.token !== token) {
         return { ok: true, kind: 'cancelled', speak: '' }
       }
       return { ok: true, kind: result.kind, speak: spokenFor(result) }
     } finally {
-      if (this.delegation?.token === token) {
+      if (token && this.delegation?.token === token) {
         this.delegation = null
       }
+      const quick = timing.quickMs === null ? '' : ` quick=${timing.quickMs}ms`
+      const adam = timing.adamMs === null ? '' : ` hermes=${timing.adamMs}ms`
+      this.log('timing', `${timing.outcome} ${clock() - startedAt}ms${quick}${adam}`)
     }
   }
 
