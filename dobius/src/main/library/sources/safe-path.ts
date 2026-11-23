@@ -55,6 +55,12 @@ export async function openSafe(path: string, realRootPath: string): Promise<File
   try {
     handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW)
     const opened = await handle.stat()
+    // ponytail: re-resolves the pathname, not the fd, so a same-user process
+    // racing renames (open outside the root, restore the parent for realpath,
+    // swap again before stat) passes the inode check. Accepted: that process
+    // could read the files itself. Upgrade path: fcntl(F_GETPATH) on the fd
+    // via a native helper, or openat-style walking from the root with
+    // O_NOFOLLOW on every component.
     const real = opened.isFile() ? await safeFile(path, realRootPath) : null
     const named = real ? await stat(real) : null
     if (named && named.dev === opened.dev && named.ino === opened.ino) {
