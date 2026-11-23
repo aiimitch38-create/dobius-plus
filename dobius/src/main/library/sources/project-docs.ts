@@ -1,10 +1,13 @@
 // Project notes: plans, CLAUDE.md, handoffs, build logs, lessons, notes,
 // READMEs and docs/ under each top-level folder of ~/Projects (Code). No
-// source code. A repository checked out in several worktrees is read once.
+// source code. Every worktree is read; copies shared between worktrees of
+// one repository count once (project-checkouts.ts).
 import { lstat, readdir, readFile } from 'node:fs/promises'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import type { LibraryIngester } from '../library-types'
 import { markdownCandidates, projectForPath, walkFiles } from './fs-walk'
+import type { Checkout, CheckoutFile } from './project-checkouts'
+import { checkoutLabels, dedupeAcrossCheckouts } from './project-checkouts'
 
 const NOTE_FILE =
   /^(?:CLAUDE|HANDOFF[^/]*|BUILD-LOG[^/]*|LESSONS-LEARNED|NOTES|README[^/]*)\.md$/i
@@ -51,33 +54,34 @@ export async function gitCommonDir(dir: string): Promise<{ common: string; linke
   }
 }
 
-function isInside(path: string, root: string): boolean {
-  const rel = relative(root, path)
-  return rel === '' || (!rel.startsWith('..') && !rel.startsWith(sep) && !isAbsolute(rel))
-}
-
 /**
- * Decides once per checkout whether to walk it. Why: Dobius alone has a dozen
- * worktrees with the same plans. The main checkout wins when it lives under
- * the projects root; otherwise the first worktree seen does.
+ * Notes files of every checkout under one top-level folder. A nested git
+ * checkout (a worktree inside the folder) is walked on its own, with its own
+ * directory budget, so each file knows which checkout it came from.
  */
-function checkoutFilter(projectsRoot: string): (dir: string) => Promise<boolean> {
-  const taken = new Set<string>()
-  return async (dir) => {
-    const git = await gitCommonDir(dir)
-    if (!git) {
-      return true
-    }
-    const mainRoot = dirname(git.common)
-    if (git.linked && isInside(mainRoot, projectsRoot)) {
-      return false
-    }
-    if (taken.has(git.common)) {
-      return false
-    }
-    taken.add(git.common)
-    return true
+async function topFolderFiles(top: string, wantFile: (path: string) => boolean): Promise<CheckoutFile[]> {
+  const git = await gitCommonDir(top)
+  const pending: Checkout[] = [{ root: top, common: git?.common ?? null, linked: git?.linked ?? false }]
+  const files: CheckoutFile[] = []
+  while (pending.length > 0) {
+    const checkout = pending.shift()!
+    const found = await walkFiles(checkout.root, {
+      maxDepth: 7,
+      maxDirs: 4000,
+      allowHidden: new Set(['.dobius', '.claude']),
+      enterDir: async (dir) => {
+        const nested = await gitCommonDir(dir)
+        if (!nested) {
+          return true
+        }
+        pending.push({ root: dir, common: nested.common, linked: nested.linked })
+        return false
+      },
+      wantFile
+    })
+    files.push(...found.map((path) => ({ checkout, path })))
   }
+  return files
 }
 
 export function projectDocsIngester(projectsRoot: string): LibraryIngester {
@@ -90,30 +94,29 @@ export function projectDocsIngester(projectsRoot: string): LibraryIngester {
       } catch {
         return []
       }
-      const enter = checkoutFilter(projectsRoot)
-      const files: string[] = []
+      const files: CheckoutFile[] = []
       for (const entry of entries) {
         if (!entry.isDirectory() || entry.name.startsWith('.')) {
           continue
         }
-        const top = join(projectsRoot, entry.name)
-        if (!(await enter(top))) {
-          continue
-        }
         files.push(
-          ...(await walkFiles(top, {
-            maxDepth: 7,
-            maxDirs: 4000,
-            allowHidden: new Set(['.dobius', '.claude']),
-            enterDir: enter,
+          ...(await topFolderFiles(
+            join(projectsRoot, entry.name),
             // Why: a top-level Docs or plans folder is notes all the way down.
-            wantFile: NOTES_FOLDER.test(entry.name)
+            NOTES_FOLDER.test(entry.name)
               ? (path) => path.toLowerCase().endsWith('.md')
               : isProjectNotesFile
-          }))
+          ))
         )
       }
-      return markdownCandidates('project', files, (file) => projectForPath(file, projectsRoot))
+      const kept = await dedupeAcrossCheckouts(files)
+      const labels = checkoutLabels(files)
+      return markdownCandidates(
+        'project',
+        kept.map((file) => file.path),
+        (file) => projectForPath(file, projectsRoot),
+        (file) => labels.get(file) ?? null
+      )
     }
   }
 }

@@ -46,25 +46,39 @@ describe('project notes', () => {
     expect(isProjectNotesFile('plans/run.ts')).toBe(false)
   })
 
-  it('reads each repository once across worktrees and skips .env', async () => {
+  it('skips code, .env and node_modules', async () => {
     const projects = join(root, 'Projects')
     put('Projects/Epoxy/.git/HEAD', 'ref: refs/heads/main')
     put('Projects/Epoxy/CLAUDE.md', '# Epoxy rules\nUse the blue accent.')
-    put('Projects/Epoxy/plans/next.md', '# Next\nShip the quote form.')
     put('Projects/Epoxy/src/app.ts', 'export const x = 1')
     put('Projects/Epoxy/.env', 'SECRET=1')
     put('Projects/Epoxy/node_modules/pkg/README.md', '# pkg')
-    // A linked worktree of the same repository, elsewhere under the root.
-    put('Projects/epoxy-worktrees/feature/.git', `gitdir: ${join(projects, 'Epoxy/.git/worktrees/feature')}`)
+    const candidates = await projectDocsIngester(projects).list()
+    expect(candidates.map((c) => c.path.slice(projects.length))).toEqual(['/Epoxy/CLAUDE.md'])
+    const [doc] = await loadAll(candidates)
+    expect(doc).toMatchObject({ project: 'Epoxy', title: 'Epoxy rules (CLAUDE.md)' })
+  })
+
+  it('reads every worktree, counting a file shared between them once', async () => {
+    const projects = join(root, 'Projects')
+    const same = '# Epoxy rules\nUse the blue accent.'
+    put('Projects/Epoxy/.git/HEAD', 'ref: refs/heads/main')
+    put('Projects/Epoxy/CLAUDE.md', same)
+    put('Projects/Epoxy/plans/next.md', '# Next\nShip the quote form.')
+    // A linked worktree of the same repository, nested in another top folder.
     put('Projects/Epoxy/.git/worktrees/feature/commondir', '../..')
-    put('Projects/epoxy-worktrees/feature/CLAUDE.md', '# Epoxy rules copy')
+    put('Projects/epoxy-worktrees/feature/.git', `gitdir: ${join(projects, 'Epoxy/.git/worktrees/feature')}`)
+    put('Projects/epoxy-worktrees/feature/CLAUDE.md', same)
+    put('Projects/epoxy-worktrees/feature/plans/next.md', '# Next\nShip the quote form, then the gallery.')
 
     const candidates = await projectDocsIngester(projects).list()
-    const paths = candidates.map((candidate) => candidate.path.slice(projects.length)).sort()
-    expect(paths).toEqual(['/Epoxy/CLAUDE.md', '/Epoxy/plans/next.md'])
-    const [doc] = await loadAll(candidates.filter((c) => c.path.endsWith('CLAUDE.md')))
-    expect(doc.project).toBe('Epoxy')
-    expect(doc.title).toBe('Epoxy rules (CLAUDE.md)')
+    expect(candidates.map((c) => c.path.slice(projects.length)).sort()).toEqual([
+      '/Epoxy/CLAUDE.md',
+      '/Epoxy/plans/next.md',
+      '/epoxy-worktrees/feature/plans/next.md'
+    ])
+    const titles = (await loadAll(candidates)).map((doc) => doc.title).sort()
+    expect(titles).toEqual(['Epoxy rules (Epoxy/CLAUDE.md)', 'Next (Epoxy/next.md)', 'Next (feature/next.md)'])
   })
 })
 

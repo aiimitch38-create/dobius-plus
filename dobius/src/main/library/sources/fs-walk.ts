@@ -55,7 +55,9 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024
 export async function markdownCandidates(
   source: LibrarySource,
   files: string[],
-  project: (file: string) => string | null
+  project: (file: string) => string | null,
+  /** A folder name shown with the file name, e.g. the worktree it came from. */
+  label: (file: string) => string | null = () => null
 ): Promise<LibraryCandidate[]> {
   const candidates: LibraryCandidate[] = []
   for (const file of files) {
@@ -74,7 +76,7 @@ export async function markdownCandidates(
           const text = await readFile(file, 'utf8')
           return {
             project: project(file),
-            title: markdownTitle(text, basename(file)),
+            title: markdownTitle(text, [label(file), basename(file)].filter(Boolean).join('/')),
             sections: [{ text, at: info.mtimeMs }]
           }
         }
