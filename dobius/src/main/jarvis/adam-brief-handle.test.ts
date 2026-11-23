@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { BriefHandleVerifier } from './adam-brief-handle'
+import { BRIEF_HANDLE_LOCKED, BriefHandleVerifier } from './adam-brief-handle'
 
 let now = 0
 let handle: string | null = '+15551234567'
@@ -75,5 +75,49 @@ describe('BriefHandleVerifier', () => {
     expect(await check.sendCode()).toMatchObject({ ok: false, error: expect.stringMatching(/Not authorized/) })
     handle = null
     expect(await check.sendCode()).toMatchObject({ ok: false, error: expect.stringMatching(/Set your handle/) })
+  })
+
+  it('keeps the resend wait after a code is dropped for wrong guesses', async () => {
+    const check = verifier()
+    await check.sendCode()
+    for (let i = 0; i < 5; i += 1) {
+      check.confirm('0000')
+    }
+    expect(await check.sendCode()).toMatchObject({ ok: false, error: expect.stringMatching(/Wait a minute/) })
+    expect(send).toHaveBeenCalledOnce()
+  })
+
+  it('locks for an hour after 3 codes in an hour', async () => {
+    const check = verifier()
+    for (let i = 0; i < 3; i += 1) {
+      expect(await check.sendCode()).toMatchObject({ ok: true })
+      now += 61_000
+    }
+    expect(await check.sendCode()).toMatchObject({ ok: false, error: BRIEF_HANDLE_LOCKED })
+    expect(check.confirm('4821')).toMatchObject({ ok: false, error: BRIEF_HANDLE_LOCKED })
+    expect(send).toHaveBeenCalledTimes(3)
+    now += 59 * 60_000
+    expect(await check.sendCode()).toMatchObject({ ok: false, error: BRIEF_HANDLE_LOCKED })
+    now += 2 * 60_000
+    expect(await check.sendCode()).toMatchObject({ ok: true })
+  })
+
+  it('locks for an hour after 10 wrong guesses in an hour, across codes', async () => {
+    const check = verifier()
+    await check.sendCode()
+    for (let i = 0; i < 5; i += 1) {
+      check.confirm('0000')
+    }
+    now += 61_000
+    await check.sendCode()
+    for (let i = 0; i < 4; i += 1) {
+      expect(check.confirm('0000')).toMatchObject({ error: 'That code does not match.' })
+    }
+    expect(check.confirm('0000')).toMatchObject({ ok: false, error: BRIEF_HANDLE_LOCKED })
+    expect(check.confirm('4821')).toMatchObject({ ok: false, error: BRIEF_HANDLE_LOCKED })
+    expect(verified).toBeNull()
+    now += 61_000
+    expect(await check.sendCode()).toMatchObject({ ok: false, error: BRIEF_HANDLE_LOCKED })
+    expect(send).toHaveBeenCalledTimes(2)
   })
 })
