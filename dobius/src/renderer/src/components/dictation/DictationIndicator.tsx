@@ -117,7 +117,9 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
         ? 'Connecting...'
         : agentState === 'speaking'
           ? 'Speaking...'
-          : agentState === 'error'
+          : agentState === 'thinking' && !liveMode
+            ? 'Thinking...'
+            : agentState === 'error'
             ? (agentErrorText ?? 'Voice error')
             : liveMode
               ? liveCallLabel(live)

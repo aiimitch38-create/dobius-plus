@@ -68,10 +68,14 @@ const OK: OpenAiLiveSessionResult = {
   callToken: 'call-1'
 }
 
-function makeCall(): LiveVoiceCall {
+function makeCall(outputLevel?: () => number): LiveVoiceCall {
   return new LiveVoiceCall(
     {
       api: api as unknown as LiveVoiceApi,
+      levelOf: outputLevel
+        ? (stream) =>
+            stream === 'remote' ? { read: outputLevel, dispose: () => undefined } : null
+        : undefined,
       createPeer: () => {
         const peer = new FakePeer()
         peers.push(peer)
@@ -140,6 +144,29 @@ describe('call state machine', () => {
     expect(call.getSnapshot().state).toBe('speaking')
     await vi.advanceTimersByTimeAsync(1_000)
     expect(call.getSnapshot().state).toBe('listening')
+  })
+
+  it('keeps speaking while the reply audio still plays, across short gaps', async () => {
+    let level = 0.4
+    const call = makeCall(() => level)
+    await connected(call)
+    peer().ontrack?.({ streams: ['remote'] })
+    peer().channel.emit({ type: 'session.output_transcript.delta', delta: 'Hi' })
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(call.getSnapshot().state).toBe('speaking')
+    // A pause between words shorter than the grace never drops the state.
+    level = 0
+    await vi.advanceTimersByTimeAsync(600)
+    level = 0.4
+    await vi.advanceTimersByTimeAsync(300)
+    expect(call.getSnapshot().state).toBe('speaking')
+    level = 0
+    await vi.advanceTimersByTimeAsync(800)
+    expect(call.getSnapshot().state).toBe('speaking')
+    await vi.advanceTimersByTimeAsync(400)
+    expect(call.getSnapshot().state).toBe('listening')
+    const states = snapshots.map((snapshot) => snapshot.state)
+    expect(states.filter((state) => state === 'speaking')).toHaveLength(1)
   })
 
   it('goes to standby on pause and tells the meter', async () => {

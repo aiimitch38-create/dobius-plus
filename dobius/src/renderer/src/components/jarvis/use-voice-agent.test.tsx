@@ -263,3 +263,57 @@ it('cancels a pending Hermes tool when the live conversation ends', async () => 
   )
   expect(window.api.jarvis.askAdamText).toHaveBeenCalledTimes(1)
 })
+
+describe('useVoiceAgent ask_adam pending state', () => {
+  it('shows thinking while ADAM answers, lets speaking win, and resets on disconnect', async () => {
+    let options: SessionOptions | null = null
+    startSession.mockImplementation(async (opts: SessionOptions) => {
+      options = opts
+      return fakeConversation()
+    })
+    const answer = deferred<{ text: string }>()
+    const api = (window as unknown as { api: { jarvis: Record<string, unknown> } }).api
+    api.jarvis.askAdamText = vi.fn(() => answer.promise)
+
+    await act(async () => {
+      latest?.toggle()
+    })
+    await act(async () => {
+      signedUrl.resolve({ ok: true, url: 'wss://signed' })
+    })
+    await act(async () => {
+      options?.onStatusChange({ status: 'connected' })
+    })
+    expect(latest?.state).toBe('listening')
+
+    let reply: Promise<string> | undefined
+    await act(async () => {
+      reply = options?.clientTools.ask_adam({ request: 'what is running?' })
+    })
+    expect(latest?.state).toBe('thinking')
+    await act(async () => {
+      options?.onModeChange({ mode: 'speaking' })
+    })
+    expect(latest?.state).toBe('speaking')
+    await act(async () => {
+      options?.onModeChange({ mode: 'listening' })
+    })
+    expect(latest?.state).toBe('thinking')
+    await act(async () => {
+      answer.resolve({ text: 'Two consoles.' })
+      await reply
+    })
+    expect(latest?.state).toBe('listening')
+
+    const never = deferred<{ text: string }>()
+    api.jarvis.askAdamText = vi.fn(() => never.promise)
+    await act(async () => {
+      void options?.clientTools.ask_adam({ request: 'and now?' })
+    })
+    expect(latest?.state).toBe('thinking')
+    await act(async () => {
+      options?.onStatusChange({ status: 'disconnected' })
+    })
+    expect(latest?.state).toBe('idle')
+  })
+})

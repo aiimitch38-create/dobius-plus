@@ -10,7 +10,10 @@ import {
   LIVE_HANG_UP_GRACE_MS,
   LIVE_IDLE_HANGUP_MS,
   LIVE_INTENT_SETTLE_MS,
+  LIVE_OUTPUT_AUDIBLE_LEVEL,
+  LIVE_SPEAKING_POLL_MS,
   LIVE_SPEAKING_QUIET_MS,
+  LIVE_SPEAKING_SILENCE_MS,
   type LivePeerCall,
   type LiveVoiceCallDeps,
   type LiveVoiceSnapshot,
@@ -44,6 +47,8 @@ export class LiveVoiceCall {
   private readonly timers: NamedTimers
   private readonly delegations: LiveDelegations
   private lastInputAt = 0
+  private lastOutputAt = 0
+  private lastAudibleAt = 0
   private capWarned = false
   private readonly reconnect: LiveReconnectPolicy
   private readonly levels: LiveLevels
@@ -229,10 +234,10 @@ export class LiveVoiceCall {
         this.transcript.addOutput(event.delta)
         this.touchIdle()
         this.update({ state: 'speaking' })
-        this.timers.arm('speaking', LIVE_SPEAKING_QUIET_MS, () => {
-          this.transcript.replyFinished()
-          this.settleState()
-        })
+        this.lastOutputAt = this.now()
+        if (!this.timers.has('speaking')) {
+          this.watchSpeaking()
+        }
         return
       case 'delegation':
         this.touchIdle()
@@ -248,6 +253,31 @@ export class LiveVoiceCall {
       default:
         break
     }
+  }
+
+  /**
+   * Speaking ends once the transcript has been quiet for SPEAKING_QUIET and
+   * the played-back audio has been silent for SPEAKING_SILENCE, whichever is later.
+   * Why poll: the output level has no events, and a reading between two
+   * words is silent, so only a sustained silence counts.
+   */
+  private watchSpeaking(): void {
+    const now = this.now()
+    if (this.levels.read('output') > LIVE_OUTPUT_AUDIBLE_LEVEL) {
+      this.lastAudibleAt = now
+    }
+    const endAt = Math.max(
+      this.lastOutputAt + LIVE_SPEAKING_QUIET_MS,
+      this.lastAudibleAt + LIVE_SPEAKING_SILENCE_MS
+    )
+    if (now < endAt) {
+      this.timers.arm('speaking', Math.min(LIVE_SPEAKING_POLL_MS, endAt - now), () =>
+        this.watchSpeaking()
+      )
+      return
+    }
+    this.transcript.replyFinished()
+    this.settleState()
   }
 
   private checkIntent(): void {
