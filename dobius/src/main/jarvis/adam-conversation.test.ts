@@ -6,6 +6,7 @@ import type { AdamTurnEvent } from '../../shared/speech-types'
 import { adamThreadRowOf } from './adam-thread-store'
 import {
   ADAM_BUSY_TEXT,
+  ADAM_COMPACTING_TEXT,
   AdamConversation,
   lookingAtOf,
   voiceMessage,
@@ -94,6 +95,32 @@ describe('AdamConversation: voice and the thread are one conversation', () => {
     const next = adam.ask('hey adam', { source: 'voice' })
     await reply('Here.', 2)
     await expect(next).resolves.toEqual({ kind: 'answer', text: 'Here.' })
+  })
+
+  it('says ADAM is tidying his memory when a message arrives during a compaction', async () => {
+    let finish: (result: { kind: 'answer'; text: string }) => void = () => {}
+    let compacting = false
+    const adam = new AdamConversation(
+      {
+        ask: () => new Promise((resolve) => (finish = resolve)),
+        isCompacting: () => compacting
+      },
+      (event) => void events.push(event)
+    )
+    const first = adam.ask('long question', { source: 'thread' })
+    await vi.waitFor(() => expect(events).toHaveLength(1))
+    compacting = true
+    await expect(adam.ask('hello?', { source: 'voice' })).resolves.toEqual({
+      kind: 'error',
+      text: ADAM_COMPACTING_TEXT
+    })
+    compacting = false
+    await expect(adam.ask('hello?', { source: 'voice' })).resolves.toEqual({
+      kind: 'error',
+      text: ADAM_BUSY_TEXT
+    })
+    finish({ kind: 'answer', text: 'Done.' })
+    await expect(first).resolves.toEqual({ kind: 'answer', text: 'Done.' })
   })
 
   it('announces a failed turn and frees ADAM for the next one', async () => {

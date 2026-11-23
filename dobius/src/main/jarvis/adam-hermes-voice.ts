@@ -18,11 +18,21 @@ type VoiceOptions = {
   ) => HermesRpc
   approve?: (command: string, description: string) => Promise<boolean>
   turnTimeoutMs?: number
+  /** Budget for one context compaction; Hermes' own ceiling is 600s by default. */
+  compactionTimeoutMs?: number
+  /** Told when Hermes starts or stops compacting ADAM's context during a turn. */
+  onCompacting?: (compacting: boolean) => void
 }
 type Turn = {
   resolve: (result: JarvisAskResult) => void
-  timer: ReturnType<typeof setTimeout>
+  timer?: ReturnType<typeof setTimeout>
+  compacting: boolean
 }
+
+export const ADAM_TURN_TIMEOUT_TEXT =
+  'ADAM went too long without answering, so Dobius+ stopped the request. Send your message again.'
+export const ADAM_COMPACTION_TIMEOUT_TEXT =
+  'ADAM was tidying his memory for much longer than usual, so Dobius+ stopped the request. Send your message again.'
 
 /** One voice conversation under Adam's real profile, independent of the open TUI and Telegram. */
 export class AdamHermesVoice {
@@ -44,16 +54,8 @@ export class AdamHermesVoice {
       return Promise.resolve({ kind: 'error', text: 'Adam is already handling a voice request.' })
     }
     return new Promise((resolve) => {
-      const turn: Turn = {
-        resolve,
-        timer: setTimeout(() => {
-          this.finish({
-            kind: 'error',
-            text: 'Adam’s voice request timed out. Check the Hermes session before retrying.'
-          })
-          this.cancel()
-        }, this.options.turnTimeoutMs ?? 180_000)
-      }
+      const turn: Turn = { resolve, compacting: false }
+      this.armTimer(turn)
       this.turn = turn
       void this.submit(text, turn).catch(() => {
         if (this.turn === turn) {
@@ -65,6 +67,43 @@ export class AdamHermesVoice {
         }
       })
     })
+  }
+
+  /** True while Hermes is compacting ADAM's context inside the running turn. */
+  get compacting(): boolean {
+    return this.turn?.compacting ?? false
+  }
+
+  /**
+   * Why two budgets: a compaction is one long summarizing call (2–3 minutes on
+   * a full session) that ends the turn's progress until it commits. Cutting it
+   * off saved nothing, so the next message compacted again, forever. While
+   * Hermes says it is compacting, the turn gets the compaction budget; once
+   * that ends, a fresh turn budget.
+   */
+  private armTimer(turn: Turn): void {
+    clearTimeout(turn.timer)
+    turn.timer = setTimeout(
+      () => {
+        this.finish({
+          kind: 'error',
+          text: turn.compacting ? ADAM_COMPACTION_TIMEOUT_TEXT : ADAM_TURN_TIMEOUT_TEXT
+        })
+        this.cancel()
+      },
+      turn.compacting
+        ? (this.options.compactionTimeoutMs ?? 720_000)
+        : (this.options.turnTimeoutMs ?? 180_000)
+    )
+  }
+
+  private setCompacting(turn: Turn, compacting: boolean): void {
+    if (turn.compacting === compacting) {
+      return
+    }
+    turn.compacting = compacting
+    this.armTimer(turn)
+    this.options.onCompacting?.(compacting)
   }
 
   cancel(): void {
@@ -201,6 +240,20 @@ export class AdamHermesVoice {
       return
     }
     const payload = event.payload ?? {}
+    // Hermes re-tags every in-progress compaction line (preflight, idle, heartbeat)
+    // as kind "compacting" and ends it with "compacted" (tui_gateway/server.py _status_update).
+    if (event.type === 'status.update') {
+      if (payload.kind === 'compacting') {
+        this.setCompacting(this.turn, true)
+      } else if (payload.kind === 'compacted') {
+        this.setCompacting(this.turn, false)
+      }
+      return
+    }
+    if (this.turn.compacting && event.type === 'message.delta') {
+      // Why: a reply streaming means the compaction is over even if its end edge was lost.
+      this.setCompacting(this.turn, false)
+    }
     if (event.type === 'message.complete') {
       const text = typeof payload.text === 'string' ? payload.text.trim() : ''
       this.finish(
@@ -251,6 +304,10 @@ export class AdamHermesVoice {
     }
     this.turn = null
     clearTimeout(turn.timer)
+    if (turn.compacting) {
+      turn.compacting = false
+      this.options.onCompacting?.(false)
+    }
     turn.resolve(result)
   }
 }

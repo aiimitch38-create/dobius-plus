@@ -12,6 +12,7 @@ import {
   talkToAdam,
   type AdamThreadContext
 } from './adam-thread'
+import { isAdamCompacting } from './adam-status'
 import { missionReport } from './mission-report'
 import { builtInCommand } from './plan-builtin'
 import { concernText } from './plan-concern-text'
@@ -47,6 +48,8 @@ export function useBoardPlanner(input: {
   // Why a ref and a state: the ref refuses a second run in the same tick; the state greys the composer.
   const running = useRef(false)
   const [busy, setBusy] = useState(false)
+  // One message sent while ADAM tidies his memory; the newest replaces an older one.
+  const waiting = useRef<string | null>(null)
   // Read at event time so the mission subscription isn't rebuilt on every card change.
   const consolesRef = useRef(data.consoles)
   consolesRef.current = data.consoles
@@ -205,6 +208,28 @@ export function useBoardPlanner(input: {
       // Why checked before any await: two submits in one tick must not both reach ADAM,
       // who runs one Hermes turn at a time.
       if (running.current) {
+        // Why wait instead of refuse: a compaction runs a minute or two, and stopping it
+        // to take the new message would only make the next message compact again.
+        if (isAdamCompacting()) {
+          const replaced = waiting.current !== null
+          waiting.current = text
+          const shown = text.length > 200 ? `${text.slice(0, 199)}…` : text
+          append({
+            role: 'system',
+            text: replaced
+              ? translate(
+                  'board.adam.waitingReplaced',
+                  'ADAM is tidying his memory, about a minute or two. Only your newest message will go to him when he is done: “{{text}}”',
+                  { text: shown }
+                )
+              : translate(
+                  'board.adam.waitingForCompaction',
+                  'ADAM is tidying his memory, about a minute or two. Your message will go to him when he is done: “{{text}}”',
+                  { text: shown }
+                )
+          })
+          return
+        }
         append({
           role: 'system',
           text: translate(
@@ -225,6 +250,14 @@ export function useBoardPlanner(input: {
     },
     [append, handle]
   )
+
+  useEffect(() => {
+    const next = waiting.current
+    if (!busy && next !== null) {
+      waiting.current = null
+      void run(next)
+    }
+  }, [busy, run])
 
   return { run, busy }
 }

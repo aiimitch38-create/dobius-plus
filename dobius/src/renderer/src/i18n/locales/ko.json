@@ -12738,7 +12738,8 @@
       "placeholderAsk": "Hold space to speak · ask “what can you do?”",
       "statusSpeaking": "말하는 중…",
       "statusThinking": "생각하는 중…",
-      "statusWorking": "작업 중…"
+      "statusWorking": "작업 중…",
+      "statusCompacting": "기억 정리 중…"
     },
     "group": {
       "deleteTitle": "Delete {{name}}?",
@@ -14265,6 +14266,8 @@
     "adam": {
       "thinking": "ADAM is thinking…",
       "stillThinking": "ADAM is still working on your last message. Wait for his reply, then send this again.",
+      "waitingForCompaction": "ADAM이 기억을 정리하는 중입니다(1~2분 정도). 끝나면 이 메시지를 보냅니다: “{{text}}”",
+      "waitingReplaced": "ADAM이 기억을 정리하는 중입니다(1~2분 정도). 끝나면 가장 최근 메시지만 보냅니다: “{{text}}”",
       "failed": "ADAM could not answer. {{reason}} To send work straight to a console instead, type its name first, for example “@Codex 1 run the tests”.",
       "unreachable": "This window could not reach ADAM’s Hermes connection. Quit and reopen Dobius+, then send your message again.",
       "cancelled": "ADAM’s answer was stopped before it finished. Send your message again.",

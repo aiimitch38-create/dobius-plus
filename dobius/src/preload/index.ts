@@ -4729,6 +4729,14 @@ const api = {
       ipcRenderer.on('jarvis:adam-thread-unsaved', listener)
       return () => ipcRenderer.removeListener('jarvis:adam-thread-unsaved', listener)
     },
+    adamStatusGet: (): Promise<{ compacting: boolean }> =>
+      ipcRenderer.invoke('jarvis:adamStatusGet'),
+    onAdamStatus: (callback: (status: { compacting: boolean }) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: { compacting: boolean }): void =>
+        callback({ compacting: data?.compacting === true })
+      ipcRenderer.on('jarvis:adam-status', listener)
+      return () => ipcRenderer.removeListener('jarvis:adam-status', listener)
+    },
     reportLookingAt: (lookingAt: AdamLookingAt | null): Promise<void> =>
       ipcRenderer.invoke('jarvis:lookingAt', lookingAt),
     onAdamTurn: (callback: (event: AdamTurnEvent) => void): (() => void) => {

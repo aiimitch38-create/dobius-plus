@@ -12754,7 +12754,8 @@
       "placeholderAsk": "Hold space to speak · ask “what can you do?”",
       "statusSpeaking": "Speaking…",
       "statusThinking": "Thinking…",
-      "statusWorking": "Working…"
+      "statusWorking": "Working…",
+      "statusCompacting": "Tidying memory…"
     },
     "group": {
       "deleteTitle": "Delete {{name}}?",
@@ -14281,6 +14282,8 @@
     "adam": {
       "thinking": "ADAM is thinking…",
       "stillThinking": "ADAM is still working on your last message. Wait for his reply, then send this again.",
+      "waitingForCompaction": "ADAM is tidying his memory, about a minute or two. Your message will go to him when he is done: “{{text}}”",
+      "waitingReplaced": "ADAM is tidying his memory, about a minute or two. Only your newest message will go to him when he is done: “{{text}}”",
       "failed": "ADAM could not answer. {{reason}} To send work straight to a console instead, type its name first, for example “@Codex 1 run the tests”.",
       "unreachable": "This window could not reach ADAM’s Hermes connection. Quit and reopen Dobius+, then send your message again.",
       "cancelled": "ADAM’s answer was stopped before it finished. Send your message again.",

@@ -8,8 +8,12 @@ import type {
 } from '../../shared/speech-types'
 
 export const ADAM_TURN_CHANNEL = 'jarvis:adam-turn'
+/** Main → main window: `{ compacting }` while Hermes tidies ADAM's context mid-turn. */
+export const ADAM_STATUS_CHANNEL = 'jarvis:adam-status'
 export const ADAM_BUSY_TEXT =
   'ADAM is busy with another message. Wait for his reply, then try again.'
+export const ADAM_COMPACTING_TEXT =
+  'ADAM is tidying his memory, which takes a minute or two. Your message was not sent; send it again when he is done.'
 
 export type AdamAskOptions = {
   source: AdamTurnSource
@@ -114,7 +118,11 @@ export function voiceTurnRow(event: AdamTurnEvent): AdamThreadRow | null {
 
 const MAX_VOICE_ROW_CHARS = 20_000
 
-type AdamBrain = { ask: (text: string) => Promise<JarvisAskResult> }
+type AdamBrain = {
+  ask: (text: string) => Promise<JarvisAskResult>
+  /** True while the running turn is compacting ADAM's context. */
+  isCompacting?: () => boolean
+}
 
 /**
  * The one way in to ADAM. Voice, the Board thread and any later voice engine
@@ -159,7 +167,10 @@ export class AdamConversation {
     // Why refuse and not queue: Hermes runs one turn per session, and a queued
     // voice turn would answer minutes late. The caller shows this and Carson resends.
     if (this.inFlight) {
-      return { kind: 'error', text: ADAM_BUSY_TEXT }
+      return {
+        kind: 'error',
+        text: this.brain.isCompacting?.() ? ADAM_COMPACTING_TEXT : ADAM_BUSY_TEXT
+      }
     }
     this.inFlight = true
     this.cancelRequested = false

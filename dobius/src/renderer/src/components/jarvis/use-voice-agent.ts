@@ -64,11 +64,13 @@ export function useVoiceAgent(): VoiceAgent {
     }
   }, [])
 
-  const stop = useCallback(async (): Promise<void> => {
+  const stop = useCallback(async (options?: { keepAdam?: boolean }): Promise<void> => {
     generationRef.current += 1
     startingRef.current = false
     clearIdleTimer()
-    if (adamRequestsRef.current > 0) {
+    // Why keepAdam: hanging up a quiet call is not Carson saying stop. ADAM's turn
+    // (often a minute-long memory tidy) goes on and his answer lands in the thread.
+    if (adamRequestsRef.current > 0 && !options?.keepAdam) {
       void window.api.jarvis.cancelAsk().catch(() => undefined)
     }
     const conversation = conversationRef.current
@@ -97,7 +99,7 @@ export function useVoiceAgent(): VoiceAgent {
       clearIdleTimer()
       idleTimerRef.current = window.setTimeout(() => {
         idleTimerRef.current = null
-        void stop()
+        void stop({ keepAdam: true })
       }, IDLE_HANGUP_MS)
     }
     touchIdle()

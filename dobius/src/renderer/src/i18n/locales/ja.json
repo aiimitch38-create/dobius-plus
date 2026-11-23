@@ -12738,7 +12738,8 @@
       "placeholderAsk": "Hold space to speak · ask “what can you do?”",
       "statusSpeaking": "話しています…",
       "statusThinking": "考えています…",
-      "statusWorking": "作業中…"
+      "statusWorking": "作業中…",
+      "statusCompacting": "記憶を整理中…"
     },
     "group": {
       "deleteTitle": "Delete {{name}}?",
@@ -14265,6 +14266,8 @@
     "adam": {
       "thinking": "ADAM is thinking…",
       "stillThinking": "ADAM is still working on your last message. Wait for his reply, then send this again.",
+      "waitingForCompaction": "ADAMは記憶を整理しています（1〜2分ほど）。終わり次第、このメッセージを送ります：「{{text}}」",
+      "waitingReplaced": "ADAMは記憶を整理しています（1〜2分ほど）。終わり次第、最新のメッセージだけを送ります：「{{text}}」",
       "failed": "ADAM could not answer. {{reason}} To send work straight to a console instead, type its name first, for example “@Codex 1 run the tests”.",
       "unreachable": "This window could not reach ADAM’s Hermes connection. Quit and reopen Dobius+, then send your message again.",
       "cancelled": "ADAM’s answer was stopped before it finished. Send your message again.",

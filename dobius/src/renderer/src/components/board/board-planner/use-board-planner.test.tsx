@@ -8,6 +8,7 @@ import type { BoardConductor } from '../board-route/use-board-conductor'
 import type { BoardRouteData } from '../board-route/use-board-route-data'
 import { BOARD } from './plan-fixtures.test-support'
 import { useBoardPlanner } from './use-board-planner'
+import { setAdamCompactingForTest } from './adam-status'
 
 const mocks = vi.hoisted(() => ({
   executePlan: vi.fn(async () => [{ ok: true, text: 'Paused 3 consoles.' }])
@@ -101,6 +102,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  setAdamCompactingForTest(false)
   act(() => root.unmount())
   container.remove()
 })
@@ -239,6 +241,47 @@ describe('useBoardPlanner: one message at a time', () => {
     expect(busy).toBe(false)
     expect(askAdamText).toHaveBeenCalledTimes(1)
     expect(rows.at(-1)).toEqual({ role: 'assistant', text: 'Done.' })
+  })
+})
+
+describe('useBoardPlanner: a message sent while ADAM tidies his memory', () => {
+  it('waits in one slot (newest wins) and goes to ADAM once his turn is done', async () => {
+    const answers: ((result: JarvisAskResult) => void)[] = []
+    askAdamText.mockImplementation(() => new Promise((resolve) => answers.push(resolve)))
+    mount()
+    let first: Promise<void> = Promise.resolve()
+    await act(async () => {
+      first = run('one')
+      await vi.waitFor(() => expect(askAdamText).toHaveBeenCalledTimes(1))
+    })
+    setAdamCompactingForTest(true)
+    await act(async () => {
+      await run('two')
+      await run('three')
+    })
+    expect(askAdamText).toHaveBeenCalledTimes(1)
+    expect(rows.slice(1).map((row) => row.text)).toEqual([
+      expect.stringContaining('Your message will go to him when he is done: “two”'),
+      expect.stringContaining('Only your newest message will go to him when he is done: “three”')
+    ])
+    setAdamCompactingForTest(false)
+    await act(async () => {
+      answers[0]({ kind: 'answer', text: 'Done.' })
+      await first
+    })
+    await act(async () => {
+      await vi.waitFor(() => expect(askAdamText).toHaveBeenCalledTimes(2))
+    })
+    const sent = askAdamText.mock.calls[1][0]
+    expect(sent).toContain('"three"')
+    expect(sent).not.toContain('"two"')
+    await act(async () => {
+      answers[1]({ kind: 'answer', text: 'Three done.' })
+      await vi.waitFor(() => expect(rows.at(-1)?.text).toBe('Three done.'))
+    })
+    expect(busy).toBe(false)
+    expect(askAdamText).toHaveBeenCalledTimes(2)
+    expect(rows.at(-1)).toEqual({ role: 'assistant', text: 'Three done.' })
   })
 })
 
