@@ -178,4 +178,18 @@ describe('LiveVoiceSettingsSection', () => {
     }
     expect(liveSessionConnect).not.toHaveBeenCalled()
   })
+
+  it('keeps "Read ADAM\'s facts word for word" off by default and saves the switch', async () => {
+    const onUpdate = vi.fn()
+    const container = await render({}, onUpdate)
+    const toggle = container.querySelector<HTMLButtonElement>('#adam-read-facts-verbatim')
+    expect(container.textContent).toContain('Read ADAM’s facts word for word')
+    expect(toggle?.getAttribute('aria-checked')).toBe('false')
+    await click(toggle!)
+    expect(onUpdate).toHaveBeenCalledWith({ adamReadFactsVerbatim: true })
+    await rerender({ adamReadFactsVerbatim: true }, onUpdate)
+    expect(toggle?.getAttribute('aria-checked')).toBe('true')
+    await click(toggle!)
+    expect(onUpdate).toHaveBeenLastCalledWith({ adamReadFactsVerbatim: false })
+  })
 })

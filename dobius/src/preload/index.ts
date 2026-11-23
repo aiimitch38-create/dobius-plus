@@ -4693,6 +4693,7 @@ const api = {
       request: string
       callLines: string[]
       callToken: string
+      delegationId?: string | null
     }): Promise<LiveDelegateResult> => ipcRenderer.invoke('jarvis:liveDelegate', request),
     liveLog: (payload: { text: string }): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('jarvis:liveLog', payload),

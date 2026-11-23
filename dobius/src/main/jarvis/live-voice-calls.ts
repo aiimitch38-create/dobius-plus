@@ -8,16 +8,24 @@ import type {
   OpenAiLiveErrorKind,
   OpenAiLiveFailure
 } from '../../shared/speech-types'
+import type { AdamProgressStep } from '../../shared/adam-progress'
 import type { AdamAskOptions } from './adam-conversation'
+import { liveProgressThrottle, type AdamProgressThrottle } from './adam-progress'
 import { logLiveVoiceProblem } from './live-voice-log'
 import type { QuickHandsDeps } from './live-voice-quick-hands'
 import { LiveQuickTurns } from './live-voice-quick-turns'
 import { LIVE_METER_TICK_MS, type LiveVoiceMeter } from './live-voice-meter'
 import { liveVoiceFailure } from './openai-live-session'
-import { speakableReply } from './live-voice-spoken'
-import { callLinesOf, LIVE_CALL_LINES_MAX, liveVoiceMessage } from './live-voice-message'
+import { spokenFor } from './live-voice-spoken'
+import {
+  callLinesOf,
+  delegationIdOf,
+  LIVE_CALL_LINES_MAX,
+  type LiveDelegation,
+  liveVoiceMessage
+} from './live-voice-message'
 
-export { LIVE_SPOKEN_MAX_CHARS, speakableReply } from './live-voice-spoken'
+export { LIVE_SPOKEN_MAX_CHARS, LIVE_WORD_FOR_WORD_LEAD, speakableReply } from './live-voice-spoken'
 export { callLinesOf, liveVoiceMessage } from './live-voice-message'
 
 const LIVE_REQUEST_MAX_CHARS = 4_000
@@ -51,10 +59,6 @@ const SETUP_NOT_BILLED: ReadonlySet<OpenAiLiveErrorKind> = new Set([
 
 export const LIVE_CAP_WARNING_TEXT = "Heads up: about 80 percent of today's live voice budget is used."
 
-function spokenFor(result: JarvisAskResult): string {
-  return result.kind === 'cancelled' ? '' : speakableReply(result.text)
-}
-
 export type LiveVoiceCallsDeps = {
   meter: LiveVoiceMeter
   capUsd: () => number
@@ -72,6 +76,8 @@ export type LiveVoiceCallsDeps = {
   forceEnd?: (attempt: number) => void
   /** Instant local answers (terminals, usage) tried before ADAM; absent = ADAM only. */
   quickHands?: QuickHandsDeps
+  /** The "Read ADAM's facts word for word" setting; absent = off. */
+  wordForWord?: () => boolean
   /** Writes one line to the live voice log (defaults to the log file). */
   log?: (source: string, text: string) => void
   now?: () => number
@@ -87,7 +93,7 @@ export type LiveVoiceCallsDeps = {
 export class LiveVoiceCalls {
   private ownerId: number | null = null
   private timer: unknown = null
-  private delegation: { ownerId: number; token: symbol } | null = null
+  private delegation: LiveDelegation | null = null
   private warnedDay: string | null = null
   // Why a token per call: transcript row ids are `live:<call>:<item>:<role>`,
   // stable within a call so a resent line is saved once.
@@ -100,9 +106,11 @@ export class LiveVoiceCalls {
   private stopGeneration = 0
   private quickInFlight = 0
   private readonly log: (source: string, text: string) => void
+  private readonly progressNotes: AdamProgressThrottle
 
   constructor(private readonly deps: LiveVoiceCallsDeps) {
     this.log = deps.log ?? logLiveVoiceProblem
+    this.progressNotes = liveProgressThrottle(deps.notify, () => this.delegation, deps.now)
     this.quickTurns = deps.quickHands
       ? new LiveQuickTurns({
           hands: deps.quickHands,
@@ -267,7 +275,9 @@ export class LiveVoiceCalls {
         return { ok: true, kind: 'error', speak: LIVE_STILL_WORKING_TEXT }
       }
       token = Symbol('live-delegation')
-      this.delegation = { ownerId, token }
+      const delegationId = delegationIdOf(raw.delegationId)
+      this.delegation = { ownerId, token, delegationId, callToken }
+      this.progressNotes.reset()
       const adamStart = clock()
       const lines =
         this.quickTurns?.contextLines(windowLines, LIVE_CALL_LINES_MAX) ?? windowLines
@@ -284,7 +294,8 @@ export class LiveVoiceCalls {
       if (this.ownerId !== ownerId || this.delegation?.token !== token) {
         return { ok: true, kind: 'cancelled', speak: '' }
       }
-      return { ok: true, kind: result.kind, speak: spokenFor(result) }
+      const speak = spokenFor(result, this.deps.wordForWord?.() === true)
+      return { ok: true, kind: result.kind, speak }
     } finally {
       if (token && this.delegation?.token === token) {
         this.delegation = null
@@ -292,6 +303,13 @@ export class LiveVoiceCalls {
       const quick = timing.quickMs === null ? '' : ` quick=${timing.quickMs}ms`
       const adam = timing.adamMs === null ? '' : ` hermes=${timing.adamMs}ms`
       this.log('timing', `${timing.outcome} ${clock() - startedAt}ms${quick}${adam}`)
+    }
+  }
+
+  /** ADAM's progress on his running turn: passed on only while it is this call's named request. */
+  progress(step: AdamProgressStep): void {
+    if (this.delegation?.delegationId && this.delegation.ownerId === this.ownerId) {
+      this.progressNotes.offer(step)
     }
   }
 

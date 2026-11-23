@@ -14,6 +14,7 @@ import {
   type LiveVoiceCallDeps,
   type LiveVoiceSnapshot
 } from './live-voice-call-types'
+import { LiveProgressNotes } from './live-voice-progress-notes'
 import { tapLiveMessages } from './live-voice-tap'
 import { parseLiveEvent, sayNowEvent, thinkingEvent } from './live-voice-wire'
 
@@ -41,6 +42,7 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
   private lastHeardInputAt = Number.NEGATIVE_INFINITY
   private lastProgressAt = Number.NEGATIVE_INFINITY
   private timer: number | null = null
+  private readonly progressNotes: LiveProgressNotes
   private readonly setTimer: (handler: () => void, ms: number) => number
   private readonly clearTimer: (timer: number) => void
 
@@ -48,13 +50,25 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
     // Why a tap: the call reads its data channel itself; this hears the same
     // transcript events so a pause between Carson's words is not "quiet".
     const tap = { heard: (_data: unknown): void => undefined }
-    super(tapLiveMessages(deps, (data) => tap.heard(data)), onChange)
+    const notes = new LiveProgressNotes()
+    super(
+      tapLiveMessages({ ...deps, api: notes.track(deps.api) }, (data) => tap.heard(data)),
+      onChange
+    )
     tap.heard = (data) => this.heard(data)
+    this.progressNotes = notes
     this.setTimer = deps.setTimeout ?? ((handler, ms) => window.setTimeout(handler, ms))
     this.clearTimer = deps.clearTimeout ?? ((timer) => window.clearTimeout(timer))
   }
 
   override notice(notice: LiveVoiceNotice): void {
+    if (notice.kind === 'adam-progress') {
+      const note = this.active ? this.progressNotes.note(notice) : null
+      if (note) {
+        this.send(note)
+      }
+      return
+    }
     if (notice.kind === 'reports-cleared') {
       if (notice.only === 'progress') {
         this.reports = this.reports.filter((update) => !isProgress(update))
@@ -89,6 +103,7 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
   protected override teardown(): void {
     super.teardown()
     this.dropReports()
+    this.progressNotes.reset()
   }
 
   private dropReports(): void {

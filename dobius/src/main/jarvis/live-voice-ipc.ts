@@ -8,8 +8,11 @@ import type {
 } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getUserDataRoot } from '../storage/user-data-root'
+import type { AdamProgressStep } from '../../shared/adam-progress'
 import type { AdamConversation } from './adam-conversation'
+import type { ConductorJob } from './adam-conductor-types'
 import type { AdamThreadStore } from './adam-thread-store'
+import { noteAdamActivity } from './adam-idle-tidy'
 import { LiveVoiceCalls } from './live-voice-calls'
 import { LiveVoiceMeter } from './live-voice-meter'
 import { logLiveVoiceProblem } from './live-voice-log'
@@ -31,6 +34,8 @@ export type LiveVoiceIpcDeps = {
   thread: () => AdamThreadStore
   /** Instant local answers tried before ADAM on every spoken request. */
   quickHands?: QuickHandsDeps
+  /** The conductor's tracked jobs, for the voice's standing instructions. */
+  conductorJobs?: () => Promise<readonly ConductorJob[]>
 }
 
 async function liveSessionOptions(
@@ -42,14 +47,17 @@ async function liveSessionOptions(
   const live = resolveLiveVoiceSettings(store.getSettings().voice)
   // Why the thread: every new session, including a reconnect or a planned
   // recycle, starts already knowing what was just said.
-  const recentThread = await deps
-    .thread()
-    .get()
-    .catch(() => [])
+  const [recentThread, jobs] = await Promise.all([
+    deps
+      .thread()
+      .get()
+      .catch(() => []),
+    (deps.conductorJobs?.() ?? Promise.resolve([])).catch(() => [])
+  ])
   return {
     voice: live.voice,
     idleTimeoutSec: live.idleTimeoutSec,
-    instructions: buildLiveVoiceInstructions({ recentThread, lookingAt: deps.lookingAt() })
+    instructions: buildLiveVoiceInstructions({ recentThread, lookingAt: deps.lookingAt(), jobs })
   }
 }
 
@@ -75,7 +83,8 @@ function getLiveCalls(store: Store, deps: LiveVoiceIpcDeps): LiveVoiceCalls {
     lookingAt: deps.lookingAt,
     appendThread: (row) => deps.thread().append(row),
     forceEnd: forceEndLiveCall,
-    quickHands: deps.quickHands
+    quickHands: deps.quickHands,
+    wordForWord: () => store.getSettings().voice?.adamReadFactsVerbatim === true
   })
   return liveCalls
 }
@@ -153,6 +162,8 @@ let activeLiveSession: {
 } | null = null
 
 function clearActiveLiveSession(): void {
+  // A call ending (or starting, below) restarts the idle tidy's quiet stretch.
+  noteAdamActivity()
   const current = activeLiveSession
   activeLiveSession = null
   current?.unwatch()
@@ -164,6 +175,7 @@ function clearActiveLiveSession(): void {
 }
 
 function setActiveLiveSession(owner: LiveSender, sessionId: string | null, callToken: string): void {
+  // Also the call's start edge for the idle tidy (clearActiveLiveSession notes it).
   clearActiveLiveSession()
   const unwatch = watchOwnerGone(owner, () => {
     if (activeLiveSession?.owner === owner) {
@@ -185,6 +197,16 @@ export function sendLiveReport(notice: LiveVoiceNotice): boolean {
   }
   owner.send(LIVE_NOTICE_CHANNEL, notice)
   return true
+}
+
+/** ADAM's progress on his running turn; reaches the voice only while it is the call's request. */
+export function sendLiveProgress(step: AdamProgressStep): void {
+  liveCalls?.progress(step)
+}
+
+/** True while a live call is open or being set up (the idle tidy waits for it). */
+export function isLiveCallOpen(): boolean {
+  return liveSessionInFlight || activeLiveSession !== null
 }
 
 export function getActiveLiveSessionForTest(): {

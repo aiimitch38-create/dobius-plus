@@ -1,3 +1,6 @@
+import type { JarvisAskResult } from '../../shared/speech-types'
+import { estimateTokens, fitTokens, LIVE_COMMENTARY_TOKEN_BUDGET } from './live-voice-tokens'
+
 // What the live voice may say out loud, shared by ADAM's answers and the quick hands.
 
 // Why ~900 characters: the Live API caps session.commentary.append at 500
@@ -28,4 +31,22 @@ export function speakableReply(text: string): string {
   const sentenceEnd = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '))
   const kept = sentenceEnd > budget / 3 ? cut.slice(0, sentenceEnd + 1) : `${cut.trimEnd()}…`
   return `${kept}${tail}`
+}
+
+// Why a lead-in, not a setting on the session: the voice paraphrases every
+// commentary by default; this asks for one answer to be said as written.
+export const LIVE_WORD_FOR_WORD_LEAD = "Say ADAM's answer to Carson exactly as written, word for word: "
+
+/** What the voice says for ADAM's result; `wordForWord` asks it not to paraphrase. */
+export function spokenFor(result: JarvisAskResult, wordForWord: boolean): string {
+  if (result.kind === 'cancelled') {
+    return ''
+  }
+  // Why the budget covers the lead-in too: the cap is on the whole commentary.
+  const lead = wordForWord && result.kind === 'answer' ? LIVE_WORD_FOR_WORD_LEAD : ''
+  const spoken = fitTokens(
+    speakableReply(result.text),
+    LIVE_COMMENTARY_TOKEN_BUDGET - estimateTokens(lead)
+  )
+  return spoken ? lead + spoken : spoken
 }

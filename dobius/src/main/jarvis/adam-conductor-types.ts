@@ -82,3 +82,9 @@ export type Tracked = {
   workingSince: number | null
   progressAt: number
 }
+
+/** A tracked job as a model may hear it: a speakable name and a fixed status. */
+export type ConductorJob = {
+  name: string
+  status: 'sent' | 'working' | 'needs-carson'
+}

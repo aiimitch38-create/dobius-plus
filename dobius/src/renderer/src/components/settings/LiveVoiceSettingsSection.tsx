@@ -71,6 +71,7 @@ export function LiveVoiceSettingsSection({
   const keySaved = voiceSettings.openAiApiKeyConfigured === true
   const reportsOn = voiceSettings.adamReportsFinishedWork !== false
   const progressOn = voiceSettings.adamProgressUpdates !== false
+  const verbatimOn = voiceSettings.adamReadFactsVerbatim === true
   // Why drafts: number and name fields are committed on blur so a half-typed
   // value ("1" on the way to "15") is never saved as the spending cap.
   const [voiceDraft, setVoiceDraft] = useState(live.voice)
@@ -313,6 +314,26 @@ export function LiveVoiceSettingsSection({
         <p className="text-xs text-muted-foreground">
           During a live call, ADAM briefly says when long work starts and that it is still going,
           at most every few minutes.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="adam-read-facts-verbatim">Read ADAM&rsquo;s facts word for word</Label>
+        <div className="flex items-center gap-2">
+          <button
+            id="adam-read-facts-verbatim"
+            type="button"
+            role="switch"
+            aria-checked={verbatimOn}
+            onClick={() => onUpdateVoiceSettings({ adamReadFactsVerbatim: !verbatimOn })}
+            className={CHOICE_CLASS}
+          >
+            <span className="font-medium text-foreground">{verbatimOn ? 'On' : 'Off'}</span>
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          During a live call, the voice says ADAM&rsquo;s answers exactly as he wrote them instead
+          of in its own words. Off by default.
         </p>
       </div>
     </div>

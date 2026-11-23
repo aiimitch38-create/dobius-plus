@@ -141,6 +141,20 @@ export function thinkingEvent(update: string): string {
   })
 }
 
+/**
+ * A progress note on ADAM's running request: quiet context the voice may
+ * mention if asked, never a result. `phrase` comes from the fixed table in
+ * shared/adam-progress.ts. Tied to the delegation so the voice knows which
+ * request it is about.
+ */
+export function progressNoteEvent(phrase: string, delegationId: string | null): string {
+  return JSON.stringify({
+    type: LIVE_EVENT.thinking,
+    content: `Progress note from Dobius+, not a result: ${phrase.slice(0, 200)}. ADAM is still working.`,
+    delegation_id: delegationId
+  })
+}
+
 export function muteEvent(muted: boolean): string {
   return JSON.stringify({ type: muted ? LIVE_EVENT.mute : LIVE_EVENT.unmute })
 }

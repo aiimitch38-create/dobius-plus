@@ -111,7 +111,11 @@ export class LiveDelegations {
       if (!isCurrent()) {
         return
       }
-      const result = await host.link.delegate(request, host.transcript.recentLines())
+      const result = await host.link.delegate(
+        request,
+        host.transcript.recentLines(),
+        delegationId
+      )
       const say = result.ok ? result.speak : LIVE_UNREACHABLE_TEXT
       if (isCurrent() && say) {
         // ADAM's answer is already in his thread (askAdam wrote it).

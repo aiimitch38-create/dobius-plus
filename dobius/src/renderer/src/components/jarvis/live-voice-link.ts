@@ -34,12 +34,16 @@ export class LiveSessionLink {
     }
   }
 
-  delegate(request: string, callLines: string[]): Promise<LiveDelegateResult> {
+  delegate(
+    request: string,
+    callLines: string[],
+    delegationId: string | null = null
+  ): Promise<LiveDelegateResult> {
     if (!this.token) {
       return Promise.resolve({ ok: false, error: 'no call' })
     }
     return this.api
-      .liveDelegate({ request, callLines, callToken: this.token })
+      .liveDelegate({ request, callLines, callToken: this.token, delegationId })
       .catch((): LiveDelegateResult => ({ ok: false, error: 'unreachable' }))
   }
 
