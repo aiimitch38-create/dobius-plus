@@ -10,7 +10,7 @@ import {
   type QuickHandsDeps
 } from './live-voice-quick-hands'
 import { speakableReply } from './live-voice-spoken'
-import { pickCandidate } from './live-voice-terminal-target'
+import { isStopReply, pickCandidate } from './live-voice-terminal-target'
 
 const EXCHANGES_MAX = 4
 const LINE_MAX_CHARS = 300
@@ -32,10 +32,26 @@ export type QuickTurn = { outcome: string; result: LiveDelegateResult }
 const CANCELLED: LiveDelegateResult = { ok: true, kind: 'cancelled', speak: '' }
 
 /**
- * One answered exchange. `after` is the newest window call line when it
- * happened, so it can be put back in order among the window's lines.
+ * One answered exchange. `window` is the window's call lines when it
+ * happened, so it can be put back in order among later lines.
  */
-type Exchange = { lines: string[]; after: string | null }
+type Exchange = { lines: string[]; window: string[] }
+
+/**
+ * Where the last line of `then` sits in `now`, or -1 once it scrolled out.
+ * Why by sequence, not text: the window keeps its newest lines, so `now` is
+ * `then` with some lines dropped from the front and new ones added; a line
+ * said twice ("ok") must not move an exchange to its later copy.
+ */
+function anchorIn(then: string[], now: string[]): number {
+  for (let dropped = 0; dropped < then.length; dropped += 1) {
+    const kept = then.slice(dropped)
+    if (kept.length <= now.length && kept.every((line, at) => now[at] === line)) {
+      return kept.length - 1
+    }
+  }
+  return -1
+}
 
 export class LiveQuickTurns {
   private exchanges: Exchange[] = []
@@ -60,23 +76,13 @@ export class LiveQuickTurns {
    * them in the order they happened, newest last, at most `max`.
    */
   contextLines(windowLines: string[], max: number): string[] {
-    const placed = new Set<Exchange>()
-    const out: string[] = []
-    // An exchange whose anchor already scrolled out of the window's lines is older than all of them.
-    for (const exchange of this.exchanges) {
-      if (exchange.after === null || !windowLines.includes(exchange.after)) {
-        out.push(...exchange.lines)
-        placed.add(exchange)
-      }
-    }
-    windowLines.forEach((line, at) => {
-      out.push(line)
-      for (const exchange of this.exchanges) {
-        if (!placed.has(exchange) && windowLines.lastIndexOf(exchange.after ?? '') === at) {
-          out.push(...exchange.lines)
-          placed.add(exchange)
-        }
-      }
+    const anchors = this.exchanges.map((exchange) => anchorIn(exchange.window, windowLines))
+    const at = (index: number): string[] =>
+      this.exchanges.flatMap((exchange, i) => (anchors[i] === index ? exchange.lines : []))
+    // An exchange whose anchor scrolled out is older than every line shown.
+    const out = at(-1)
+    windowLines.forEach((line, index) => {
+      out.push(line, ...at(index))
     })
     return out.slice(-max)
   }
@@ -94,7 +100,12 @@ export class LiveQuickTurns {
   ): Promise<QuickTurn | null> {
     const now = (this.deps.now ?? Date.now)()
     const pending = this.pending
+    // Why cleared first: whatever comes next that is not a clear answer
+    // (a stop, a new request) ends the question.
     this.pending = null
+    if (pending && isStopReply(request)) {
+      return { outcome: 'cancelled', result: CANCELLED }
+    }
     try {
       const chosen =
         pending && pending.callToken === callToken && now < pending.expiresAt
@@ -106,7 +117,7 @@ export class LiveQuickTurns {
           ? await runQuickHandOn(pending.intent, chosen.handle, this.deps.hands, isCurrent)
           : await runQuickHand(request, this.deps.hands, isCurrent)
       if (quick || !isCurrent()) {
-        return this.finish(quick, request, callToken, isCurrent, windowLines.at(-1) ?? null, now)
+        return this.finish(quick, request, callToken, isCurrent, windowLines, now)
       }
     } catch (error) {
       // Nothing was written (any partial write is spoken instead), so ADAM
@@ -121,7 +132,7 @@ export class LiveQuickTurns {
     request: string,
     callToken: string,
     isCurrent: () => boolean,
-    after: string | null,
+    window: string[],
     now: number
   ): QuickTurn {
     if (!quick || quick.cancelled || !isCurrent()) {
@@ -131,7 +142,7 @@ export class LiveQuickTurns {
       this.pending = { ...quick.ask, callToken, expiresAt: now + QUICK_ASK_TTL_MS }
     }
     const speak = speakableReply(quick.speak)
-    this.remember(callToken, request, speak, after)
+    this.remember(callToken, request, speak, window)
     return { outcome: `quick:${quick.name}`, result: { ok: true, kind: 'answer', speak } }
   }
 
@@ -141,7 +152,7 @@ export class LiveQuickTurns {
    * without this a quick exchange would be missing from ADAM's thread. Each
    * row is written on its own: a failed one does not stop the other.
    */
-  private remember(callToken: string, request: string, speak: string, after: string | null): void {
+  private remember(callToken: string, request: string, speak: string, window: string[]): void {
     const id = `live:${callToken}:quick-${++this.count}`
     this.exchanges = [
       ...this.exchanges,
@@ -150,7 +161,7 @@ export class LiveQuickTurns {
           `Carson: ${request}`.slice(0, LINE_MAX_CHARS),
           `ADAM's quick answer: ${speak}`.slice(0, LINE_MAX_CHARS)
         ],
-        after
+        window: [...window]
       }
     ].slice(-EXCHANGES_MAX)
     const rows: AdamThreadRow[] = [

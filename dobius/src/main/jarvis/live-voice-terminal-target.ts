@@ -171,18 +171,43 @@ export function whichOneQuestion(hits: QuickTerminal[]): string | null {
 
 const ORDINAL_REPLY =
   /^(?:the\s+)?(?:(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)(?:\s+one)?|(?:number|option)\s+([1-5]|one|two|three|four|five))$/
+const ANSWER_WORDS_MAX = 6
+
+/** "Stop", "cancel", "never mind", "forget it": drops an open question. */
+export function isStopReply(reply: string): boolean {
+  return /^(?:(?:hey|ok|okay|no)\s+)?(?:adam\s+)?(?:stop|cancel|never\s?mind|forget\s+(?:it|that)|scratch\s+that)(?:\s+(?:it|that|please|now|adam))*$/.test(
+    reply
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
+}
+
+/** The one candidate whose value equals `said`; null for none or several. */
+function only(
+  candidates: QuickTerminal[],
+  said: string,
+  values: (terminal: QuickTerminal) => string[]
+): QuickTerminal | null {
+  const hits = candidates.filter((terminal) => values(terminal).some((value) => value === said))
+  return hits.length === 1 ? hits[0] : null
+}
 
 /**
- * The one candidate a short answer to "which one?" picks: "the second one",
- * "the SMID one", "Terminal 1 in Website". Null when it picks none or several.
+ * The one candidate a short answer to "which one?" picks. Why strict: the
+ * answer may be a new request ("fix the login bug"), so only an order ("the
+ * second one", "number two"), a candidate's whole label, its project
+ * ("the SMID one", "the one in Website") or both ("Terminal 1 in Website")
+ * count, never part of a title. Null otherwise; the request is then read fresh.
  */
 export function pickCandidate(reply: string, candidates: QuickTerminal[]): QuickTerminal | null {
   const said = reply
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s']+/gu, ' ')
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-  if (!said || said.split(' ').length > 8) {
+  if (!said || said.split(' ').length > ANSWER_WORDS_MAX) {
     return null
   }
   const ordinal = ORDINAL_REPLY.exec(said)
@@ -192,11 +217,22 @@ export function pickCandidate(reply: string, candidates: QuickTerminal[]): Quick
     const spoken = ['one', 'two', 'three', 'four', 'five'].indexOf(word)
     return candidates[at >= 0 ? at : spoken] ?? null
   }
-  const bare = said.replace(/^(?:the|in the|in|on the|on)\s+/, '')
-  for (const target of [bare, bare.replace(/\s+one$/, '')]) {
-    const hits = matchTerminals(candidates, target, 'words')
-    if (hits.length === 1) {
-      return hits[0]
+  const bare = said.replace(/^(?:the\s+)?(?:one\s+)?(?:(?:in|from|on)\s+)?(?:the\s+)?/, '')
+  const forms = [...new Set([bare.replace(/\s+(?:one|terminal|tab)$/, ''), bare])]
+    .map(spokenWords)
+    .filter(Boolean)
+  const labels = (terminal: QuickTerminal): string[] =>
+    (terminal.labels ?? [terminal.name]).map(spokenWords)
+  const project = (terminal: QuickTerminal): string => spokenWords(terminal.project ?? '')
+  for (const form of forms) {
+    const hit =
+      only(candidates, form, labels) ??
+      only(candidates, form, (terminal) => [project(terminal)]) ??
+      only(candidates, form, (terminal) =>
+        labels(terminal).map((label) => `${label} in ${project(terminal)}`)
+      )
+    if (hit) {
+      return hit
     }
   }
   return null

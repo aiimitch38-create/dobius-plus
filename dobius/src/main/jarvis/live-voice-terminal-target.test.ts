@@ -3,6 +3,7 @@ import { matchQuickHand, runQuickHand, type QuickHandsDeps } from './live-voice-
 import {
   branchLabel,
   cleanTitle,
+  isStopReply,
   matchTerminals,
   pickCandidate,
   spokenWords,
@@ -133,12 +134,39 @@ describe('pickCandidate', () => {
   ])('%s picks %s', (reply, handle) => {
     expect(pickCandidate(reply, asked)?.handle).toBe(handle)
   })
-  it.each(['terminal one', 'the sixth', 'fix the login bug in the API and tell me how it went', 'epoxy'])(
-    '%s picks nothing',
+  it.each([
+    'terminal one',
+    'the sixth',
+    'fix the login bug in the API and tell me how it went',
+    'epoxy',
+    'web',
+    'the online one'
+  ])('%s picks nothing', (reply) => {
+    expect(pickCandidate(reply, asked)).toBeNull()
+  })
+
+  it('never picks by part of a title: "fix the login bug" is a new request', () => {
+    const panes: QuickTerminal[] = [
+      { handle: 'x', name: 'Terminal 1', labels: ['Terminal 1', 'Fix the login bug in API'], project: 'SMID' },
+      { handle: 'y', name: 'Terminal 1', project: 'Website' }
+    ]
+    expect(pickCandidate('fix the login bug', panes)).toBeNull()
+    expect(pickCandidate('Fix the login bug in API', panes)?.handle).toBe('x')
+    expect(pickCandidate('the one in SMID', panes)?.handle).toBe('x')
+    expect(pickCandidate('the website terminal', panes)?.handle).toBe('y')
+  })
+})
+
+describe('isStopReply', () => {
+  it.each(['stop', 'Stop.', 'cancel that', 'never mind', 'nevermind', 'forget it', 'okay adam stop'])(
+    '%s is a stop',
     (reply) => {
-      expect(pickCandidate(reply, asked)).toBeNull()
+      expect(isStopReply(reply)).toBe(true)
     }
   )
+  it.each(['stop the server in backend', 'the second one'])('%s is not', (reply) => {
+    expect(isStopReply(reply)).toBe(false)
+  })
 })
 
 describe('quick hands on the real list', () => {

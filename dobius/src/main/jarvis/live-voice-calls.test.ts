@@ -351,6 +351,55 @@ describe('quick hands, round 2', () => {
     expect(typeInto).not.toHaveBeenCalled()
   })
 
+  it('"stop" spoken after a which-one question drops it, even with nothing in flight', async () => {
+    const { calls, typeInto } = calls2()
+    await calls.delegate(7, { request: 'type ls into terminal 1' })
+    await expect(calls.delegate(7, { request: 'stop' })).resolves.toMatchObject({ kind: 'cancelled' })
+    const answer = calls.delegate(7, { request: 'the second one' })
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1))
+    pending?.resolve({ kind: 'answer', text: 'Second what?' })
+    await answer
+    expect(typeInto).not.toHaveBeenCalled()
+  })
+
+  it('a pane title mentioned in a new request is not taken as the answer', async () => {
+    const { calls, typeInto } = calls2({
+      listTerminals: async () => ({
+        terminals: [
+          { handle: 'a', name: 'Terminal 1', labels: ['Terminal 1', 'Fix the login bug in API'], project: 'SMID' },
+          { handle: 'b', name: 'Terminal 1', project: 'Website' }
+        ],
+        truncated: false
+      })
+    })
+    await calls.delegate(7, { request: 'type ls into terminal 1' })
+    const answer = calls.delegate(7, { request: 'fix the login bug' })
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1))
+    pending?.resolve({ kind: 'answer', text: 'On it.' })
+    await answer
+    expect(typeInto).not.toHaveBeenCalled()
+  })
+
+  it('anchors exchanges by sequence, so a repeated window line does not move them', async () => {
+    const { calls } = calls2()
+    await calls.delegate(7, { request: 'how many terminals are open', callLines: ['Carson: ok'] })
+    const window = ['Carson: ok', 'Carson: later', 'Carson: ok']
+    const answer = calls.delegate(7, { request: 'and the plan?', callLines: window })
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1))
+    const sent = JSON.parse(
+      String(ask.mock.calls[0][0]).split('<untrusted_context>\n')[1].split('\n</untrusted_context>')[0]
+    ) as { earlier_on_this_call: string[] }
+    expect(sent.earlier_on_this_call).toEqual([
+      'Carson: ok',
+      'Carson: how many terminals are open',
+      "ADAM's quick answer: 2 terminals are open: Terminal 1, Terminal 1.",
+      'Carson: later',
+      'Carson: ok'
+    ])
+    pending?.resolve({ kind: 'answer', text: 'Sure.' })
+    await answer
+  })
+
   it('a failed user row does not stop the assistant row', async () => {
     const saved: AdamThreadRow[] = []
     const { calls } = calls2(

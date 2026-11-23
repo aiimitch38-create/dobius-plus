@@ -52,10 +52,14 @@ export class LiveDelegations {
     this.waitingForWords = 0
   }
 
-  /** Drops ADAM's work for this call, if any is running. */
-  cancel(): void {
+  /**
+   * Drops ADAM's work for this call, if any is running. `spoken`: Carson
+   * said "stop"; main is told even with nothing pending here, because a
+   * quick answer may have left a "which one?" open there.
+   */
+  cancel(spoken = false): void {
     this.epoch += 1
-    if (this.pending > 0) {
+    if (spoken || this.pending > 0) {
       this.host.link.cancel()
     }
   }
@@ -133,7 +137,7 @@ export class LiveDelegations {
     const said = this.host.transcript.peekInput()
     if (isStopIntent(said)) {
       this.host.transcript.discardInput()
-      this.cancel()
+      this.cancel(true)
       return false
     }
     return isHangUpIntent(said)
