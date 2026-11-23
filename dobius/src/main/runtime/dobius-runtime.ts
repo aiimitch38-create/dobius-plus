@@ -683,7 +683,7 @@ import { closeLocalWatcherForWorktreePath } from '../ipc/filesystem-watcher'
 import { HeadlessEmulator, type HeadlessEmulatorOptions } from '../daemon/headless-emulator'
 import { buildRenderedScreenRead, screenReadRowBudget } from './terminal-read-views'
 import { readAgentTranscriptTail } from './terminal-transcript-read'
-import { resolveSessionFilePath } from '../native-chat/session-file-resolver'
+import { agentTranscriptRoots, resolveSessionFilePath } from '../native-chat/session-file-resolver'
 import type { TerminalSnapshot } from '../daemon/types'
 import { killAllProcessesForWorktree } from './worktree-teardown'
 import { MOBILE_SUBSCRIBE_SCROLLBACK_ROWS } from './scrollback-limits'
@@ -1118,6 +1118,9 @@ type RuntimeHeadlessTerminal = {
   // registered its serializer) holds only output since then. It must still be
   // seeded from the renderer once that registers, or the snapshot stays blank.
   awaitingRendererHydration?: boolean
+  // Why: a seed can fail or be capped; terminal.read --screen must say the
+  // older history is missing instead of presenting the mirror as complete.
+  historyIncomplete?: string
 }
 
 type HeadlessSeedMetadata = {
@@ -5914,9 +5917,10 @@ export class DobiusRuntimeService {
           state.emulator.setRestoredOscLinks(metadata.oscLinks)
         }
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         // Seeding is best-effort; live data will continue to populate the
         // emulator even if the snapshot replay fails.
+        state.historyIncomplete = `restoring earlier output into the mirror failed (${err instanceof Error ? err.message : String(err)}); only later output is present`
       })
   }
 
@@ -5989,6 +5993,12 @@ export class DobiusRuntimeService {
           state.emulator.resize(rendered.cols, rendered.rows)
         }
         await state.emulator.write(rendered.data)
+        // Why: the renderer seed is capped at MOBILE_SUBSCRIBE_SCROLLBACK_ROWS;
+        // a seed that fills the cap almost certainly left older rows behind.
+        state.historyIncomplete =
+          state.emulator.getScrollbackRowCount() >= MOBILE_SUBSCRIBE_SCROLLBACK_ROWS
+            ? `mirror was seeded with at most ${MOBILE_SUBSCRIBE_SCROLLBACK_ROWS} scrollback rows from the pane; older rows were not copied`
+            : undefined
         const ptyDims = this.getTerminalSize(ptyId)
         if (ptyDims && (ptyDims.cols !== rendered.cols || ptyDims.rows !== rendered.rows)) {
           state.emulator.resize(ptyDims.cols, ptyDims.rows)
@@ -5997,9 +6007,10 @@ export class DobiusRuntimeService {
           state.emulator.setLastTitle(rendered.lastTitle)
           this.applySeededAgentStatus(ptyId, rendered.lastTitle)
         }
-      } catch {
+      } catch (err) {
         // Hydration is best-effort. Live writes continue via the same
         // writeChain that this catch-arm leaves intact.
+        state.historyIncomplete = `seeding the mirror from the pane failed (${err instanceof Error ? err.message : String(err)}); only output since tracking began is present`
       } finally {
         // Why: the seed write and resizes above change the screen without moving outputSequence.
         state.snapshotCache = undefined
@@ -8860,7 +8871,9 @@ export class DobiusRuntimeService {
     }
     const [screen, transcript] = await Promise.all([
       opts.screen ? this.readTerminalRenderedScreen(ptyId, opts.limit) : undefined,
-      opts.transcript ? this.readTerminalAgentTranscript(handle, opts.transcriptLimit) : undefined
+      opts.transcript
+        ? this.readTerminalAgentTranscript(handle, ptyId, opts.transcriptLimit)
+        : undefined
     ])
     return {
       ...read,
@@ -8902,7 +8915,7 @@ export class DobiusRuntimeService {
         limit,
         historyIncomplete: state.awaitingRendererHydration
           ? 'mirror holds only output received since Dobius+ began tracking this PTY; earlier output was not seeded'
-          : undefined
+          : state.historyIncomplete
       })
     } catch (err) {
       return {
@@ -8917,10 +8930,15 @@ export class DobiusRuntimeService {
     agent: string
     sessionId: string | null
     transcriptPath: string | null
+    remote: boolean
   } | null {
     const paneKey = this.getPaneKeyForTerminalHandle(handle)
-    let best: { agent: string; sessionId: string | null; transcriptPath: string | null } | null =
-      null
+    let best: {
+      agent: string
+      sessionId: string | null
+      transcriptPath: string | null
+      remote: boolean
+    } | null = null
     let bestAt = -1
     for (const entry of this.getAgentStatusSnapshotFn?.() ?? []) {
       if (entry.terminalHandle !== handle && (!paneKey || entry.paneKey !== paneKey)) {
@@ -8934,7 +8952,8 @@ export class DobiusRuntimeService {
       best = {
         agent: entry.agentType,
         sessionId: session.id || null,
-        transcriptPath: session.transcriptPath ?? null
+        transcriptPath: session.transcriptPath ?? null,
+        remote: entry.connectionId !== null && entry.connectionId !== undefined
       }
     }
     return best
@@ -8942,9 +8961,20 @@ export class DobiusRuntimeService {
 
   private async readTerminalAgentTranscript(
     handle: string,
+    ptyId: string | null,
     limit: number | undefined
   ): Promise<RuntimeTerminalTranscriptRead> {
     const session = this.findAgentSessionForTerminalHandle(handle)
+    // Why: a remote agent's transcript lives on the remote host. Resolving its
+    // path here would read whatever local file happens to match.
+    if ((ptyId && this.ptysById.get(ptyId)?.connectionId) || session?.remote) {
+      return {
+        available: false,
+        source: 'transcript',
+        ...(session ? { agent: session.agent, sessionId: session.sessionId } : {}),
+        reason: 'remote-transcript-unavailable'
+      }
+    }
     if (!session) {
       return {
         available: false,
@@ -8979,6 +9009,7 @@ export class DobiusRuntimeService {
       agent: session.agent,
       path,
       sessionId: session.sessionId,
+      allowedRoots: agentTranscriptRoots(session.agent),
       limit
     })
   }

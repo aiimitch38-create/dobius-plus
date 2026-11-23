@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks'
 import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { lstat, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ipcMain } from 'electron'
@@ -26343,17 +26343,37 @@ describe('readTerminal screen + transcript views', () => {
   let transcriptDir: string | null = null
 
   afterEach(async () => {
+    vi.unstubAllEnvs()
     if (transcriptDir) {
       await rm(transcriptDir, { recursive: true, force: true })
       transcriptDir = null
     }
   })
 
-  function createRuntime(snapshot: () => unknown[] = () => []): DobiusRuntimeService {
+  function claudeSessionEntry(transcriptPath: string, connectionId: string | null = null): unknown {
+    return {
+      paneKey,
+      state: 'done',
+      prompt: '',
+      agentType: 'claude',
+      connectionId,
+      receivedAt: Date.now(),
+      stateStartedAt: Date.now(),
+      tabId: 'tab-1',
+      worktreeId: TEST_WORKTREE_ID,
+      providerSession: { key: 'session_id', id: 'abc', transcriptPath }
+    }
+  }
+
+  function createRuntime(
+    snapshot: () => unknown[] = () => [],
+    controllerExtras: Record<string, unknown> = {}
+  ): DobiusRuntimeService {
     const runtime = new DobiusRuntimeService(store, undefined, {
       getAgentStatusSnapshot: snapshot as never
     })
     runtime.setPtyController({
+      ...controllerExtras,
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null
@@ -26433,7 +26453,10 @@ describe('readTerminal screen + transcript views', () => {
 
   it('returns recent transcript messages for the agent session bound to the pane', async () => {
     transcriptDir = await mkdtemp(join(tmpdir(), 'runtime-terminal-transcript-'))
-    const transcriptPath = join(transcriptDir, 'abc.jsonl')
+    // Why HOME: transcripts are only read from inside ~/.claude/projects.
+    vi.stubEnv('HOME', transcriptDir)
+    await mkdir(join(transcriptDir, '.claude', 'projects', 'p'), { recursive: true })
+    const transcriptPath = join(transcriptDir, '.claude', 'projects', 'p', 'abc.jsonl')
     await writeFile(
       transcriptPath,
       [
@@ -26444,20 +26467,7 @@ describe('readTerminal screen + transcript views', () => {
         })
       ].join('\n')
     )
-    const runtime = createRuntime(() => [
-      {
-        paneKey,
-        state: 'done',
-        prompt: '',
-        agentType: 'claude',
-        connectionId: null,
-        receivedAt: Date.now(),
-        stateStartedAt: Date.now(),
-        tabId: 'tab-1',
-        worktreeId: TEST_WORKTREE_ID,
-        providerSession: { key: 'session_id', id: 'abc', transcriptPath }
-      }
-    ])
+    const runtime = createRuntime(() => [claudeSessionEntry(transcriptPath)])
     runtime.onPtyData('pty-1', 'hello\r\n', 1)
     const [terminal] = (await runtime.listTerminals()).terminals
     const read = await runtime.readTerminal(terminal.handle, { transcript: true })
@@ -26465,12 +26475,88 @@ describe('readTerminal screen + transcript views', () => {
       available: true,
       agent: 'claude',
       sessionId: 'abc',
-      path: transcriptPath,
+      path: await realpath(transcriptPath),
       messages: [
         { role: 'user', text: 'status?' },
         { role: 'assistant', text: 'All green.' }
       ]
     })
+  })
+
+  it('refuses a hook-reported transcript path outside the agent session folders', async () => {
+    transcriptDir = await mkdtemp(join(tmpdir(), 'runtime-terminal-transcript-'))
+    vi.stubEnv('HOME', join(transcriptDir, 'home'))
+    const transcriptPath = join(transcriptDir, 'elsewhere.jsonl')
+    await writeFile(transcriptPath, JSON.stringify({ type: 'user', message: { content: 'x' } }))
+    const runtime = createRuntime(() => [claudeSessionEntry(transcriptPath)])
+    runtime.onPtyData('pty-1', 'hello\r\n', 1)
+    const [terminal] = (await runtime.listTerminals()).terminals
+    const read = await runtime.readTerminal(terminal.handle, { transcript: true })
+    expect(read.transcript).toMatchObject({ available: false })
+  })
+
+  it('never reads a local file for a remote agent session', async () => {
+    transcriptDir = await mkdtemp(join(tmpdir(), 'runtime-terminal-transcript-'))
+    vi.stubEnv('HOME', transcriptDir)
+    await mkdir(join(transcriptDir, '.claude', 'projects', 'p'), { recursive: true })
+    const transcriptPath = join(transcriptDir, '.claude', 'projects', 'p', 'abc.jsonl')
+    await writeFile(transcriptPath, JSON.stringify({ type: 'user', message: { content: 'x' } }))
+    const runtime = createRuntime(() => [claudeSessionEntry(transcriptPath, 'ssh-conn-1')])
+    runtime.onPtyData('pty-1', 'hello\r\n', 1)
+    const [terminal] = (await runtime.listTerminals()).terminals
+    const read = await runtime.readTerminal(terminal.handle, { transcript: true })
+    expect(read.transcript).toEqual({
+      available: false,
+      source: 'transcript',
+      agent: 'claude',
+      sessionId: 'abc',
+      reason: 'remote-transcript-unavailable'
+    })
+  })
+
+  it('reports incomplete history when seeding the mirror from the pane failed', async () => {
+    const runtime = createRuntime(() => [], {
+      hasRendererSerializer: () => true,
+      serializeBuffer: async () => {
+        throw new Error('renderer gone')
+      }
+    })
+    runtime.onPtyData('pty-1', 'live line\r\n', 1)
+    const [terminal] = (await runtime.listTerminals()).terminals
+    const read = await runtime.readTerminal(terminal.handle, { screen: true })
+    expect(read.screen).toMatchObject({ available: true })
+    expect(read.screen?.available && read.screen.historyIncomplete).toMatch(/renderer gone/)
+  })
+
+  it('reports incomplete history when the pane seed hit its row cap', async () => {
+    const seed = Array.from({ length: 1100 }, (_, index) => `seed ${index}`).join('\r\n')
+    const runtime = createRuntime(() => [], {
+      hasRendererSerializer: () => true,
+      serializeBuffer: async () => ({ data: seed, cols: 80, rows: 24 })
+    })
+    runtime.onPtyData('pty-1', '\r\nlive line\r\n', 1)
+    const [terminal] = (await runtime.listTerminals()).terminals
+    const read = await runtime.readTerminal(terminal.handle, { screen: true, limit: 5 })
+    if (!read.screen?.available) {
+      throw new Error('expected screen')
+    }
+    expect(read.screen.historyIncomplete).toMatch(/at most 1000 scrollback rows/)
+    expect(read.screen.screen.at(-1)).toBe('live line')
+  })
+
+  it('does not report incomplete history after a complete small seed', async () => {
+    const runtime = createRuntime(() => [], {
+      hasRendererSerializer: () => true,
+      serializeBuffer: async () => ({ data: 'earlier\r\n', cols: 80, rows: 24 })
+    })
+    runtime.onPtyData('pty-1', 'live line\r\n', 1)
+    const [terminal] = (await runtime.listTerminals()).terminals
+    const read = await runtime.readTerminal(terminal.handle, { screen: true })
+    if (!read.screen?.available) {
+      throw new Error('expected screen')
+    }
+    expect(read.screen.historyIncomplete).toBeUndefined()
+    expect(read.screen.screen).toEqual(['earlier', 'live line'])
   })
 
   it('says why when no transcript is known for the terminal', async () => {

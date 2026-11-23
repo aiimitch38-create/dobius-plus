@@ -1029,15 +1029,31 @@ export const TERMINAL_METHODS: RpcAnyMethod[] = [
   defineMethod({
     name: 'terminal.read',
     params: TerminalRead,
-    handler: async (params, { runtime }) => ({
-      terminal: await runtime.readTerminal(params.terminal, {
+    handler: async (params, { runtime, agentKey }) => {
+      // Why: the limited agent key may not call nativeChat.readSession, so it
+      // must not reach the same transcripts through terminal.read either. The
+      // rendered screen is what terminal.read already exposes, so it stays.
+      const transcriptDenied = params.transcript === true && agentKey === true
+      const terminal = await runtime.readTerminal(params.terminal, {
         cursor: params.cursor,
         limit: params.limit,
         ...(params.screen ? { screen: true } : {}),
-        ...(params.transcript ? { transcript: true } : {}),
+        ...(params.transcript && !transcriptDenied ? { transcript: true } : {}),
         ...(params.transcriptLimit !== undefined ? { transcriptLimit: params.transcriptLimit } : {})
       })
-    })
+      return {
+        terminal: transcriptDenied
+          ? {
+              ...terminal,
+              transcript: {
+                available: false as const,
+                source: 'transcript' as const,
+                reason: 'not-permitted'
+              }
+            }
+          : terminal
+      }
+    }
   }),
   defineMethod({
     name: 'terminal.inspectProcess',

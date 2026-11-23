@@ -121,6 +121,23 @@ describe('buildRenderedScreenRead', () => {
     expect(read.screen).toEqual(['Waddling… (43s)', '', '', '', 'Build ADAM quick hands'])
   })
 
+  it('trims blank screen padding before applying the line limit', async () => {
+    const read = await renderRead('hello', { limit: 1 })
+    expect(read.screen).toEqual(['hello'])
+    expect(read.scrollback).toEqual([])
+  })
+
+  it('shows the visible part of a line that wraps from scrollback into the screen', async () => {
+    // 4-row screen, 10 cols: 'a'*10 + 'b'*10 + 'c'*10 wraps over 3 rows; three
+    // more lines push its first row into scrollback.
+    const read = await renderRead(`${'a'.repeat(10)}${'b'.repeat(10)}${'c'.repeat(10)}\r\nx\r\ny`, {
+      cols: 10,
+      rows: 4
+    })
+    expect(read.scrollback).toEqual(['a'.repeat(10)])
+    expect(read.screen).toEqual(['b'.repeat(10) + 'c'.repeat(10), 'x', 'y'])
+  })
+
   it('passes through a history-incomplete reason', () => {
     const read = buildRenderedScreenRead(
       {

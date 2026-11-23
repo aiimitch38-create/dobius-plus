@@ -29,6 +29,7 @@ export function clampLimit(value: number | undefined, fallback: number, max: num
   return Math.min(Math.floor(value), max)
 }
 
+/** Scrollback rows to fetch above the always-fetched visible screen. */
 export function screenReadRowBudget(limit: number | undefined): number {
   // Why: rows are fetched before soft-wrapped rows are rejoined, so ask for
   // enough rows that `limit` logical lines are still covered when many wrap.
@@ -53,7 +54,9 @@ export function buildRenderedScreenRead(
     // Why: a wrapped row continues the previous logical line. The first
     // returned row can be a continuation whose head was not fetched; it then
     // starts its own (partial) line rather than being dropped.
-    if (row.wrapped && previous) {
+    // Why the screen boundary: a line wrapping from scrollback into the top
+    // screen row must still show its visible part under `screen`.
+    if (row.wrapped && previous && absoluteRow !== input.firstScreenRow) {
       previous.text += row.text
     } else {
       logical.push({ text: row.text, startRow: absoluteRow })

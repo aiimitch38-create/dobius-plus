@@ -1,9 +1,9 @@
-import { open, stat } from 'node:fs/promises'
 import type {
   RuntimeTerminalTranscriptMessage,
   RuntimeTerminalTranscriptRead
 } from '../../shared/runtime-types'
 import { clampLimit } from './terminal-read-views'
+import { openConfinedTranscriptFile } from './transcript-path-guard'
 
 // Why: the terminal screen only shows what fits and redraws; the agent's own
 // JSONL transcript is the reliable record of what it said. Read-only.
@@ -23,6 +23,8 @@ type DecodedTextRecord = {
   /** Claude splits one assistant message into one record per content block;
    *  records sharing this id are the same message. */
   mergeKey: string | null
+  /** Codex writes many turns twice (response_item and event_msg). */
+  kind?: 'response' | 'event'
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -106,6 +108,9 @@ export function decodeCodexTextRecord(line: string): DecodedTextRecord | null {
   }
   const record = asRecord(parsed)
   const payload = asRecord(record?.payload)
+  if (record?.type === 'event_msg' && payload) {
+    return decodeCodexEventMessage(payload, parseTimestamp(record.timestamp))
+  }
   if (!record || record.type !== 'response_item' || payload?.type !== 'message') {
     return null
   }
@@ -120,8 +125,49 @@ export function decodeCodexTextRecord(line: string): DecodedTextRecord | null {
     role: payload.role,
     text,
     timestamp: parseTimestamp(record.timestamp),
-    mergeKey: null
+    mergeKey: null,
+    kind: 'response'
   }
+}
+
+function decodeCodexEventMessage(
+  payload: Record<string, unknown>,
+  timestamp: number | null
+): DecodedTextRecord | null {
+  const role =
+    payload.type === 'user_message' ? 'user' : payload.type === 'agent_message' ? 'assistant' : null
+  const text = typeof payload.message === 'string' ? payload.message.trim() : ''
+  if (!role || !text) {
+    return null
+  }
+  return { role, text, timestamp, mergeKey: null, kind: 'event' }
+}
+
+const CODEX_DUPLICATE_LOOKBACK = 4
+
+// Why: when Codex records a turn both as a response_item and as an event_msg,
+// show it once. Only a nearby copy from the OTHER representation counts, so a
+// user genuinely repeating the same prompt is still shown twice.
+function isCodexDuplicate(messages: DecodedTextRecord[], next: DecodedTextRecord): boolean {
+  if (!next.kind) {
+    return false
+  }
+  for (
+    let index = messages.length - 1;
+    index >= 0 && index >= messages.length - CODEX_DUPLICATE_LOOKBACK;
+    index -= 1
+  ) {
+    const earlier = messages[index]!
+    if (
+      earlier.kind &&
+      earlier.kind !== next.kind &&
+      earlier.role === next.role &&
+      earlier.text === next.text
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 function clipMessage(
@@ -156,6 +202,9 @@ export function extractTranscriptTextMessages(
     if (!decoded) {
       continue
     }
+    if (isCodexDuplicate(messages, decoded)) {
+      continue
+    }
     const previous = messages.at(-1)
     if (
       previous &&
@@ -180,6 +229,8 @@ export async function readAgentTranscriptTail(args: {
   agent: string
   path: string
   sessionId: string | null
+  /** Only files inside these folders are read (see transcript-path-guard.ts). */
+  allowedRoots: readonly string[]
   limit?: number
   maxBytes?: number
 }): Promise<RuntimeTerminalTranscriptRead> {
@@ -194,31 +245,27 @@ export async function readAgentTranscriptTail(args: {
   }
   const limit = clampLimit(args.limit, DEFAULT_TRANSCRIPT_READ_LIMIT, MAX_TRANSCRIPT_READ_LIMIT)
   const maxBytes = Math.max(1024, args.maxBytes ?? TRANSCRIPT_TAIL_SCAN_BYTES)
-  let fileBytes: number
-  try {
-    fileBytes = (await stat(args.path)).size
-  } catch {
-    return { ...base, available: false, path: args.path, reason: 'transcript file not found' }
+  const opened = await openConfinedTranscriptFile(args.path, args.allowedRoots)
+  if ('reason' in opened) {
+    return { ...base, available: false, path: args.path, reason: opened.reason }
   }
+  const fileBytes = opened.size
   const start = Math.max(0, fileBytes - maxBytes)
   const length = fileBytes - start
   let raw = ''
   try {
-    const handle = await open(args.path, 'r')
-    try {
-      const buffer = Buffer.alloc(length)
-      const { bytesRead } = await handle.read(buffer, 0, length, start)
-      raw = buffer.subarray(0, bytesRead).toString('utf8')
-    } finally {
-      await handle.close()
-    }
+    const buffer = Buffer.alloc(length)
+    const { bytesRead } = await opened.handle.read(buffer, 0, length, start)
+    raw = buffer.subarray(0, bytesRead).toString('utf8')
   } catch (err) {
     return {
       ...base,
       available: false,
-      path: args.path,
+      path: opened.canonicalPath,
       reason: `transcript unreadable: ${err instanceof Error ? err.message : String(err)}`
     }
+  } finally {
+    await opened.handle.close()
   }
   const lines = raw.split('\n')
   // Why: a window that starts mid-file starts mid-record; that first fragment
@@ -231,7 +278,7 @@ export async function readAgentTranscriptTail(args: {
   return {
     ...base,
     available: true,
-    path: args.path,
+    path: opened.canonicalPath,
     messages: recent.map((message) => ({
       role: message.role,
       timestamp: message.timestamp,

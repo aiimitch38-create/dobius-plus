@@ -223,9 +223,9 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
       'Use --cursor with the nextCursor value from a previous read to get only new output since that read.',
       'Use --limit to request more retained lines for long agent responses; output reports oldestCursor when older lines were dropped.',
       'Useful for capturing the response to a command: read before sending, then read --cursor <prev> after waiting.',
-      'The default output is a raw line log of the PTY stream. Full-screen agent TUIs (Claude Code, Codex) redraw in place, so that log can collapse to a few status rows.',
+      "Reading an agent TUI (Claude Code, Codex)? Add --screen for the rendered screen and --transcript for the agent's recent messages. The plain output (tail) is a raw line log of the terminal stream, and in-place redraws can mangle it: rows merge or the conversation collapses to a few status lines.",
       '--screen adds what the terminal actually shows: the rendered screen plus retained scrollback (up to --limit lines), with redraws resolved. It reports when scrollback was evicted or never captured.',
-      "--transcript adds the agent's recent user/assistant text messages from its own session transcript (default 10, max 200 via --transcript-limit). Tool calls, tool output and reasoning are excluded. It says why when no transcript is known."
+      "--transcript adds the agent's recent user/assistant text messages from its own session transcript (default 10, max 200 via --transcript-limit). Tool calls, tool output and reasoning are excluded. It says why when no transcript is known; it is not available to the limited agent key or for remote (SSH) agents."
     ],
     examples: [
       'dobius terminal read --json',

@@ -99,11 +99,64 @@ describe('transcript extraction', () => {
     ])
   })
 
+  it('decodes Codex event_msg messages and shows a turn recorded both ways once', () => {
+    const responseItem = (role: string, text: string): string =>
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role,
+          content: [{ type: role === 'user' ? 'input_text' : 'output_text', text }]
+        }
+      })
+    const event = (type: string, message: string): string =>
+      JSON.stringify({ type: 'event_msg', payload: { type, message } })
+    const messages = extractTranscriptTextMessages('codex', [
+      responseItem('user', 'run the tests'),
+      event('user_message', 'run the tests'),
+      event('token_count', 'ignored'),
+      event('agent_message', 'Running them now.'),
+      responseItem('assistant', 'Running them now.'),
+      event('agent_message', 'Only in events.'),
+      event('user_message', 'again'),
+      event('user_message', 'again')
+    ])
+    expect(messages.map(({ role, text }) => [role, text])).toEqual([
+      ['user', 'run the tests'],
+      ['assistant', 'Running them now.'],
+      ['assistant', 'Only in events.'],
+      ['user', 'again'],
+      ['user', 'again']
+    ])
+  })
+
+  it('refuses a transcript path outside the allowed roots', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'terminal-read-transcript-'))
+    const path = join(dir, 'session.jsonl')
+    await writeFile(path, `${claudeLines.join('\n')}\n`)
+    const read = await readAgentTranscriptTail({
+      agent: 'claude',
+      path,
+      sessionId: 's1',
+      allowedRoots: [join(dir, 'projects')]
+    })
+    expect(read).toMatchObject({
+      available: false,
+      reason: 'transcript path is outside the agent session folders'
+    })
+  })
+
   it('reads the newest messages from a file with a limit', async () => {
     dir = await mkdtemp(join(tmpdir(), 'terminal-read-transcript-'))
     const path = join(dir, 'session.jsonl')
     await writeFile(path, `${claudeLines.join('\n')}\n`)
-    const read = await readAgentTranscriptTail({ agent: 'claude', path, sessionId: 's1', limit: 2 })
+    const read = await readAgentTranscriptTail({
+      agent: 'claude',
+      path,
+      sessionId: 's1',
+      allowedRoots: [dir],
+      limit: 2
+    })
     expect(read).toMatchObject({
       available: true,
       source: 'transcript',
@@ -135,6 +188,7 @@ describe('transcript extraction', () => {
       agent: 'claude',
       path,
       sessionId: null,
+      allowedRoots: [dir],
       limit: 200,
       maxBytes: 2048
     })
@@ -157,7 +211,12 @@ describe('transcript extraction', () => {
       path,
       `${JSON.stringify({ type: 'assistant', message: { id: 'm', content: [{ type: 'text', text }] } })}\n`
     )
-    const read = await readAgentTranscriptTail({ agent: 'claude', path, sessionId: null })
+    const read = await readAgentTranscriptTail({
+      agent: 'claude',
+      path,
+      sessionId: null,
+      allowedRoots: [dir]
+    })
     if (!read.available) {
       throw new Error('expected available')
     }
@@ -173,7 +232,8 @@ describe('transcript extraction', () => {
     const read = await readAgentTranscriptTail({
       agent: 'claude',
       path: join(tmpdir(), 'definitely-missing-transcript.jsonl'),
-      sessionId: 's'
+      sessionId: 's',
+      allowedRoots: [tmpdir()]
     })
     expect(read).toMatchObject({ available: false, reason: 'transcript file not found' })
   })
@@ -182,7 +242,8 @@ describe('transcript extraction', () => {
     const read = await readAgentTranscriptTail({
       agent: 'gemini',
       path: '/x.jsonl',
-      sessionId: 's'
+      sessionId: 's',
+      allowedRoots: []
     })
     expect(read).toMatchObject({ available: false })
   })

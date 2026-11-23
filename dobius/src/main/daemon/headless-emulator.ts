@@ -198,12 +198,18 @@ export class HeadlessEmulator {
     return lines
   }
 
-  /** The newest `maxRows` rendered rows of the active buffer (oldest first),
-   *  each with xterm's soft-wrap flag so readers can rejoin wrapped rows.
+  /** Rows retained in the normal buffer above the visible screen. */
+  getScrollbackRowCount(): number {
+    const buffer = this.terminal.buffer.normal
+    return Math.max(0, buffer.length - this.terminal.rows)
+  }
+
+  /** The whole visible screen plus up to `scrollbackRows` rows above it, oldest
+   *  first, each with xterm's soft-wrap flag so readers can rejoin wrapped rows.
    *  Unlike the raw PTY line log, cursor moves, erases and in-place redraws are
    *  already resolved here. Row indexes are absolute buffer indexes: rows below
    *  `firstScreenRow` are scrollback, the rest are the visible screen. */
-  getRenderedRows(maxRows: number): {
+  getRenderedRows(scrollbackRows: number): {
     rows: { text: string; wrapped: boolean }[]
     firstReturnedRow: number
     totalRows: number
@@ -215,7 +221,9 @@ export class HeadlessEmulator {
     scrollbackCapacity: number
   } {
     const buffer = this.terminal.buffer.active
-    const start = Math.max(0, buffer.length - Math.max(1, Math.floor(maxRows)))
+    // Why the whole screen: blank padding below the content is trimmed later,
+    // so a budget counted from the bottom row could fetch only padding.
+    const start = Math.max(0, buffer.baseY - Math.max(0, Math.floor(scrollbackRows)))
     const rows: { text: string; wrapped: boolean }[] = []
     for (let index = start; index < buffer.length; index += 1) {
       const line = buffer.getLine(index)
