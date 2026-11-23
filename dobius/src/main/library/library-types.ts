@@ -1,6 +1,7 @@
 // The library: one local full-text index of Carson's projects, conversations
 // and notes, so ADAM and the voice layer can look things up without asking a
 // busy agent. Text only, on this Mac only.
+import type { DocClass, TranscriptSignals } from './library-classify'
 
 export const LIBRARY_SOURCES = ['project', 'claude', 'codex', 'adam', 'obsidian'] as const
 export type LibrarySource = (typeof LIBRARY_SOURCES)[number]
@@ -12,6 +13,8 @@ export type LibraryDocument = {
   project: string | null
   title: string
   sections: LibrarySection[]
+  /** Tool work counted while reading a transcript; used only to classify it. */
+  signals?: TranscriptSignals
 }
 
 /**
@@ -57,6 +60,8 @@ export type LibraryRefreshReport = {
   unchanged: number
   removed: number
   evicted: number
+  /** Work conversations cut to their compact form (old, or to make room). */
+  compacted: number
   droppedChunks: number
   /** Why the pass ended early (low disk, disk full, quit), or null when it finished. */
   stopped: string | null
@@ -77,6 +82,8 @@ export type LibraryStatus = {
   refreshing: boolean
   lastRefresh: LibraryRefreshReport | null
   sources: LibrarySourceStatus[]
+  /** Documents still holding text, by class; `compacted` of them are in short form. */
+  classes: { kind: DocClass; documents: number; compacted: number }[]
 }
 
 export const LIBRARY_DEFAULT_CAP_BYTES = 400 * 1024 * 1024

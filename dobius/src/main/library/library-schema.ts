@@ -7,8 +7,10 @@ import type SyncDatabase from '../sqlite/sync-database'
  * 2: docs.key holds a sha256 of the source key, not the raw path. Why a
  * rebuild rather than a migration: the old keys are exactly what must go, and
  * the next pass re-reads everything.
+ * 3: docs.kind (see library-classify.ts) and docs.compacted. A rebuild for the
+ * same reason: every transcript must be re-read to be classified.
  */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 /** The stored identity of a source key. Why a hash: the key carries the raw path. */
 export function docKeyId(key: string): string {
@@ -27,6 +29,8 @@ export const SCHEMA = `
     mtime_ms INTEGER NOT NULL,
     size INTEGER NOT NULL,
     evicted INTEGER NOT NULL DEFAULT 0,
+    kind TEXT NOT NULL DEFAULT 'reference',
+    compacted INTEGER NOT NULL DEFAULT 0,
     indexed_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS docs_live_mtime ON docs(evicted, mtime_ms);

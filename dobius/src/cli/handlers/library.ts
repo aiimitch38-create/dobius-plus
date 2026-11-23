@@ -30,11 +30,20 @@ type StatusResult = {
     unchanged: number
     removed: number
     evicted: number
+    compacted?: number
     droppedChunks: number
     stopped?: string | null
     errors: string[]
   } | null
   sources: { source: Source; documents: number; chunks: number; textBytes: number }[]
+  classes?: { kind: string; documents: number; compacted: number }[]
+}
+
+const CLASS_NAMES: Record<string, string> = {
+  'work-done': 'Finished work',
+  'work-open': 'Unfinished work',
+  chat: 'Chats',
+  reference: 'Notes and docs'
 }
 
 const SOURCE_NAMES: Record<Source, string> = {
@@ -88,12 +97,19 @@ export function formatLibraryStatus(status: StatusResult): string {
       `  ${SOURCE_NAMES[source.source] ?? source.source}s: ${source.documents} (${source.chunks} passages, ${megabytes(source.textBytes)} of text)`
     )
   }
+  if (status.classes && status.classes.length > 0) {
+    lines.push(
+      `  By kind: ${status.classes
+        .map((entry) => `${CLASS_NAMES[entry.kind] ?? safeText(entry.kind)} ${entry.documents}${entry.compacted > 0 ? ` (${entry.compacted} compacted)` : ''}`)
+        .join(', ')}.`
+    )
+  }
   const last = status.lastRefresh
   if (!last) {
     lines.push('Not refreshed yet (the first pass runs two minutes after the app starts).')
   } else {
     lines.push(
-      `Last refresh: ${new Date(last.finishedAt).toLocaleString('en-US')}, ${Math.round(last.durationMs / 1000)}s: ${last.indexed} read, ${last.unchanged} unchanged, ${last.removed} removed, ${last.evicted} dropped for space.`
+      `Last refresh: ${new Date(last.finishedAt).toLocaleString('en-US')}, ${Math.round(last.durationMs / 1000)}s: ${last.indexed} read, ${last.unchanged} unchanged, ${last.removed} removed, ${last.compacted ?? 0} compacted, ${last.evicted} dropped for space.`
     )
     if (last.stopped) {
       lines.push(`  It stopped early: ${last.stopped}.`)

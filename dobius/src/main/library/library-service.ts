@@ -4,7 +4,7 @@
 // and then every 30 minutes, never two at once.
 import type { LibraryRefreshJob } from './library-refresh-job'
 import type { LibraryRoots } from './library-roots'
-import { searchLibrary, sourceCounts } from './library-search'
+import { classCounts, searchLibrary, sourceCounts } from './library-search'
 import { LibraryStore } from './library-store'
 import type {
   LibraryHit,
@@ -71,7 +71,8 @@ export class LibraryService {
       capBytes: this.capBytes,
       refreshing: this.running !== null,
       lastRefresh: last ? (JSON.parse(last) as LibraryRefreshReport) : null,
-      sources: sourceCounts(store)
+      sources: sourceCounts(store),
+      classes: classCounts(store)
     }
   }
 

@@ -153,7 +153,7 @@ describe('disk limits', () => {
   })
 
   it('counts the WAL toward the size', () => {
-    store.putDoc({ key: 'k', source: 'project', project: null, path: '/k', title: 't', mtimeMs: 1, size: 1 }, [{ text: 'x '.repeat(50_000), at: 1 }])
+    store.putDoc({ key: 'k', source: 'project', project: null, path: '/k', title: 't', mtimeMs: 1, size: 1, kind: 'reference' }, [{ text: 'x '.repeat(50_000), at: 1 }])
     expect(store.walBytes()).toBeGreaterThan(0)
     expect(store.usedBytes()).toBeGreaterThanOrEqual(store.walBytes())
   })

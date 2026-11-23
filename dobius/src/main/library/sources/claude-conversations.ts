@@ -3,6 +3,7 @@
 // thinking, hidden meta turns and subagent sidechains are left out.
 import { basename } from 'node:path'
 import { RecentSections, titleFrom } from '../library-chunk'
+import { addClaudeSignals, emptySignals } from '../library-classify'
 import type { LibraryDocument, LibraryIngester } from '../library-types'
 import { projectForPath } from './fs-walk'
 import type { FileStat } from './jsonl-lines'
@@ -55,7 +56,8 @@ export async function readClaudeConversation(
   let cwd = ''
   let aiTitle = ''
   let firstUser = ''
-  for await (const record of safeJsonLines(file, keepLine)) {
+  const signals = emptySignals()
+  for await (const record of safeJsonLines(file, keepLine, (line) => addClaudeSignals(line, signals))) {
     const type = record.type
     if (type === 'ai-title' || type === 'custom-title') {
       aiTitle = asText(record.aiTitle ?? record.customTitle) || aiTitle
@@ -87,7 +89,8 @@ export async function readClaudeConversation(
   return {
     project: cwd ? projectForPath(cwd, projectsRoot) : null,
     title: aiTitle || titleFrom(firstUser, `Claude session ${basename(file.path, '.jsonl')}`),
-    sections
+    sections,
+    signals
   }
 }
 

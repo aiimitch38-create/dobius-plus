@@ -21,7 +21,8 @@ const status: LibraryStatus = {
   capBytes: 400 * 1024 * 1024,
   refreshing: false,
   lastRefresh: null,
-  sources: []
+  sources: [],
+  classes: []
 }
 const search = vi.fn<LibraryMethodDeps['search']>(() => [hit])
 const methods = buildLibraryMethods({ search, status: () => status })

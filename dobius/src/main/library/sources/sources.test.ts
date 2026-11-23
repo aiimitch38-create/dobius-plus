@@ -113,6 +113,8 @@ describe('Claude conversations', () => {
       expect(text).not.toContain(excluded)
     }
     expect(doc.sections[0].at).toBe(Date.parse('2026-11-22T10:00:00Z'))
+    // Counted for the classifier; the tool line itself is never stored.
+    expect(doc.signals).toEqual({ toolCalls: 1, edits: 0, gitWrites: 0 })
   })
 })
 
@@ -133,6 +135,7 @@ describe('Codex conversations', () => {
     expect(doc.project).toBe('Verlo')
     expect(doc.title).toBe('Rename the pricing page')
     expect(allText(doc)).toBe('User: Rename the pricing page\nCodex: Renamed to Plans.')
+    expect(doc.signals).toEqual({ toolCalls: 0, edits: 0, gitWrites: 0 })
   })
 })
 
@@ -149,13 +152,14 @@ describe('ADAM', () => {
     const statePath = join(root, 'hermes-state.db')
     const db = new SyncDatabase(statePath)
     db.exec(`CREATE TABLE sessions (id TEXT PRIMARY KEY, title TEXT);
-      CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp REAL);
+      CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp REAL,
+        tool_calls TEXT, tool_name TEXT);
       INSERT INTO sessions VALUES ('h1', 'Morning plan');
-      INSERT INTO messages (session_id, role, content, timestamp) VALUES
-        ('h1', 'user', 'Plan my morning', 1795400000),
-        ('h1', 'assistant', '', 1795400001),
-        ('h1', 'tool', 'TOOL DUMP', 1795400002),
-        ('h1', 'assistant', 'Start with the Epoxy quotes.', 1795400003);`)
+      INSERT INTO messages (session_id, role, content, timestamp, tool_calls, tool_name) VALUES
+        ('h1', 'user', 'Plan my morning', 1795400000, NULL, NULL),
+        ('h1', 'assistant', '', 1795400001, '[{"command": "git commit -m plan"}]', NULL),
+        ('h1', 'tool', 'TOOL DUMP', 1795400002, NULL, 'write_file'),
+        ('h1', 'assistant', 'Start with the Epoxy quotes.', 1795400003, NULL, NULL);`)
     db.close()
 
     const candidates = await adamIngester({ threadFile: thread, hermesStateDb: statePath }).list()
@@ -165,6 +169,7 @@ describe('ADAM', () => {
     const docs = await loadAll(candidates)
     const session = docs.find((doc) => doc.title === 'Morning plan')!
     expect(allText(session)).toBe('Carson: Plan my morning\nADAM: Start with the Epoxy quotes.')
+    expect(session.signals).toEqual({ toolCalls: 1, edits: 1, gitWrites: 1 })
     const threadDoc = docs.find((doc) => doc.title === 'ADAM thread in Dobius+')!
     expect(allText(threadDoc)).toBe('Carson: What is on the Board?\nADAM: Three cards are running.')
   })

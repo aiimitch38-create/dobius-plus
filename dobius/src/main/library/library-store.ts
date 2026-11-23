@@ -6,6 +6,7 @@
 import { statSync } from 'node:fs'
 import SyncDatabase from '../sqlite/sync-database'
 import { docKeyId, hasFts5, migrateSchema, runTransaction, SCHEMA } from './library-schema'
+import type { DocClass } from './library-classify'
 import type { LibrarySection, LibrarySource } from './library-types'
 
 export type StoredDoc = {
@@ -25,6 +26,8 @@ export type DocInput = {
   title: string
   mtimeMs: number
   size: number
+  kind: DocClass
+  compacted?: boolean
 }
 
 export const WAL_SIZE_LIMIT = 16 * 1024 * 1024
@@ -110,13 +113,17 @@ export class LibraryStore {
       }
       this.db
         .prepare(
-          `INSERT INTO docs (key, source, project, path, title, mtime_ms, size, evicted, indexed_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO docs (key, source, project, path, title, mtime_ms, size, evicted, kind, compacted, indexed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(key) DO UPDATE SET source = excluded.source, project = excluded.project,
              path = excluded.path, title = excluded.title, mtime_ms = excluded.mtime_ms,
-             size = excluded.size, evicted = excluded.evicted, indexed_at = excluded.indexed_at`
+             size = excluded.size, evicted = excluded.evicted, kind = excluded.kind,
+             compacted = excluded.compacted, indexed_at = excluded.indexed_at`
         )
-        .run(docKeyId(doc.key), doc.source, doc.project, doc.path, doc.title, PENDING_MTIME, doc.size, evicted ? 1 : 0, Date.now())
+        .run(
+          docKeyId(doc.key), doc.source, doc.project, doc.path, doc.title, PENDING_MTIME, doc.size,
+          evicted ? 1 : 0, doc.kind, doc.compacted ? 1 : 0, Date.now()
+        )
       return this.getDoc(doc.key)!.id
     })
   }
@@ -157,6 +164,22 @@ export class LibraryStore {
     })
   }
 
+  /** Swap a document's chunks for its compact form, in one transaction. */
+  replaceWithCompact(docId: number, title: string, text: string): void {
+    this.transaction(() => {
+      this.deleteChunks(docId)
+      this.db.prepare('UPDATE docs SET compacted = 1 WHERE id = ?').run(docId)
+      const result = this.db
+        .prepare('INSERT INTO chunks (doc_id, at_ms, text) VALUES (?, (SELECT mtime_ms FROM docs WHERE id = ?), ?)')
+        .run(docId, docId, text)
+      if (this.fts) {
+        this.db
+          .prepare('INSERT INTO chunks_fts(rowid, title, text) VALUES (?, ?, ?)')
+          .run(Number(result.lastInsertRowid), title, text)
+      }
+    })
+  }
+
   removeDocByKeyId(keyId: string): void {
     const row = this.db.prepare('SELECT id FROM docs WHERE key = ?').get(keyId) as
       | { id: number }
@@ -168,14 +191,6 @@ export class LibraryStore {
       this.deleteChunks(row.id)
       this.db.prepare('DELETE FROM docs WHERE id = ?').run(row.id)
     })
-  }
-
-  /** The oldest document that still has text. */
-  oldestLiveDoc(): { id: number; mtimeMs: number } | null {
-    const row = this.db
-      .prepare('SELECT id, mtime_ms FROM docs WHERE evicted = 0 ORDER BY mtime_ms ASC LIMIT 1')
-      .get() as { id: number; mtime_ms: number } | undefined
-    return row ? { id: row.id, mtimeMs: row.mtime_ms } : null
   }
 
   walBytes(): number {

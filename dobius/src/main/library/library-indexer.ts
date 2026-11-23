@@ -4,7 +4,10 @@
 // thread; it still yields between batches so a stop request is seen quickly.
 import { statfs } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import type { DocClass } from './library-classify'
+import { classifyDocument } from './library-classify'
 import { cleanDocument } from './library-clean'
+import { agedWorkDocs, COMPACT_AFTER_MS, compactStoredDoc, compactText, nextShrinkStep } from './library-compact'
 import { docKeyId } from './library-schema'
 import type { LibraryStore } from './library-store'
 import { WAL_SIZE_LIMIT } from './library-store'
@@ -58,7 +61,10 @@ export function walReserve(capBytes: number): number {
   return Math.min(WAL_SIZE_LIMIT, Math.floor(capBytes / 4))
 }
 
-/** Evict oldest documents until under the cap. True when `justAdded` itself went. */
+/**
+ * Compact or evict, in the order of nextShrinkStep, until under the cap. True
+ * when `justAdded` itself was evicted.
+ */
 function enforceCap(
   store: LibraryStore,
   capBytes: number,
@@ -66,18 +72,23 @@ function enforceCap(
   report: LibraryRefreshReport
 ): boolean {
   const pageCap = capBytes - walReserve(capBytes)
-  const evictedBefore = report.evicted
+  const shrunkBefore = report.evicted + report.compacted
   let removedJustAdded = false
   while (store.pageBytes() > pageCap) {
-    const oldest = store.oldestLiveDoc()
-    if (!oldest) {
+    const step = nextShrinkStep(store)
+    if (!step) {
       break
     }
-    store.evictDoc(oldest.id)
+    if (step.action === 'compact') {
+      compactStoredDoc(store, step.id)
+      report.compacted += 1
+      continue
+    }
+    store.evictDoc(step.id)
     report.evicted += 1
-    removedJustAdded ||= oldest.id === justAdded
+    removedJustAdded ||= step.id === justAdded
   }
-  if (report.evicted > evictedBefore) {
+  if (report.evicted + report.compacted > shrunkBefore) {
     store.mergeIndex()
   }
   return removedJustAdded
@@ -92,6 +103,7 @@ function emptyReport(started: number): LibraryRefreshReport {
     unchanged: 0,
     removed: 0,
     evicted: 0,
+    compacted: 0,
     droppedChunks: 0,
     stopped: null,
     errors: []
@@ -138,17 +150,27 @@ async function indexOne(pass: Pass, candidate: LibraryCandidate): Promise<boolea
     size: candidate.size
   }
   if (candidate.mtimeMs <= pass.floorMs) {
-    store.putDoc({ ...meta, project: null, title: '' }, [], true)
+    // ponytail: an unread marker has no class; it holds no text, so the guess only shows in counts.
+    const kind: DocClass = candidate.source === 'project' || candidate.source === 'obsidian' ? 'reference' : 'chat'
+    store.putDoc({ ...meta, project: null, title: '', kind }, [], true)
     return true
   }
   const loaded = await candidate.load()
+  const kind = loaded ? classifyDocument(candidate.source, loaded) : 'chat'
   const doc = loaded ? cleanDocument(loaded) : { title: '', project: null, chunks: [], dropped: 0 }
+  // Why at read time: an old work conversation is written short once, not full then cut.
+  const compacted = kind.startsWith('work-') && candidate.mtimeMs < Date.now() - COMPACT_AFTER_MS
+  if (compacted && doc.chunks.length > 0) {
+    const text = compactText(doc.title, doc.chunks.map((chunk) => chunk.text))
+    doc.chunks = [{ text, at: candidate.mtimeMs }]
+    report.compacted += 1
+  }
   const textBytes = doc.chunks.reduce((sum, chunk) => sum + Buffer.byteLength(chunk.text), 0)
   if (await pass.lowDisk(textBytes * WRITE_FACTOR)) {
     return false
   }
   report.droppedChunks += doc.dropped
-  const docId = store.beginDoc({ ...meta, project: doc.project, title: doc.title })
+  const docId = store.beginDoc({ ...meta, project: doc.project, title: doc.title, kind, compacted })
   for (let i = 0; i < doc.chunks.length; i += CHUNK_BATCH) {
     store.addChunks(docId, doc.title, doc.chunks.slice(i, i + CHUNK_BATCH))
     await pass.yieldNow()
@@ -156,9 +178,10 @@ async function indexOne(pass: Pass, candidate: LibraryCandidate): Promise<boolea
   store.finishDoc(docId, candidate.mtimeMs)
   store.checkpointPassive()
   report.indexed += 1
-  // Why: once a document is evicted right after it went in, everything older
-  // would go the same way, so the rest is only marked, never read.
-  if (enforceCap(store, pass.options.capBytes, docId, report)) {
+  // Why only reference: reference notes go last, so once a new one is evicted
+  // everything older, of every class, would go the same way; the rest is only
+  // marked, never read. An evicted chat says nothing about older notes.
+  if (enforceCap(store, pass.options.capBytes, docId, report) && kind === 'reference') {
     pass.floorMs = candidate.mtimeMs
   }
   return true
@@ -218,6 +241,15 @@ export async function refreshLibrary(
       report.errors.push(`${candidate.source} ${candidate.path}: ${errorText(error)}`)
     }
     await pass.yieldNow()
+  }
+  try {
+    for (const docId of agedWorkDocs(store, Date.now() - COMPACT_AFTER_MS)) {
+      compactStoredDoc(store, docId)
+      report.compacted += 1
+      await pass.yieldNow()
+    }
+  } catch (error) {
+    report.errors.push(`compacting old work: ${errorText(error)}`)
   }
   // Why once more: compaction and the last markers can leave the file over the cap.
   enforceCap(store, options.capBytes, -1, report)

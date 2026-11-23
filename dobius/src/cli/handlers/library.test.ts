@@ -86,15 +86,21 @@ describe('library CLI', () => {
         unchanged: 90,
         removed: 1,
         evicted: 0,
+        compacted: 4,
         droppedChunks: 2,
         stopped: 'less than 2 GB of disk would be left free',
         errors: []
       },
-      sources: [{ source: 'claude', documents: 3, chunks: 40, textBytes: 1_048_576 }]
+      sources: [{ source: 'claude', documents: 3, chunks: 40, textBytes: 1_048_576 }],
+      classes: [
+        { kind: 'work-done', documents: 2, compacted: 1 },
+        { kind: 'chat', documents: 1, compacted: 0 }
+      ]
     })
     expect(text).toContain('Library: 50.0 MB of 400.0 MB.')
     expect(text).toContain('Claude conversations: 3 (40 passages, 1.0 MB of text)')
-    expect(text).toContain('10 read, 90 unchanged, 1 removed, 0 dropped for space.')
+    expect(text).toContain('By kind: Finished work 2 (1 compacted), Chats 1.')
+    expect(text).toContain('10 read, 90 unchanged, 1 removed, 4 compacted, 0 dropped for space.')
     expect(text).toContain('It stopped early: less than 2 GB of disk would be left free.')
     expect(formatLibraryStatus({ fullTextSearch: false, sizeBytes: 0, capBytes: 1, refreshing: true, lastRefresh: null, sources: [] })).toContain(
       'Not refreshed yet'

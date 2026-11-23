@@ -6,6 +6,8 @@ import { existsSync, lstatSync, realpathSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { DOCUMENT_MAX_CHARS, RecentSections, titleFrom } from '../library-chunk'
+import type { TranscriptSignals } from '../library-classify'
+import { emptySignals } from '../library-classify'
 import { isSecretOrSkippedPath } from '../library-secrets'
 import type { LibraryCandidate, LibraryDocument, LibraryIngester } from '../library-types'
 import SyncDatabase from '../../sqlite/sync-database'
@@ -107,6 +109,35 @@ function hermesCandidates(path: string): LibraryCandidate[] {
   }
 }
 
+/** Tool work in a Hermes session: tool result rows, file writes, git writes in tool calls. */
+function hermesSignals(db: SyncDatabase, sessionId: string): TranscriptSignals {
+  try {
+    return hermesSignalsQuery(db, sessionId)
+  } catch (error) {
+    // Why not fail the session: an older Hermes layout without tool columns still has its text.
+    console.warn('Library: Hermes tool columns are unreadable, classing by text only:', error)
+    return emptySignals()
+  }
+}
+
+function hermesSignalsQuery(db: SyncDatabase, sessionId: string): TranscriptSignals {
+  const row = db
+    .prepare(
+      `SELECT
+         SUM(role = 'tool') AS toolCalls,
+         SUM(role = 'tool' AND tool_name IN ('write_file', 'patch')) AS edits,
+         SUM(role = 'assistant' AND tool_calls LIKE '%git %' AND (tool_calls LIKE '%commit%'
+           OR tool_calls LIKE '%merge%' OR tool_calls LIKE '%push%')) AS gitWrites
+       FROM messages WHERE session_id = ?`
+    )
+    .get(sessionId) as Record<string, number | null> | undefined
+  return {
+    toolCalls: Number(row?.toolCalls ?? 0),
+    edits: Number(row?.edits ?? 0),
+    gitWrites: Number(row?.gitWrites ?? 0)
+  }
+}
+
 export function readHermesSession(
   path: string,
   sessionId: string,
@@ -138,7 +169,8 @@ export function readHermesSession(
     return {
       project: 'ADAM',
       title: title?.trim() || titleFrom(firstUser, 'ADAM session'),
-      sections
+      sections,
+      signals: hermesSignals(db, sessionId)
     }
   } finally {
     db.close()

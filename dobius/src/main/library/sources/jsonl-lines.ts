@@ -61,9 +61,12 @@ export async function* boundedLines(
  */
 export async function* jsonLines(
   file: string | FileHandle,
-  keep: (line: string) => boolean
+  keep: (line: string) => boolean,
+  /** Sees every line (within the length cap) before `keep`, e.g. to count tool calls. */
+  onLine?: (line: string) => void
 ): AsyncGenerator<Record<string, unknown>> {
   for await (const line of boundedLines(file)) {
+    onLine?.(line)
     if (!keep(line)) {
       continue
     }
@@ -114,14 +117,15 @@ export async function jsonlFiles(dir: string, depth: number): Promise<FileStat[]
 /** Transcript lines, after the read-time symlink and secret check. */
 export async function* safeJsonLines(
   file: FileStat,
-  keep: (line: string) => boolean
+  keep: (line: string) => boolean,
+  onLine?: (line: string) => void
 ): AsyncGenerator<Record<string, unknown>> {
   const handle = await openSafe(file.path, file.root)
   if (!handle) {
     return
   }
   try {
-    yield* jsonLines(handle, keep)
+    yield* jsonLines(handle, keep, onLine)
   } finally {
     await handle.close()
   }

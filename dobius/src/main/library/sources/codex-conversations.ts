@@ -4,6 +4,7 @@
 // as user messages (<environment_context>, AGENTS.md instructions).
 import { basename } from 'node:path'
 import { RecentSections, titleFrom } from '../library-chunk'
+import { addCodexSignals, emptySignals } from '../library-classify'
 import type { LibraryDocument, LibraryIngester } from '../library-types'
 import { projectForPath } from './fs-walk'
 import type { FileStat } from './jsonl-lines'
@@ -40,7 +41,8 @@ export async function readCodexConversation(
   const mtimeMs = file.mtimeMs
   let cwd = ''
   let firstUser = ''
-  for await (const record of safeJsonLines(file, keepLine)) {
+  const signals = emptySignals()
+  for await (const record of safeJsonLines(file, keepLine, (line) => addCodexSignals(line, signals))) {
     const payload = (record.payload ?? {}) as Record<string, unknown>
     if (record.type === 'session_meta') {
       cwd ||= asText(payload.cwd)
@@ -70,7 +72,8 @@ export async function readCodexConversation(
   return {
     project: cwd ? projectForPath(cwd, projectsRoot) : null,
     title: titleFrom(firstUser, `Codex session ${basename(file.path, '.jsonl')}`),
-    sections
+    sections,
+    signals
   }
 }
 

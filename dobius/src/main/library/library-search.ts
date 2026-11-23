@@ -1,3 +1,5 @@
+import type { DocClass } from './library-classify'
+import { DOC_CLASSES } from './library-classify'
 import { scrubSnippet } from './library-secrets'
 import type { LibraryStore } from './library-store'
 import {
@@ -7,7 +9,8 @@ import {
   type LibraryHit,
   type LibrarySearchQuery,
   type LibrarySource,
-  type LibrarySourceStatus
+  type LibrarySourceStatus,
+  type LibraryStatus
 } from './library-types'
 
 type HitRow = {
@@ -143,5 +146,17 @@ export function sourceCounts(store: LibraryStore): LibrarySourceStatus[] {
       chunks: Number(row?.chunks ?? 0),
       textBytes: Number(row?.textBytes ?? 0)
     }
+  })
+}
+
+export function classCounts(store: LibraryStore): LibraryStatus['classes'] {
+  const rows = store.db
+    .prepare(
+      'SELECT kind, COUNT(*) AS documents, SUM(compacted) AS compacted FROM docs WHERE evicted = 0 GROUP BY kind'
+    )
+    .all() as { kind: DocClass; documents: number; compacted: number | null }[]
+  return DOC_CLASSES.map((kind) => {
+    const row = rows.find((candidate) => candidate.kind === kind)
+    return { kind, documents: Number(row?.documents ?? 0), compacted: Number(row?.compacted ?? 0) }
   })
 }
