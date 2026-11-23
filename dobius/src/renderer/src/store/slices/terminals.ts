@@ -65,6 +65,8 @@ import {
 } from '@/lib/workspace-session-host-persistence'
 import { getForegroundTerminalTabIds } from '@/lib/foreground-terminal-tabs'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { pickAgentName } from '../../../../shared/agent-names'
+import { applyDefaultConsoleTitles, nameDefaultTerminalTabs } from './default-agent-names'
 import { getFolderWorkspaceConnectionId } from '@/lib/folder-workspace-connection'
 import { hasWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
 import { sanitizeTerminalLayoutPaneTitles } from '@/lib/terminal-pane-title-sanitization'
@@ -79,21 +81,30 @@ import {
   type AgentStatusWorktreeShutdownReason
 } from './agent-status'
 
-function getNextTerminalOrdinal(tabs: TerminalTab[]): number {
-  const usedOrdinals = new Set<number>()
-  for (const tab of tabs) {
-    const match = /^Terminal (\d+)$/.exec(tab.defaultTitle ?? tab.title)
-    if (!match) {
-      continue
+// Why: names must be unique across every open terminal in every project (the
+// renderer store holds all of them), and must not repeat a name Carson typed
+// for a tab or a Board console card, or a spoken "Juniper" would be ambiguous.
+export function collectUsedAgentNames(
+  state: Pick<AppState, 'tabsByWorktree'> & Partial<Pick<AppState, 'boardsByWorktree'>>
+): string[] {
+  const used: string[] = []
+  for (const tabs of Object.values(state.tabsByWorktree)) {
+    for (const tab of tabs) {
+      for (const label of [tab.agentName, tab.defaultTitle, tab.customTitle]) {
+        if (label?.trim()) {
+          used.push(label)
+        }
+      }
     }
-    usedOrdinals.add(Number(match[1]))
   }
-
-  let nextOrdinal = 1
-  while (usedOrdinals.has(nextOrdinal)) {
-    nextOrdinal += 1
+  for (const board of Object.values(state.boardsByWorktree ?? {})) {
+    for (const card of board?.cards ?? []) {
+      if (card.kind === 'console' && card.title?.trim()) {
+        used.push(card.title)
+      }
+    }
   }
-  return nextOrdinal
+  return used
 }
 
 function isRemoteRuntimePtyId(ptyId: string | null | undefined): boolean {
@@ -494,6 +505,9 @@ export type TerminalSlice = {
        *  bar can show the provider icon before the agent's first hook event. */
       launchAgent?: TuiAgent
       quickCommandLabel?: string | null
+      /** Agent name already chosen for this terminal (e.g. baked into a
+       *  main-spawned PTY's env). Omitted: a fresh unused name is picked. */
+      agentName?: string
       /** Initial native-chat view mode for the unified tab. When the
        *  `openAgentTabsInChatByDefault` setting is on, agent launches pass
        *  `'chat'` so the tab opens in the native chat view; omitted otherwise
@@ -536,6 +550,8 @@ export type TerminalSlice = {
     opts?: { recordInteraction?: boolean }
   ) => void
   setTabColor: (tabId: string, color: string | null) => void
+  /** Re-names a just-created tab before its PTY spawns (a restarted console keeps its name). */
+  setTabAgentName: (tabId: string, agentName: string) => void
   updateTabPtyId: (tabId: string, ptyId: string) => void
   clearTabPtyId: (tabId: string, ptyId?: string) => void
   shutdownWorktreeTerminals: (
@@ -867,8 +883,8 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       }
       const id = hintedId !== undefined && !idCollides ? hintedId : createBrowserUuid()
       const shouldActivate = options?.activate !== false
-      const nextOrdinal = getNextTerminalOrdinal(existing)
-      const defaultTitle = `Terminal ${nextOrdinal}`
+      const agentName = options?.agentName?.trim() || pickAgentName(collectUsedAgentNames(s))
+      const defaultTitle = agentName
       const quickCommandLabel = options?.quickCommandLabel?.trim()
       const startupCwd = options?.startupCwd
       const remoteConnectionId = getRemoteConnectionIdForWorktree(s, worktreeId)
@@ -896,11 +912,9 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         // one later should attach the pane instead of spawning a duplicate.
         ptyId: options?.initialPtyId ?? null,
         worktreeId,
-        // Why: users expect terminal labels to reflect the currently open set,
-        // not a monotonic creation counter. Reusing the lowest free ordinal
-        // keeps a lone fresh terminal at "Terminal 1" after older tabs close.
         title: defaultTitle,
         defaultTitle,
+        agentName,
         ...(quickCommandLabel ? { quickCommandLabel } : {}),
         customTitle: null,
         color: null,
@@ -980,6 +994,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         ...(tab.quickCommandLabel?.trim()
           ? { quickCommandLabel: tab.quickCommandLabel.trim() }
           : {}),
+        agentName,
         customLabel: tab.customTitle,
         color: tab.color,
         sortOrder: cleanedGroupOrder.length,
@@ -1704,6 +1719,48 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
     if (item) {
       get().setTabCustomLabel(item.id, title, opts)
     }
+  },
+
+  setTabAgentName: (tabId, agentName) => {
+    const name = agentName.trim()
+    set((s) => {
+      const ownerWorktreeId = getTerminalTabOwnerWorktreeId(s.tabsByWorktree, tabId)
+      const current = ownerWorktreeId
+        ? s.tabsByWorktree[ownerWorktreeId]?.find((t) => t.id === tabId)
+        : undefined
+      if (!name || !ownerWorktreeId || !current) {
+        return s
+      }
+      // Why: only labels still showing the picked name follow it; a live
+      // title the pane already reported is left alone.
+      const previous = current.agentName
+      const follow = (value: string): string => (value === previous ? name : value)
+      return {
+        tabsByWorktree: {
+          ...s.tabsByWorktree,
+          [ownerWorktreeId]: s.tabsByWorktree[ownerWorktreeId].map((t) =>
+            t.id === tabId
+              ? {
+                  ...t,
+                  title: follow(t.title),
+                  ...(t.defaultTitle ? { defaultTitle: follow(t.defaultTitle) } : {}),
+                  agentName: name
+                }
+              : t
+          )
+        },
+        unifiedTabsByWorktree: s.unifiedTabsByWorktree[ownerWorktreeId]
+          ? {
+              ...s.unifiedTabsByWorktree,
+              [ownerWorktreeId]: s.unifiedTabsByWorktree[ownerWorktreeId].map((t) =>
+                t.contentType === 'terminal' && t.entityId === tabId
+                  ? { ...t, label: follow(t.label), agentName: name }
+                  : t
+              )
+            }
+          : s.unifiedTabsByWorktree
+      }
+    })
   },
 
   setTabColor: (tabId, color) => {
@@ -2906,7 +2963,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       // again) and any other restored worktrees the user clicks later. The
       // tag is consumed on the first updateTabPtyId/clearTabPtyId per tab,
       // so subsequent legitimate events (codex restart, new pane) still bump.
-      const tabsByWorktree: Record<string, TerminalTab[]> = Object.fromEntries(
+      const hydratedTabsByWorktree: Record<string, TerminalTab[]> = Object.fromEntries(
         Object.entries(session.tabsByWorktree)
           .filter(([worktreeId]) => validWorktreeIds.has(worktreeId))
           .map(([worktreeId, tabs]) => {
@@ -2938,6 +2995,9 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
           })
           .filter(([, tabs]) => tabs.length > 0)
       )
+      // Why: tabs from before agent names still say "Terminal 3"; name them
+      // once here so the next session save persists the name.
+      const tabsByWorktree = nameDefaultTerminalTabs(hydratedTabsByWorktree, s.boardsByWorktree)
 
       const validTabIds = new Set(
         Object.values(tabsByWorktree)
@@ -3184,6 +3244,8 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         )
       }
     })
+    // Why: a console card still titled "Claude 5" takes its tab's new name.
+    applyDefaultConsoleTitles(get())
   },
 
   reconnectPersistedTerminals: async (_signal) => {

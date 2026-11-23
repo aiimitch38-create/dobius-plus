@@ -1420,6 +1420,7 @@ export function useIpcEvents(): void {
           launchConfig,
           launchToken,
           launchAgent,
+          agentName,
           title,
           ptyId,
           activate,
@@ -1485,6 +1486,9 @@ export function useIpcEvents(): void {
                 ? store.createTab(worktreeId, undefined, undefined, {
                     initialPtyId: ptyId,
                     activate: shouldActivate,
+                    // Why: main named this PTY before spawn (DOBIUS_AGENT_NAME);
+                    // adopting with a fresh name would split tab and env.
+                    ...(agentName?.trim() ? { agentName: agentName.trim() } : {}),
                     ...(launchAgent
                       ? {
                           launchAgent,

@@ -959,6 +959,8 @@ describe('useIpcEvents browser tab create routing', () => {
           onBoardOpenWebTile: () => () => {},
           replyBoardOpenWebTile: () => {},
           onAgentCursor: () => () => {},
+          onBoardCardAction: () => () => {},
+          onTabSnoozeRequest: () => () => {},
           onCreateTerminal: () => () => {},
           onRequestTerminalCreate: () => () => {},
           replyTerminalCreate: () => {},
@@ -1183,6 +1185,8 @@ describe('useIpcEvents updater integration', () => {
           onBoardOpenWebTile: () => () => {},
           replyBoardOpenWebTile: () => {},
           onAgentCursor: () => () => {},
+          onBoardCardAction: () => () => {},
+          onTabSnoozeRequest: () => () => {},
           onCreateTerminal: () => () => {},
           onRequestTerminalCreate: () => () => {},
           replyTerminalCreate: () => {},
@@ -1430,6 +1434,8 @@ describe('useIpcEvents updater integration', () => {
           onBoardOpenWebTile: () => () => {},
           replyBoardOpenWebTile: () => {},
           onAgentCursor: () => () => {},
+          onBoardCardAction: () => () => {},
+          onTabSnoozeRequest: () => () => {},
           onCreateTerminal: () => () => {},
           onRequestTerminalCreate: () => () => {},
           replyTerminalCreate: () => {},
@@ -1725,6 +1731,7 @@ describe('useIpcEvents updater integration', () => {
             command?: string
             launchConfig?: SleepingAgentLaunchConfig
             launchAgent?: TuiAgent
+            agentName?: string
             title?: string
             ptyId?: string
             activate?: boolean
@@ -1866,6 +1873,8 @@ describe('useIpcEvents updater integration', () => {
           onBoardOpenWebTile: () => () => {},
           replyBoardOpenWebTile: () => {},
           onAgentCursor: () => () => {},
+          onBoardCardAction: () => () => {},
+          onTabSnoozeRequest: () => () => {},
           onWorktreeHistoryNavigate: () => () => {},
           onCreateTerminal: (
             listener: (data: {
@@ -1874,6 +1883,7 @@ describe('useIpcEvents updater integration', () => {
               command?: string
               launchConfig?: SleepingAgentLaunchConfig
               launchAgent?: TuiAgent
+              agentName?: string
               title?: string
               ptyId?: string
               activate?: boolean
@@ -1903,6 +1913,7 @@ describe('useIpcEvents updater integration', () => {
               cwd?: string
               launchConfig?: SleepingAgentLaunchConfig
               launchAgent?: TuiAgent
+              agentName?: string
               title?: string
               activate?: boolean
               presentation?: 'background' | 'focused'
@@ -2378,6 +2389,22 @@ describe('useIpcEvents updater integration', () => {
       activate: false,
       id: 'tab-cli-bg'
     })
+
+    // Why: main named this PTY before spawn; adoption must keep that name.
+    createTab.mockClear()
+    createTerminalListenerRef.current({
+      worktreeId: 'wt-2',
+      ptyId: 'pty-bg-named',
+      activate: false,
+      tabId: 'tab-cli-named',
+      agentName: 'Juniper'
+    })
+    expect(createTab).toHaveBeenCalledWith('wt-2', undefined, undefined, {
+      initialPtyId: 'pty-bg-named',
+      activate: false,
+      agentName: 'Juniper',
+      id: 'tab-cli-named'
+    })
     expect(setActiveView).not.toHaveBeenCalled()
     expect(setActiveWorktree).not.toHaveBeenCalled()
     expect(setActiveTabType).not.toHaveBeenCalled()
@@ -2766,6 +2793,8 @@ describe('useIpcEvents browser tab close routing', () => {
           onBoardOpenWebTile: () => () => {},
           replyBoardOpenWebTile: () => {},
           onAgentCursor: () => () => {},
+          onBoardCardAction: () => () => {},
+          onTabSnoozeRequest: () => () => {},
           onCreateTerminal: () => () => {},
           onRequestTerminalCreate: () => () => {},
           replyTerminalCreate: () => {},
@@ -3258,6 +3287,8 @@ describe('useIpcEvents browser tab close routing', () => {
           onBoardOpenWebTile: () => () => {},
           replyBoardOpenWebTile: () => {},
           onAgentCursor: () => () => {},
+          onBoardCardAction: () => () => {},
+          onTabSnoozeRequest: () => () => {},
           onCreateTerminal: () => () => {},
           onRequestTerminalCreate: () => () => {},
           replyTerminalCreate: () => {},
@@ -3478,6 +3509,8 @@ describe('useIpcEvents browser tab close routing', () => {
           onBoardOpenWebTile: () => () => {},
           replyBoardOpenWebTile: () => {},
           onAgentCursor: () => () => {},
+          onBoardCardAction: () => () => {},
+          onTabSnoozeRequest: () => () => {},
           onCreateTerminal: () => () => {},
           onRequestTerminalCreate: () => () => {},
           replyTerminalCreate: () => {},
@@ -3693,6 +3726,8 @@ describe('useIpcEvents browser tab close routing', () => {
           onBoardOpenWebTile: () => () => {},
           replyBoardOpenWebTile: () => {},
           onAgentCursor: () => () => {},
+          onBoardCardAction: () => () => {},
+          onTabSnoozeRequest: () => () => {},
           onCreateTerminal: () => () => {},
           onRequestTerminalCreate: () => () => {},
           replyTerminalCreate: () => {},
@@ -3935,6 +3970,8 @@ describe('useIpcEvents CLI-created worktree activation', () => {
           onBoardOpenWebTile: () => () => {},
           replyBoardOpenWebTile: () => {},
           onAgentCursor: () => () => {},
+          onBoardCardAction: () => () => {},
+          onTabSnoozeRequest: () => () => {},
           onCreateTerminal: () => () => {},
           onRequestTerminalCreate: () => () => {},
           replyTerminalCreate: () => {},
@@ -4185,6 +4222,8 @@ describe('useIpcEvents CLI-created worktree activation', () => {
           onBoardOpenWebTile: () => () => {},
           replyBoardOpenWebTile: () => {},
           onAgentCursor: () => () => {},
+          onBoardCardAction: () => () => {},
+          onTabSnoozeRequest: () => () => {},
           onCreateTerminal: () => () => {},
           onRequestTerminalCreate: () => () => {},
           replyTerminalCreate: () => {},
@@ -4421,6 +4460,8 @@ describe('useIpcEvents agent status snapshot integration', () => {
           onBoardOpenWebTile: () => () => {},
           replyBoardOpenWebTile: () => {},
           onAgentCursor: () => () => {},
+          onBoardCardAction: () => () => {},
+          onTabSnoozeRequest: () => () => {},
           onCreateTerminal: () => () => {},
           onRequestTerminalCreate: () => () => {},
           replyTerminalCreate: () => {},

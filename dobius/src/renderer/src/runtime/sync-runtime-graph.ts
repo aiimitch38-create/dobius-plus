@@ -379,7 +379,8 @@ function buildRuntimeMobileTabsProjection(tabsByWorktree: AppState['tabsByWorktr
                 quickCommandLabel: tab.quickCommandLabel,
                 generatedTitle: tab.generatedTitle,
                 customTitle: tab.customTitle,
-                launchAgent: tab.launchAgent
+                launchAgent: tab.launchAgent,
+                agentName: tab.agentName
               }))
             )
           }
@@ -400,7 +401,13 @@ function resolveRuntimeTerminalTitle(
   generatedTitlesEnabled: boolean,
   liveTitle = tab.title
 ): string {
-  return resolveTerminalTabTitle({ ...tab, title: liveTitle }, generatedTitlesEnabled, liveTitle)
+  // Why: runtime `title` keeps its pre-name meaning for CLI/ADAM consumers;
+  // the name travels separately as `agentName` on the synced tab.
+  return resolveTerminalTabTitle(
+    { ...tab, agentName: undefined, title: liveTitle },
+    generatedTitlesEnabled,
+    liveTitle
+  )
 }
 
 function buildRuntimeMobileOpenFilesProjection(openFiles: AppState['openFiles']): string {
@@ -569,6 +576,7 @@ async function syncRuntimeGraph(): Promise<void> {
       tabId,
       worktreeId: registeredTab.worktreeId,
       title: resolveRuntimeTerminalTitle(tab, generatedTitlesEnabled),
+      ...(tab.agentName ? { agentName: tab.agentName } : {}),
       activeLeafId: activePaneId === null ? null : (manager?.getLeafId(activePaneId) ?? null),
       layout: serializePaneTree(root)
     })

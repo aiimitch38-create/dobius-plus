@@ -27,6 +27,7 @@ import { boardInsertCard, boardInsertCardSize } from './board-insert-cards'
 import { closeConsoleCards } from './board-reset'
 import type { BoardConductor } from './use-board-conductor'
 import type { BoardRouteData } from './use-board-route-data'
+import { consoleTitleForTab } from './console-agent-title'
 
 const KILL_CONFIRM_THRESHOLD = 4
 
@@ -101,7 +102,11 @@ export function useBoardActions({
         const card = {
           kind: 'console' as const,
           ...rect,
-          title: `${label} ${existing + index + 1}`,
+          title: consoleTitleForTab(
+            useAppStore.getState(),
+            result.tabId,
+            `${label} ${existing + index + 1}`
+          ),
           agentKind: agent
         }
         // Why: host-backed launches return no tab id yet; the card is placed

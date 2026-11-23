@@ -19,7 +19,15 @@ export const DEPLOY_CONFIRM_CONSOLES = 8
 /** Agent per console, per lane id. */
 export type LaneAgents = Record<string, PresetAgent[]>
 
-export type PlanConsole = { cardId: string; agent: PresetAgent; title: string; rect: Rect }
+export type PlanConsole = {
+  cardId: string
+  agent: PresetAgent
+  title: string
+  rect: Rect
+  /** Plain agent grids: title the card with its terminal's agent name once
+   *  launched; `title` ("Claude 3") is only the fallback. Role crews keep roles. */
+  nameFromTab?: true
+}
 export type DeployPlan = {
   consoles: PlanConsole[]
   groups: { name: string; color: BoardSwatch; cardIds: string[] }[]
@@ -86,7 +94,8 @@ export function buildCatalogDeployPlan(
           preset.section === 'workspace'
             ? `${lane.name} ${slot + 1}`
             : `${deps.agentLabel(agent)} ${n}`,
-        rect
+        rect,
+        ...(preset.section === 'workspace' ? {} : { nameFromTab: true as const })
       })
       return cardId
     })

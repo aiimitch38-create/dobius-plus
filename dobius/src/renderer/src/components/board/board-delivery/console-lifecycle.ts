@@ -6,12 +6,10 @@ import { getAgentLabel } from '@/lib/agent-catalog'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { useAppStore } from '@/store'
 import { flushBoardPersistence, getBoard, type BoardCardOf } from '@/store/slices/board'
-import {
-  bugFixClaudeArgs,
-  isBugFixWorktreePath
-} from '../../../../../shared/bug-fix-agent-profile'
+import { bugFixClaudeArgs, isBugFixWorktreePath } from '../../../../../shared/bug-fix-agent-profile'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
-import type { TuiAgent } from '../../../../../shared/types'
+import type { TerminalTab, TuiAgent } from '../../../../../shared/types'
+import type { AppState } from '@/store/types'
 import { boardSpawnRects } from '../board-canvas/board-spawn-placement'
 import type { BoardPoint } from '../board-canvas/board-viewport'
 import {
@@ -23,6 +21,7 @@ import { clearBoardConsoleEnded, isBoardConsoleEnded } from '../console-card/boa
 import { isShellProcessName } from '../console-card/console-card-status'
 import { resolvePinnedAgentCommand } from '../console-card/console-account-launch'
 import { markConsolePaused } from './board-pause'
+import { consoleTitleForTab } from '../board-route/console-agent-title'
 
 type Console = BoardCardOf<'console'>
 
@@ -74,7 +73,11 @@ export function spawnConsoles(input: {
     const card = {
       kind: 'console' as const,
       ...rect,
-      title: `${label} ${existing + i + 1}`,
+      title: consoleTitleForTab(
+        useAppStore.getState(),
+        launched.tabId,
+        `${label} ${existing + i + 1}`
+      ),
       tabId: launched.tabId,
       agentKind: input.agent,
       ...(input.role ? { role: input.role } : {})
@@ -110,7 +113,9 @@ function restrictedLaunchFor(worktreeId: string): RestrictedLaunch | null {
   // older, wider one; the current shared profile always wins.
   const state = useAppStore.getState()
   const worktree = state.allWorktrees?.().find((entry) => entry.id === worktreeId)
-  return isBugFixWorktreePath(worktree?.path) ? { command: 'claude', args: bugFixClaudeArgs() } : null
+  return isBugFixWorktreePath(worktree?.path)
+    ? { command: 'claude', args: bugFixClaudeArgs() }
+    : null
 }
 
 export function restartConsole(
@@ -123,7 +128,16 @@ export function restartConsole(
   // the Settings default args (which skip permissions) or another agent.
   const restricted = restrictedLaunchFor(worktreeId)
   if (restricted) {
-    return relaunchInNewTab(worktreeId, card, 'claude', restricted.command, restricted.args, undefined) !== null
+    return (
+      relaunchInNewTab(
+        worktreeId,
+        card,
+        'claude',
+        restricted.command,
+        restricted.args,
+        undefined
+      ) !== null
+    )
   }
   const next = agent ?? agentOrDefault(card.agentKind)
   // Why: a plain restart of a pinned console must stay on its account; falling
@@ -147,7 +161,10 @@ export function restartConsole(
     return true
   }
   const accountId = launch?.agentCommandOverride ? (launch.accountId ?? undefined) : undefined
-  return relaunchInNewTab(worktreeId, card, next, launch?.agentCommandOverride, undefined, accountId) !== null
+  return (
+    relaunchInNewTab(worktreeId, card, next, launch?.agentCommandOverride, undefined, accountId) !==
+    null
+  )
 }
 
 export type RestartAndWaitOptions = {
@@ -214,6 +231,14 @@ function relaunchInNewTab(
   if (!launched?.tabId) {
     return null
   }
+  // Why: the card keeps its title across a restart, so the replacement tab
+  // (and its DOBIUS_AGENT_NAME) must keep the old tab's name, or routing and
+  // @mentions split between "Juniper" (card) and a fresh "Falcon" (tab). This
+  // runs in the same tick as createTab, before the new pane mounts and spawns.
+  const keptName = findTerminalTab(useAppStore.getState(), card.tabId)?.agentName
+  if (keptName) {
+    useAppStore.getState().setTabAgentName(launched.tabId, keptName)
+  }
   const oldTab = card.tabId
   markConsolePaused(oldTab, false)
   useAppStore
@@ -235,6 +260,19 @@ function relaunchInNewTab(
       )
     }
   )
+}
+
+function findTerminalTab(
+  state: Pick<AppState, 'tabsByWorktree'>,
+  tabId: string
+): TerminalTab | undefined {
+  for (const tabs of Object.values(state.tabsByWorktree)) {
+    const tab = tabs.find((entry) => entry.id === tabId)
+    if (tab) {
+      return tab
+    }
+  }
+  return undefined
 }
 
 /** True when the console has ended: tab gone or back at a bare shell. */

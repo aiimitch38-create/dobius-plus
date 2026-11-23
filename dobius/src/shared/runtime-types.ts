@@ -98,6 +98,8 @@ export type RuntimeSyncedTab = {
   tabId: string
   worktreeId: string
   title: string | null
+  /** The tab's generated agent name ("Juniper"); absent for older tabs. */
+  agentName?: string | null
   activeLeafId: string | null
   layout: TerminalPaneLayoutNode | null
 }
@@ -376,6 +378,9 @@ export type RuntimeTerminalSummary = {
   /** Set only on PTY-only rows (tabId is then `pty:<ptyId>`): the tab the PTY was spawned in. */
   originTabId?: string | null
   title: string | null
+  /** Stable agent name of the owning tab ("Juniper"); omitted for tabs created
+   *  before names existed. Additive: `title` keeps its live-title meaning. */
+  name?: string
   connected: boolean
   writable: boolean
   lastOutputAt: number | null
