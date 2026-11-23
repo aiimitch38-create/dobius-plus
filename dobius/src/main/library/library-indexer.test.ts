@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { refreshLibrary } from './library-indexer'
+import { refreshLibrary, walReserve } from './library-indexer'
 import { queryTerms, searchLibrary, sourceCounts } from './library-search'
 import { LibraryStore } from './library-store'
 import type { LibraryCandidate, LibraryIngester, LibrarySource } from './library-types'
@@ -86,11 +86,19 @@ describe('refreshLibrary', () => {
   })
 
   it('evicts oldest first to stay under the cap, and does not re-read evicted files', async () => {
-    const big = (word: string): string => `${word} `.repeat(20_000)
+    const big = (word: string): string =>
+      Array.from({ length: 20_000 }, (_, i) => `${word} t${i}`).join(' ')
     const items: Fake[] = Array.from({ length: 8 }, (_, i) => ({ key: `doc${i}`, text: big(`word${i}`), mtimeMs: (i + 1) * 1000 }))
-    const empty = store.usedBytes()
-    const capBytes = empty + 1_200_000
+    // Measure the full size in a scratch store, then cap at half of it.
+    const scratch = new LibraryStore(join(dir, 'scratch.sqlite'))
+    await refreshLibrary(scratch, [ingester(items)], { capBytes: 1e12, ...noYield })
+    scratch.checkpoint()
+    const capBytes = Math.round(scratch.usedBytes() / 2)
+    scratch.close()
     const report = await refreshLibrary(store, [ingester(items)], { capBytes, ...noYield })
+    // Pages stay under the cap minus the WAL's reserve; once checkpointed, file + WAL fit the cap.
+    expect(store.pageBytes()).toBeLessThanOrEqual(capBytes - walReserve(capBytes))
+    store.checkpoint()
     expect(store.usedBytes()).toBeLessThanOrEqual(capBytes)
     expect(report.evicted).toBeGreaterThan(0)
     expect(searchLibrary(store, { query: 'word7' })).toHaveLength(1)

@@ -31,6 +31,7 @@ type StatusResult = {
     removed: number
     evicted: number
     droppedChunks: number
+    stopped?: string | null
     errors: string[]
   } | null
   sources: { source: Source; documents: number; chunks: number; textBytes: number }[]
@@ -94,6 +95,9 @@ export function formatLibraryStatus(status: StatusResult): string {
     lines.push(
       `Last refresh: ${new Date(last.finishedAt).toLocaleString('en-US')}, ${Math.round(last.durationMs / 1000)}s: ${last.indexed} read, ${last.unchanged} unchanged, ${last.removed} removed, ${last.evicted} dropped for space.`
     )
+    if (last.stopped) {
+      lines.push(`  It stopped early: ${last.stopped}.`)
+    }
     if (last.errors.length > 0) {
       lines.push(`  ${last.errors.length} could not be read, e.g. ${last.errors[0]}`)
     }

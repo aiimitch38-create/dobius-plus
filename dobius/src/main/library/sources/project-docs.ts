@@ -2,10 +2,12 @@
 // READMEs and docs/ under each top-level folder of ~/Projects (Code). No
 // source code. Every worktree is read; copies shared between worktrees of
 // one repository count once (project-checkouts.ts).
-import { lstat, readdir, readFile } from 'node:fs/promises'
+import { lstat, readdir, readFile, realpath } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
 import type { LibraryIngester } from '../library-types'
+import { isSkippedDirName } from '../library-secrets'
 import { markdownCandidates, projectForPath, walkFiles } from './fs-walk'
+import { realRoot } from './safe-path'
 import type { Checkout, CheckoutFile } from './project-checkouts'
 import { checkoutLabels, dedupeAcrossCheckouts } from './project-checkouts'
 
@@ -36,7 +38,7 @@ export async function gitCommonDir(dir: string): Promise<{ common: string; linke
     return null
   }
   if (info.isDirectory()) {
-    return { common: resolve(dotGit), linked: false }
+    return { common: await realpath(dotGit).catch(() => resolve(dotGit)), linked: false }
   }
   if (!info.isFile()) {
     return null
@@ -48,7 +50,9 @@ export async function gitCommonDir(dir: string): Promise<{ common: string; linke
     }
     const gitDir = isAbsolute(pointer) ? pointer : resolve(dir, pointer)
     const commonFile = await readFile(join(gitDir, 'commondir'), 'utf8').catch(() => '../..')
-    return { common: resolve(gitDir, commonFile.trim()), linked: true }
+    const common = resolve(gitDir, commonFile.trim())
+    // Why realpath: the pointer may name the repository through a link.
+    return { common: await realpath(common).catch(() => common), linked: true }
   } catch {
     return null
   }
@@ -88,20 +92,24 @@ export function projectDocsIngester(projectsRoot: string): LibraryIngester {
   return {
     source: 'project',
     list: async () => {
+      const base = await realRoot(projectsRoot)
+      if (!base) {
+        return []
+      }
       let entries
       try {
-        entries = await readdir(projectsRoot, { withFileTypes: true })
+        entries = await readdir(base, { withFileTypes: true })
       } catch {
         return []
       }
       const files: CheckoutFile[] = []
       for (const entry of entries) {
-        if (!entry.isDirectory() || entry.name.startsWith('.')) {
+        if (!entry.isDirectory() || entry.name.startsWith('.') || isSkippedDirName(entry.name)) {
           continue
         }
         files.push(
           ...(await topFolderFiles(
-            join(projectsRoot, entry.name),
+            join(base, entry.name),
             // Why: a top-level Docs or plans folder is notes all the way down.
             NOTES_FOLDER.test(entry.name)
               ? (path) => path.toLowerCase().endsWith('.md')
@@ -113,8 +121,9 @@ export function projectDocsIngester(projectsRoot: string): LibraryIngester {
       const labels = checkoutLabels(files)
       return markdownCandidates(
         'project',
+        base,
         kept.map((file) => file.path),
-        (file) => projectForPath(file, projectsRoot),
+        (file) => projectForPath(file, base),
         (file) => labels.get(file) ?? null
       )
     }

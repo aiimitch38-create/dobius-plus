@@ -145,7 +145,7 @@ import { ClaudeRuntimeAuthService } from './claude-accounts/runtime-auth-service
 import { StarNagService } from './star-nag/service'
 import { startImessageBridge, stopImessageBridge } from './imessage-bridge/bridge-service'
 import { startDobiusCli, stopDobiusCli } from './dobius-cli/dispatch-server'
-import { startLibraryRefresh, stopLibraryRefresh } from './library/library-service'
+import { startLibraryRefresh, stopLibraryRefresh } from './library/library-app'
 import { shutdownBugAutoFix } from './vertex/bug-autofix-wiring'
 import { bootLeadsFromAutostart } from './runtime/rpc/methods/leads'
 import { syncVoiceConductorFromSettings } from './voice-conductor/service'

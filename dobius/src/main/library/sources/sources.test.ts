@@ -1,19 +1,23 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SyncDatabase from '../../sqlite/sync-database'
 import type { LibraryCandidate, LibraryDocument } from '../library-types'
 import { adamIngester } from './adam'
 import { claudeConversationsIngester } from './claude-conversations'
 import { codexConversationsIngester } from './codex-conversations'
+import { MAX_FILE_BYTES } from './fs-walk'
+import { boundedLines } from './jsonl-lines'
 import { obsidianIngester } from './obsidian'
+import { dedupeAcrossCheckouts, streamHash } from './project-checkouts'
 import { isProjectNotesFile, projectDocsIngester } from './project-docs'
 
 let root: string
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'library-sources-'))
+  // Why realpath: the library reports real paths, and macOS tmp is a link.
+  root = realpathSync(mkdtempSync(join(tmpdir(), 'library-sources-')))
 })
 afterEach(() => {
   rmSync(root, { recursive: true, force: true })
@@ -181,5 +185,67 @@ describe('Obsidian', () => {
       ['AI Research', 'Carson (Carson.md)'],
       ['Obsidian', 'Inbox.md']
     ])
+  })
+})
+
+describe('symlinks and folder case', () => {
+  it('reads nothing through a symlinked root into a vendor folder', async () => {
+    put('repo/vendor/pkg/README.md', '# vendored')
+    symlinkSync(join(root, 'repo/vendor'), join(root, 'vault-link'))
+    expect(await obsidianIngester(join(root, 'vault-link')).list()).toEqual([])
+  })
+
+  it('skips symlinked files and folders named Vendor or NODE_MODULES', async () => {
+    put('outside/secret-notes.md', 'outside the vault')
+    put('vault/Keep.md', 'kept')
+    put('vault/Vendor/a.md', 'vendored')
+    put('vault/NODE_MODULES/b.md', 'deps')
+    symlinkSync(join(root, 'outside/secret-notes.md'), join(root, 'vault/Linked.md'))
+    const candidates = await obsidianIngester(join(root, 'vault')).list()
+    expect(candidates.map((c) => c.path.slice(root.length))).toEqual(['/vault/Keep.md'])
+  })
+
+  it('refuses a file swapped for a symlink after listing', async () => {
+    put('vault/Note.md', 'real note')
+    put('outside/other.md', 'not in the vault')
+    const [candidate] = await obsidianIngester(join(root, 'vault')).list()
+    rmSync(candidate.path)
+    symlinkSync(join(root, 'outside/other.md'), candidate.path)
+    expect(await candidate.load()).toBeNull()
+  })
+})
+
+describe('bounded transcript lines', () => {
+  it('skips an oversized line without buffering it and keeps the others', async () => {
+    const file = put('big.jsonl', `first\n${'x'.repeat(3_000_000)}\nlast`)
+    const lines: string[] = []
+    for await (const line of boundedLines(file, 1_000_000)) {
+      lines.push(line)
+    }
+    expect(lines).toEqual(['first', 'last'])
+  })
+})
+
+describe('dedupe size limit', () => {
+  it('never hashes a file over the 2 MB limit, and drops it', async () => {
+    const big = 'y'.repeat(MAX_FILE_BYTES + 10)
+    const a = put('main/plans/export.md', big)
+    const b = put('wt/plans/export.md', big)
+    const c = put('main/plans/small.md', 'same')
+    const d = put('wt/plans/small.md', 'same')
+    const main = { root: join(root, 'main'), common: '/repo/.git', linked: false }
+    const wt = { root: join(root, 'wt'), common: '/repo/.git', linked: true }
+    const hasher = vi.fn(streamHash)
+    const kept = await dedupeAcrossCheckouts(
+      [
+        { checkout: main, path: a },
+        { checkout: wt, path: b },
+        { checkout: main, path: c },
+        { checkout: wt, path: d }
+      ],
+      hasher
+    )
+    expect(kept.map((file) => file.path)).toEqual([c])
+    expect(hasher.mock.calls.map(([path]) => path).sort()).toEqual([c, d].sort())
   })
 })

@@ -3,10 +3,11 @@
 // and tool output are left out, and so are the context blocks Codex injects
 // as user messages (<environment_context>, AGENTS.md instructions).
 import { basename } from 'node:path'
-import { titleFrom } from '../library-chunk'
-import type { LibraryDocument, LibraryIngester, LibrarySection } from '../library-types'
+import { RecentSections, titleFrom } from '../library-chunk'
+import type { LibraryDocument, LibraryIngester } from '../library-types'
 import { projectForPath } from './fs-walk'
-import { asText, jsonLines, jsonlFiles, timeOf } from './jsonl-lines'
+import type { FileStat } from './jsonl-lines'
+import { asText, jsonlFiles, safeJsonLines, timeOf } from './jsonl-lines'
 
 function isInjectedContext(text: string): boolean {
   return /^<[a-z_-]+[\s>]/i.test(text) || text.startsWith('# AGENTS.md instructions')
@@ -32,14 +33,14 @@ function keepLine(line: string): boolean {
 }
 
 export async function readCodexConversation(
-  file: string,
-  mtimeMs: number,
+  file: FileStat,
   projectsRoot: string
 ): Promise<LibraryDocument | null> {
-  const sections: LibrarySection[] = []
+  const recent = new RecentSections()
+  const mtimeMs = file.mtimeMs
   let cwd = ''
   let firstUser = ''
-  for await (const record of jsonLines(file, keepLine)) {
+  for await (const record of safeJsonLines(file, keepLine)) {
     const payload = (record.payload ?? {}) as Record<string, unknown>
     if (record.type === 'session_meta') {
       cwd ||= asText(payload.cwd)
@@ -57,17 +58,18 @@ export async function readCodexConversation(
       continue
     }
     firstUser ||= role === 'user' ? text : ''
-    sections.push({
+    recent.push({
       text: `${role === 'user' ? 'User' : 'Codex'}: ${text}`,
       at: timeOf(record.timestamp, mtimeMs)
     })
   }
+  const sections = recent.sections
   if (sections.length === 0) {
     return null
   }
   return {
     project: cwd ? projectForPath(cwd, projectsRoot) : null,
-    title: titleFrom(firstUser, `Codex session ${basename(file, '.jsonl')}`),
+    title: titleFrom(firstUser, `Codex session ${basename(file.path, '.jsonl')}`),
     sections
   }
 }
@@ -85,7 +87,7 @@ export function codexConversationsIngester(
         path: file.path,
         mtimeMs: file.mtimeMs,
         size: file.size,
-        load: () => readCodexConversation(file.path, file.mtimeMs, projectsRoot)
+        load: () => readCodexConversation(file, projectsRoot)
       }))
   }
 }

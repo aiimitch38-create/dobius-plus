@@ -3,7 +3,7 @@
 // every conversation, so a paired phone or a sandboxed agent key (default
 // deny, agent-rpc-scope.ts) gets nothing.
 import { z } from 'zod'
-import { getLibraryService } from '../../../library/library-service'
+import { getLibraryService } from '../../../library/library-app'
 import {
   LIBRARY_MAX_RESULTS,
   LIBRARY_SOURCES,

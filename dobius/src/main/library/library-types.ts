@@ -58,6 +58,8 @@ export type LibraryRefreshReport = {
   removed: number
   evicted: number
   droppedChunks: number
+  /** Why the pass ended early (low disk, disk full, quit), or null when it finished. */
+  stopped: string | null
   errors: string[]
 }
 

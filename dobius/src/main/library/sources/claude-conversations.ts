@@ -2,10 +2,11 @@
 // Only what the user and Claude wrote to each other; tool calls, tool output,
 // thinking, hidden meta turns and subagent sidechains are left out.
 import { basename } from 'node:path'
-import { titleFrom } from '../library-chunk'
-import type { LibraryDocument, LibraryIngester, LibrarySection } from '../library-types'
+import { RecentSections, titleFrom } from '../library-chunk'
+import type { LibraryDocument, LibraryIngester } from '../library-types'
 import { projectForPath } from './fs-walk'
-import { asText, jsonLines, jsonlFiles, timeOf } from './jsonl-lines'
+import type { FileStat } from './jsonl-lines'
+import { asText, jsonlFiles, safeJsonLines, timeOf } from './jsonl-lines'
 
 const NOISE_TAG = /^<(?:command-|local-command-|bash-|task-notification|user-prompt-submit-hook)/
 
@@ -46,15 +47,15 @@ function keepLine(line: string): boolean {
 }
 
 export async function readClaudeConversation(
-  file: string,
-  mtimeMs: number,
+  file: FileStat,
   projectsRoot: string
 ): Promise<LibraryDocument | null> {
-  const sections: LibrarySection[] = []
+  const recent = new RecentSections()
+  const mtimeMs = file.mtimeMs
   let cwd = ''
   let aiTitle = ''
   let firstUser = ''
-  for await (const record of jsonLines(file, keepLine)) {
+  for await (const record of safeJsonLines(file, keepLine)) {
     const type = record.type
     if (type === 'ai-title' || type === 'custom-title') {
       aiTitle = asText(record.aiTitle ?? record.customTitle) || aiTitle
@@ -74,17 +75,18 @@ export async function readClaudeConversation(
       continue
     }
     firstUser ||= type === 'user' ? text : ''
-    sections.push({
+    recent.push({
       text: `${type === 'user' ? 'User' : 'Claude'}: ${text}`,
       at: timeOf(record.timestamp, mtimeMs)
     })
   }
+  const sections = recent.sections
   if (sections.length === 0) {
     return null
   }
   return {
     project: cwd ? projectForPath(cwd, projectsRoot) : null,
-    title: aiTitle || titleFrom(firstUser, `Claude session ${basename(file, '.jsonl')}`),
+    title: aiTitle || titleFrom(firstUser, `Claude session ${basename(file.path, '.jsonl')}`),
     sections
   }
 }
@@ -102,7 +104,7 @@ export function claudeConversationsIngester(
         path: file.path,
         mtimeMs: file.mtimeMs,
         size: file.size,
-        load: () => readClaudeConversation(file.path, file.mtimeMs, projectsRoot)
+        load: () => readClaudeConversation(file, projectsRoot)
       }))
   }
 }

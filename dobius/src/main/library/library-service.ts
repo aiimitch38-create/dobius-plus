@@ -1,67 +1,34 @@
-// The library in the running app: one index file in userData, refreshed two
-// minutes after start and then every 30 minutes, never two passes at once.
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-import { getUserDataRoot } from '../storage/user-data-root'
-import { refreshLibrary } from './library-indexer'
+// The library in the running app: search and status read the index on the
+// main thread (WAL lets them read while a pass writes); refresh passes run
+// through a PassRunner (a worker thread in the app), two minutes after start
+// and then every 30 minutes, never two at once.
+import type { LibraryRefreshJob } from './library-refresh-job'
+import type { LibraryRoots } from './library-roots'
 import { searchLibrary, sourceCounts } from './library-search'
 import { LibraryStore } from './library-store'
-import {
-  LIBRARY_DEFAULT_CAP_BYTES,
-  type LibraryHit,
-  type LibraryIngester,
-  type LibraryRefreshReport,
-  type LibrarySearchQuery,
-  type LibraryStatus
+import type {
+  LibraryHit,
+  LibraryRefreshReport,
+  LibrarySearchQuery,
+  LibraryStatus
 } from './library-types'
-import { adamIngester } from './sources/adam'
-import { claudeConversationsIngester } from './sources/claude-conversations'
-import { codexConversationsIngester } from './sources/codex-conversations'
-import { obsidianIngester } from './sources/obsidian'
-import { projectDocsIngester } from './sources/project-docs'
+import { LIBRARY_DEFAULT_CAP_BYTES } from './library-types'
 
 export const LIBRARY_FIRST_REFRESH_DELAY_MS = 2 * 60 * 1000
 export const LIBRARY_REFRESH_INTERVAL_MS = 30 * 60 * 1000
 
-export type LibraryRoots = {
-  projectsRoot: string
-  claudeProjectsDir: string
-  codexSessionsDir: string
-  adamThreadFile: string
-  hermesStateDb: string
-  obsidianVault: string
-}
-
-export function defaultLibraryRoots(home = homedir(), userData = getUserDataRoot()): LibraryRoots {
-  return {
-    projectsRoot: join(home, 'Projects (Code)'),
-    claudeProjectsDir: join(home, '.claude', 'projects'),
-    codexSessionsDir: join(home, '.codex', 'sessions'),
-    adamThreadFile: join(userData, 'adam-thread.json'),
-    hermesStateDb: join(home, '.hermes', 'profiles', 'adam', 'state.db'),
-    obsidianVault: join(home, 'Obsidian Vault')
-  }
-}
-
-export function libraryIngesters(roots: LibraryRoots): LibraryIngester[] {
-  return [
-    projectDocsIngester(roots.projectsRoot),
-    claudeConversationsIngester(roots.claudeProjectsDir, roots.projectsRoot),
-    codexConversationsIngester(roots.codexSessionsDir, roots.projectsRoot),
-    adamIngester({ threadFile: roots.adamThreadFile, hermesStateDb: roots.hermesStateDb }),
-    obsidianIngester(roots.obsidianVault)
-  ]
-}
+export type RunningPass = { done: Promise<LibraryRefreshReport>; stop: () => void }
+export type PassRunner = (job: LibraryRefreshJob) => RunningPass
 
 export class LibraryService {
   private store: LibraryStore | null = null
-  private running: Promise<LibraryRefreshReport> | null = null
-  private stopped = false
+  private running: RunningPass | null = null
   private timers: NodeJS.Timeout[] = []
 
   constructor(
     private readonly dbPath: string,
-    private readonly ingesters: LibraryIngester[],
+    private readonly roots: LibraryRoots,
+    private readonly runPass: PassRunner,
     private readonly capBytes = LIBRARY_DEFAULT_CAP_BYTES
   ) {}
 
@@ -72,13 +39,21 @@ export class LibraryService {
 
   /** One incremental pass; a call while a pass runs gets that pass. */
   refresh(): Promise<LibraryRefreshReport> {
-    this.running ??= refreshLibrary(this.open(), this.ingesters, {
-      capBytes: this.capBytes,
-      shouldStop: () => this.stopped
-    }).finally(() => {
+    if (!this.running) {
+      const pass = this.runPass({ dbPath: this.dbPath, roots: this.roots, capBytes: this.capBytes })
+      this.running = pass
+      void pass.done.then(
+        () => this.clear(pass),
+        () => this.clear(pass)
+      )
+    }
+    return this.running.done
+  }
+
+  private clear(pass: RunningPass): void {
+    if (this.running === pass) {
       this.running = null
-    })
-    return this.running
+    }
   }
 
   search(query: LibrarySearchQuery): LibraryHit[] {
@@ -113,36 +88,14 @@ export class LibraryService {
   }
 
   async stop(): Promise<void> {
-    this.stopped = true
     for (const timer of this.timers) {
       clearTimeout(timer)
     }
     this.timers = []
-    await this.running?.catch(() => undefined)
+    const pass = this.running
+    pass?.stop()
+    await pass?.done.catch(() => undefined)
     this.store?.close()
     this.store = null
   }
-}
-
-let service: LibraryService | null = null
-
-/** The app's library; opened on first use. */
-export function getLibraryService(): LibraryService {
-  service ??= new LibraryService(
-    join(getUserDataRoot(), 'library.sqlite'),
-    libraryIngesters(defaultLibraryRoots())
-  )
-  return service
-}
-
-/** Schedule refreshes. Why skipped under e2e: a test copy must not read Carson's files. */
-export function startLibraryRefresh(env: NodeJS.ProcessEnv = process.env): void {
-  if (env.DOBIUS_E2E_USER_DATA_DIR || env.DOBIUS_LIBRARY_DISABLED === '1') {
-    return
-  }
-  getLibraryService().start()
-}
-
-export function stopLibraryRefresh(): void {
-  void service?.stop()
 }

@@ -30,6 +30,13 @@ export const LIBRARY_SKIPPED_DIRS: ReadonlySet<string> = new Set([
   '.obsidian'
 ])
 
+const SKIPPED_LOWER = new Set([...LIBRARY_SKIPPED_DIRS].map((name) => name.toLowerCase()))
+
+/** Why case-insensitive: macOS folders are, so "Vendor" and "NODE_MODULES" are the same folders. */
+export function isSkippedDirName(name: string): boolean {
+  return SKIPPED_LOWER.has(name.toLowerCase())
+}
+
 const SECRET_FILE_NAMES = [
   /^\.env(?:\..*)?$/i,
   /\.env$/i,
@@ -46,7 +53,7 @@ const SECRET_FILE_NAMES = [
 /** True for a path the library must never read: secret files and skipped folders. */
 export function isSecretOrSkippedPath(path: string): boolean {
   const parts = path.split(/[\\/]+/)
-  if (parts.slice(0, -1).some((part) => LIBRARY_SKIPPED_DIRS.has(part))) {
+  if (parts.slice(0, -1).some((part) => isSkippedDirName(part))) {
     return true
   }
   const name = basename(path)
@@ -72,10 +79,28 @@ function maskRandomTokens(line: string): string {
   return line.replace(LONG_RUN, (run) => (isRandomToken(run) ? '[redacted]' : run))
 }
 
-/** looksSecret, minus its long-token rule (paths), which isRandomToken covers. */
+// looksSecret's provider shapes (live-voice-terminal-text.ts), without its
+// generic long-token rule. Why a copy: they must run on the original line,
+// while the long-token rule may only run with paths taken out, and the jarvis
+// module exposes the list as one function. Keep the two in step.
+const PROVIDER_SHAPED = [
+  /\bsk-[A-Za-z0-9_-]{6,}/,
+  /\bek_[A-Za-z0-9_-]{6,}/,
+  /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{6,}/,
+  /\bgithub_pat_[A-Za-z0-9_]{6,}/,
+  /\bxox[bpas]-[A-Za-z0-9-]{6,}/,
+  /\b(?:AKIA|ASIA)[0-9A-Z]{12,}/,
+  /\bbearer\s+[A-Za-z0-9._~+/=-]{8,}/i,
+  /\bbasic\s+[A-Za-z0-9+/]+={0,2}/i
+]
+
+/** Provider shapes on the line as written; looksSecret's other rules with paths taken out. */
 function lineLooksSecret(line: string): boolean {
-  return looksSecret(line.replace(LONG_RUN, ' '))
+  return PROVIDER_SHAPED.some((pattern) => pattern.test(line)) || looksSecret(line.replace(LONG_RUN, ' '))
 }
+
+/** A line that ends in a credential label ("password:"), so the next line is its value. */
+const DANGLING_LABEL = /(?:password|passwd|pwd|secret|token|api[\s_-]?key|access[\s_-]?key|auth)s?["']?\s*[:=]\s*["']?\s*$/i
 
 export type ScrubbedText = { text: string; secretWords: number; words: number }
 
@@ -85,34 +110,39 @@ function wordCount(text: string): number {
   return text.split(/\s+/).filter((word) => word.length > 0).length
 }
 
-/** Redact secrets in place and drop credential-looking lines, counting words lost. */
+/**
+ * Redact secrets and drop credential-looking lines, counting words lost. Why
+ * the redactor runs on the whole text first: a label and its value can sit on
+ * two lines ("password:" then the value), which a line-by-line pass misses.
+ */
 export function scrubText(text: string): ScrubbedText {
+  const words = wordCount(text)
   const kept: string[] = []
-  let secretWords = 0
-  let words = 0
-  for (const raw of text.split('\n')) {
+  let dropNext = false
+  for (const raw of redactString(text).split('\n')) {
     if (raw.trim() === '') {
       kept.push('')
       continue
     }
-    words += wordCount(raw)
-    const line = maskRandomTokens(redactString(raw))
-    if (lineLooksSecret(line)) {
-      secretWords += wordCount(raw)
+    const line = maskRandomTokens(raw)
+    if (dropNext || lineLooksSecret(line)) {
+      dropNext = DANGLING_LABEL.test(line) && !dropNext
       continue
     }
-    const markers = line.match(REDACTION)?.length ?? 0
-    // Words a redaction swallowed, plus the redactions themselves.
-    secretWords += Math.max(0, wordCount(raw) - wordCount(line)) + markers
+    dropNext = false
     kept.push(line)
   }
-  return { text: kept.join('\n').replace(/\n{3,}/g, '\n\n').trim(), secretWords, words }
+  const out = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+  const markers = out.match(REDACTION)?.length ?? 0
+  // Words removed or swallowed by a redaction, plus the redactions themselves.
+  const secretWords = Math.min(words, Math.max(0, words - (wordCount(out) - markers)) + markers)
+  return { text: out, secretWords, words }
 }
 
 /**
- * Text fit to store, or null when the chunk is mostly secret. Why a ratio: a
- * chunk that was half keys is a credentials dump; what is left of it would
- * only be noise around the redactions.
+ * Text fit to store, or null when it is mostly secret. Why a ratio: text that
+ * was half keys is a credentials dump; what is left would only be noise
+ * around the redactions.
  */
 export function scrubForIndex(text: string): string | null {
   const scrubbed = scrubText(text)
@@ -120,6 +150,12 @@ export function scrubForIndex(text: string): string | null {
     return null
   }
   return scrubbed.text.length > 0 ? scrubbed.text : null
+}
+
+/** A short stored label (title, project name): redacted, one line, never empty. */
+export function scrubLabel(label: string, maxChars: number, fallback: string): string {
+  const text = scrubSnippet(label, maxChars)
+  return text === HIDDEN_SNIPPET ? fallback : text
 }
 
 export const HIDDEN_SNIPPET = '(passage hidden: it looked like a credential)'

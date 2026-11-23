@@ -3,7 +3,7 @@ import type { LibrarySection } from './library-types'
 export const CHUNK_TARGET_CHARS = 1500
 export const CHUNK_MAX_CHARS = 2000
 /** Why: one runaway transcript must not fill the cap on its own. */
-export const DOCUMENT_MAX_CHARS = 2_000_000
+export const DOCUMENT_MAX_CHARS = 1_000_000
 
 /** Split one long block on paragraph, then line, then word boundaries. */
 function splitLong(text: string, max: number): string[] {
@@ -50,10 +50,12 @@ export function chunkSections(sections: LibrarySection[]): LibrarySection[] {
     text = ''
   }
   for (const section of sections) {
-    if (total >= DOCUMENT_MAX_CHARS) {
+    const room = DOCUMENT_MAX_CHARS - total
+    if (room <= 0) {
       break
     }
-    const body = section.text.trim()
+    // Why cut to the room left: one 8M-character section must not pass whole.
+    const body = section.text.trim().slice(0, room)
     if (!body) {
       continue
     }
@@ -82,4 +84,25 @@ export function titleFrom(text: string, fallback: string): string {
     return fallback
   }
   return line.length > 80 ? `${line.slice(0, 79).trimEnd()}…` : line
+}
+
+/**
+ * Sections kept while a transcript is read, holding at most `budget`
+ * characters: the newest text stays and the oldest goes, so a long session
+ * never sits whole in memory.
+ */
+export class RecentSections {
+  readonly sections: LibrarySection[] = []
+  private chars = 0
+
+  constructor(private readonly budget = DOCUMENT_MAX_CHARS) {}
+
+  push(section: LibrarySection): void {
+    const text = section.text.slice(0, this.budget)
+    this.sections.push({ text, at: section.at })
+    this.chars += text.length
+    while (this.chars > this.budget && this.sections.length > 1) {
+      this.chars -= this.sections.shift()!.text.length
+    }
+  }
 }

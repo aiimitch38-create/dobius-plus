@@ -3,8 +3,10 @@
 // different plans (WORKSTATION-BUILD/plans is the main build plan), while most
 // notes are identical copies of main's.
 import { createHash } from 'node:crypto'
-import { readFile, stat } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
+import { lstat } from 'node:fs/promises'
 import { basename } from 'node:path'
+import { isEligibleSize } from './fs-walk'
 
 export type Checkout = {
   root: string
@@ -15,17 +17,23 @@ export type Checkout = {
 
 export type CheckoutFile = { checkout: Checkout; path: string }
 
-async function contentHash(path: string): Promise<string | null> {
-  try {
-    return createHash('sha256').update(await readFile(path)).digest('hex')
-  } catch {
-    return null
-  }
+export type ContentHasher = (path: string) => Promise<string | null>
+
+/** sha256 of a file, streamed so a large file is never held in memory. */
+export function streamHash(path: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const hash = createHash('sha256')
+    createReadStream(path)
+      .on('data', (chunk) => hash.update(chunk))
+      .on('end', () => resolve(hash.digest('hex')))
+      .on('error', () => resolve(null))
+  })
 }
 
 async function sizeOf(path: string): Promise<number | null> {
   try {
-    return (await stat(path)).size
+    const info = await lstat(path)
+    return info.isFile() ? info.size : null
   } catch {
     return null
   }
@@ -44,7 +52,10 @@ function checkoutOrder(a: Checkout, b: Checkout): number {
  * of the same repository. Only files whose size collides with a file in a
  * sibling checkout are read, so a pass stays cheap.
  */
-export async function dedupeAcrossCheckouts(files: CheckoutFile[]): Promise<CheckoutFile[]> {
+export async function dedupeAcrossCheckouts(
+  files: CheckoutFile[],
+  contentHash: ContentHasher = streamHash
+): Promise<CheckoutFile[]> {
   const byRepo = new Map<string, CheckoutFile[]>()
   const kept: CheckoutFile[] = []
   for (const file of files) {
@@ -58,7 +69,10 @@ export async function dedupeAcrossCheckouts(files: CheckoutFile[]): Promise<Chec
   }
   for (const group of byRepo.values()) {
     group.sort((a, b) => checkoutOrder(a.checkout, b.checkout) || a.path.localeCompare(b.path))
-    const sizes = await Promise.all(group.map((file) => sizeOf(file.path)))
+    // Why the size check first: a file the library will not index is never hashed.
+    const sizes = (await Promise.all(group.map((file) => sizeOf(file.path)))).map((size) =>
+      size !== null && isEligibleSize(size) ? size : null
+    )
     const rootsBySize = new Map<number, Set<string>>()
     sizes.forEach((size, index) => {
       if (size !== null) {
@@ -70,7 +84,10 @@ export async function dedupeAcrossCheckouts(files: CheckoutFile[]): Promise<Chec
     const seen = new Map<string, string>()
     for (const [index, file] of group.entries()) {
       const size = sizes[index]
-      if (size === null || (rootsBySize.get(size)?.size ?? 0) < 2) {
+      if (size === null) {
+        continue
+      }
+      if ((rootsBySize.get(size)?.size ?? 0) < 2) {
         kept.push(file)
         continue
       }
