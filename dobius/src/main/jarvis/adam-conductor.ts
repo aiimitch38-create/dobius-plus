@@ -5,7 +5,28 @@
 // its own last reply, so ADAM never claims more than the agent said.
 // No Electron import: the runtime RPC (terminal.send) reaches it too.
 
-import { lastOutputLine, looksSecret } from './live-voice-terminal-text'
+import {
+  doneNotice,
+  freshReply,
+  lastSentenceAsks,
+  needsYouNotice,
+  plainWords,
+  clip,
+  safeLabel,
+  summarizeUpdates,
+  type ConductorUpdate
+} from './adam-conductor-text'
+
+export {
+  CONDUCTOR_NOTICE_MAX_CHARS,
+  doneNotice,
+  firstSentence,
+  lastQuestion,
+  needsYouNotice,
+  plainWords,
+  safeLabel,
+  summarizeUpdates
+} from './adam-conductor-text'
 
 export type ConductorStatus = {
   isRunningAgent: boolean
@@ -37,6 +58,8 @@ export type ConductorDeps = {
   /** The terminal's current name, or null when it is gone. */
   labelOf: (handle: string) => Promise<string | null>
   report: (notice: ConductorNotice) => void
+  /** Reports were switched off: anything still waiting to be said is dropped. */
+  cleared?: () => void
   /** The "ADAM reports finished work" setting. */
   enabled: () => boolean
   now?: () => number
@@ -47,14 +70,19 @@ export type ConductorDeps = {
 export type DispatchSource = 'quick-hands' | 'cli'
 
 type Tracked = {
+  /** Unique per dispatch: a newer send to the same terminal replaces this one. */
+  id: number
   handle: string
   what: string
   source: DispatchSource
   sentAt: number
   sawWorking: boolean
+  /** The agent's last reply when ADAM sent the work (undefined = not read yet). */
+  baselineReply: string | null | undefined
+  replyCheckedAt: number
   /** When the current done / needs-you reading began; it must hold SETTLE_MS. */
   settling: { kind: ConductorNoticeKind; since: number } | null
-  /** A needs-you was already said for this stretch of waiting. */
+  /** A notice was already given for this stretch of waiting. */
   askedAt: number | null
 }
 
@@ -64,97 +92,15 @@ export const CONDUCTOR_POLL_MS = 2_000
 export const CONDUCTOR_SETTLE_MS = 5_000
 export const CONDUCTOR_EXPIRE_MS = 6 * 60 * 60_000
 export const CONDUCTOR_MAX_TRACKED = 30
-export const CONDUCTOR_NOTICE_MAX_CHARS = 200
+// Why throttled: a reply check reads the agent's transcript file.
+export const CONDUCTOR_REPLY_CHECK_MS = 6_000
 const WHAT_MAX_CHARS = 80
 const CONTEXT_MAX_LINES = 6
+const UNSEEN_MAX = 50
 
-// oxlint-disable-next-line no-control-regex -- stripping terminal escapes is the point
-const ANSI = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|\u001b[@-_]/g
-
-/** One line of plain words: no escapes, control characters, markdown marks or extra spaces. */
-export function plainWords(text: string): string {
-  return (
-    text
-      .replace(ANSI, '')
-      // oxlint-disable-next-line no-control-regex -- removing control characters is the point
-      .replace(/[\u0000-\u001F\u007F]/g, ' ')
-      .replace(/```[\s\S]*?```/g, ' ')
-      .replace(/[`*_#>|]+/g, ' ')
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-      .replace(/\s+/g, ' ')
-      .trim()
-  )
-}
-
-const SENTENCES = /[^.!?]+(?:[.!?]+(?=\s|$)|$)/g
-
-function sentencesOf(text: string): string[] {
-  return (plainWords(text).match(SENTENCES) ?? []).map((s) => s.trim()).filter(Boolean)
-}
-
-/** The first sentence of a reply, as plain words. */
-export function firstSentence(text: string): string {
-  return sentencesOf(text)[0] ?? ''
-}
-
-/** The last sentence ending in "?", or null. */
-export function lastQuestion(text: string): string | null {
-  const questions = sentencesOf(text).filter((s) => s.endsWith('?'))
-  return questions.at(-1) ?? null
-}
-
-function clip(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
-}
-
-/** The agent's last reply if it was written after ADAM's message, else null. */
-function freshReply(read: ConductorRead | null, sentAt: number): string | null {
-  const reply = read?.reply
-  // Why the time check: a reply from before ADAM's message is the previous task's.
-  return reply && (reply.at === null || reply.at >= sentAt) && reply.text.trim() ? reply.text : null
-}
-
-function lastSentenceAsks(text: string): boolean {
-  return sentencesOf(text).at(-1)?.endsWith('?') === true
-}
-
-/** "<label> says it's done: <first sentence>", short, never a secret. */
-export function doneNotice(label: string, read: ConductorRead | null, sentAt: number): string {
-  const fresh = freshReply(read, sentAt) ?? ''
-  const sentence = fresh ? firstSentence(fresh) : ''
-  if (!sentence) {
-    return clip(`${label} looks finished, but I could not read what it said.`, CONDUCTOR_NOTICE_MAX_CHARS)
-  }
-  // Why the whole reply: a key past the first sentence would still be shown in part elsewhere.
-  if (looksSecret(fresh) || looksSecret(sentence)) {
-    return clip(
-      `${label} says it's done. Its reply looked like it had a secret, so I left it out.`,
-      CONDUCTOR_NOTICE_MAX_CHARS
-    )
-  }
-  return clip(`${label} says it's done: ${sentence}`, CONDUCTOR_NOTICE_MAX_CHARS)
-}
-
-/** "<label> needs you: <question>", short, never a secret. */
-export function needsYouNotice(
-  label: string,
-  read: ConductorRead | null,
-  status: ConductorStatus['status'],
-  sentAt: number
-): string {
-  const reply = freshReply(read, sentAt)
-  // Why the whole reply: a question next to a key must not be shown.
-  const fromReply = reply && !looksSecret(reply) ? lastQuestion(reply) : null
-  const screenLine = read ? lastOutputLine(read.screen.filter((line) => line.includes('?'))) : null
-  const question = fromReply ?? (screenLine ? plainWords(screenLine) : null)
-  if (question && !looksSecret(question)) {
-    return clip(`${label} needs you: ${question}`, CONDUCTOR_NOTICE_MAX_CHARS)
-  }
-  const generic =
-    status === 'permission'
-      ? `${label} needs you: it is waiting for your answer or a permission.`
-      : `${label} needs you.`
-  return clip(generic, CONDUCTOR_NOTICE_MAX_CHARS)
+/** Identifies one reply, so "a new reply since ADAM's message" can be told apart. */
+function replyKey(read: ConductorRead | null): string | null {
+  return read?.reply ? `${read.reply.at ?? ''}|${read.reply.text.slice(0, 300)}` : null
 }
 
 /**
@@ -167,7 +113,8 @@ export class AdamConductor {
   private timer: unknown = null
   private checking: Promise<void> | null = null
   private recheck = false
-  private unseen: string[] = []
+  private unseen: ConductorUpdate[] = []
+  private nextId = 1
   private readonly now: () => number
 
   constructor(private readonly deps: ConductorDeps) {
@@ -182,23 +129,28 @@ export class AdamConductor {
     return this.tracked.has(handle)
   }
 
-  /** ADAM sent `text` to the terminal. A repeat send restarts its clock. */
+  /**
+   * ADAM sent `text` to the terminal. Each send starts over: a follow-up that
+   * is typed but never submitted must not inherit the last task's work.
+   */
   noteDispatch(handle: string, text: string, source: DispatchSource): void {
     if (!this.deps.enabled() || !handle || !text.trim()) {
       return
     }
-    const previous = this.tracked.get(handle)
     this.tracked.delete(handle)
-    this.tracked.set(handle, {
+    const entry: Tracked = {
+      id: this.nextId++,
       handle,
       what: clip(plainWords(text), WHAT_MAX_CHARS),
       source,
       sentAt: this.now(),
-      // Why kept: a second message while it works still ends with one finish.
-      sawWorking: previous?.sawWorking ?? false,
+      sawWorking: false,
+      baselineReply: undefined,
+      replyCheckedAt: this.now(),
       settling: null,
       askedAt: null
-    })
+    }
+    this.tracked.set(handle, entry)
     while (this.tracked.size > CONDUCTOR_MAX_TRACKED) {
       const oldest = this.tracked.keys().next().value
       if (oldest === undefined) {
@@ -206,7 +158,18 @@ export class AdamConductor {
       }
       this.tracked.delete(oldest)
     }
+    // Why read now: work that finishes before the first poll is only visible
+    // as a reply newer than this one.
+    void this.deps
+      .read(handle)
+      .then((read) => replyKey(read))
+      .catch(() => null)
+      .then((key) => {
+        entry.baselineReply = key
+      })
     this.startPolling()
+    // Why at once: an agent that starts (or asks) right away is seen now.
+    void this.check()
   }
 
   /** Something changed (an agent hook fired): look now, not at the next poll. */
@@ -217,13 +180,22 @@ export class AdamConductor {
   }
 
   /**
-   * The notices since ADAM's last turn, once: the next message to him carries
-   * them as context, and later messages do not repeat them.
+   * The updates since ADAM's last turn, once: the next message to him carries
+   * them as context, and later messages do not repeat them. Many become one
+   * summary line instead of being dropped.
    */
   takeContext(): string[] {
-    const lines = this.unseen
+    const lines = summarizeUpdates(this.unseen, CONTEXT_MAX_LINES)
     this.unseen = []
     return lines
+  }
+
+  /** Reports were switched off: forget every terminal and every unsaid update. */
+  clear(): void {
+    this.tracked.clear()
+    this.unseen = []
+    this.stopPolling()
+    this.deps.cleared?.()
   }
 
   dispose(): void {
@@ -255,7 +227,9 @@ export class AdamConductor {
 
   private async checkAll(): Promise<void> {
     if (!this.deps.enabled()) {
-      this.tracked.clear()
+      if (this.tracked.size > 0 || this.unseen.length > 0) {
+        this.clear()
+      }
       return
     }
     for (const entry of this.tracked.values()) {
@@ -268,10 +242,24 @@ export class AdamConductor {
     }
   }
 
+  private isCurrent(entry: Tracked): boolean {
+    return this.tracked.get(entry.handle) === entry
+  }
+
   private forget(entry: Tracked): void {
-    if (this.tracked.get(entry.handle) === entry) {
+    if (this.isCurrent(entry)) {
       this.tracked.delete(entry.handle)
     }
+  }
+
+  /** A reply newer than the one there when ADAM sent the work: the agent did work. */
+  private async newReplySinceDispatch(entry: Tracked, now: number): Promise<boolean> {
+    if (entry.baselineReply === undefined || now - entry.replyCheckedAt < CONDUCTOR_REPLY_CHECK_MS) {
+      return false
+    }
+    entry.replyCheckedAt = now
+    const key = replyKey(await this.deps.read(entry.handle).catch(() => null))
+    return key !== null && key !== entry.baselineReply
   }
 
   private async checkOne(entry: Tracked): Promise<void> {
@@ -287,11 +275,17 @@ export class AdamConductor {
       entry.askedAt = null
       return
     }
-    // Why only after working: quick hands never press Enter, so a terminal sits
-    // idle until Carson (or ADAM) submits; that idle is not a finish.
-    if (!entry.sawWorking) {
+    // Why a prompt counts: quick hands never type into one and a guarded send
+    // refuses one, so a prompt after ADAM's message is the agent's own doing.
+    if (status === 'permission') {
+      entry.sawWorking = true
+    }
+    // Why only after evidence of work: quick hands never press Enter, so a
+    // terminal sits idle until Carson (or ADAM) submits; that idle is not a finish.
+    if (!entry.sawWorking && !(await this.newReplySinceDispatch(entry, now))) {
       return
     }
+    entry.sawWorking = true
     const kind: ConductorNoticeKind | null =
       status === 'permission'
         ? 'needs-you'
@@ -310,21 +304,31 @@ export class AdamConductor {
     if (now - entry.settling.since < CONDUCTOR_SETTLE_MS) {
       return
     }
-    await this.announce(entry, kind, status)
+    await this.announce(entry, kind)
   }
 
-  private async announce(
-    entry: Tracked,
-    settled: ConductorNoticeKind,
-    status: ConductorStatus['status']
-  ): Promise<void> {
+  private async announce(entry: Tracked, settled: ConductorNoticeKind): Promise<void> {
     // Why claimed before the awaits: a poke during the reads must not announce twice.
     entry.askedAt = this.now()
     entry.settling = null
-    const [label, read] = await Promise.all([
+    const [label, read, after] = await Promise.all([
       this.deps.labelOf(entry.handle).catch(() => null),
-      this.deps.read(entry.handle).catch(() => null)
+      this.deps.read(entry.handle).catch(() => null),
+      this.deps.status(entry.handle).catch(() => null)
     ])
+    // Why rechecked: during the reads ADAM may have sent new work (this entry
+    // was replaced), the agent may have started again, or reports were turned off.
+    const stillSettled =
+      after !== null &&
+      (settled === 'needs-you'
+        ? after.status === 'permission'
+        : after.status === 'idle' || !after.isRunningAgent)
+    if (!this.isCurrent(entry) || !this.deps.enabled() || !stillSettled) {
+      if (this.isCurrent(entry)) {
+        entry.askedAt = null
+      }
+      return
+    }
     const reply = freshReply(read, entry.sentAt)
     // Why: an agent that ended its turn on a question is waiting for Carson, not done.
     const kind: ConductorNoticeKind =
@@ -332,10 +336,12 @@ export class AdamConductor {
     if (kind === 'done') {
       this.forget(entry)
     }
-    const name = label?.trim() || 'A terminal'
+    const name = safeLabel(label)
     const text =
-      kind === 'done' ? doneNotice(name, read, entry.sentAt) : needsYouNotice(name, read, status, entry.sentAt)
-    this.unseen = [...this.unseen, text].slice(-CONTEXT_MAX_LINES)
+      kind === 'done'
+        ? doneNotice(name, read, entry.sentAt)
+        : needsYouNotice(name, read, after.status, entry.sentAt)
+    this.unseen = [...this.unseen, { label: name, text }].slice(-UNSEEN_MAX)
     this.deps.report({ kind, handle: entry.handle, label: name, text, at: this.now() })
   }
 

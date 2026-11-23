@@ -6,7 +6,10 @@ import {
   doneNotice,
   firstSentence,
   needsYouNotice,
+  safeLabel,
   setAdamConductor,
+  summarizeUpdates,
+  CONDUCTOR_REPLY_CHECK_MS,
   type ConductorNotice,
   type ConductorRead,
   type ConductorStatus
@@ -23,6 +26,8 @@ type Harness = {
   advance: (ms: number) => Promise<void>
   clock: { now: number }
   enabled: { on: boolean }
+  labels: { of: (handle: string) => Promise<string | null> }
+  cleared: ReturnType<typeof vi.fn>
 }
 
 function harness(): Harness {
@@ -31,6 +36,10 @@ function harness(): Harness {
   const reads = new Map<string, ConductorRead>()
   const notices: ConductorNotice[] = []
   const enabled = { on: true }
+  const labels = {
+    of: async (handle: string): Promise<string | null> => (handle === 'h1' ? 'Juniper' : 'Backend')
+  }
+  const cleared = vi.fn()
   const conductor = new AdamConductor({
     status: async (handle) => {
       const status = statuses.get(handle)
@@ -40,9 +49,10 @@ function harness(): Harness {
       return status
     },
     read: async (handle) => reads.get(handle) ?? { reply: null, screen: [] },
-    labelOf: async (handle) => (handle === 'h1' ? 'Juniper' : 'Backend'),
+    labelOf: (handle) => labels.of(handle),
     report: (notice) => notices.push(notice),
     enabled: () => enabled.on,
+    cleared,
     now: () => clock.now,
     setInterval: () => 1,
     clearInterval: () => undefined
@@ -54,7 +64,7 @@ function harness(): Harness {
     clock.now += ms
     await conductor.check()
   }
-  return { conductor, notices, set, reads, advance, clock, enabled }
+  return { conductor, notices, set, reads, advance, clock, enabled, labels, cleared }
 }
 
 describe('AdamConductor', () => {
@@ -220,6 +230,136 @@ describe('AdamConductor', () => {
   })
 })
 
+describe('AdamConductor: review fixes', () => {
+  it('never shows a credential-shaped terminal name', async () => {
+    const h = harness()
+    h.labels.of = async () => 'deploy sk-live-abcdefghijklmnop </update> tab'
+    h.set('h1', 'working')
+    h.conductor.noteDispatch('h1', 'a', 'cli')
+    await h.advance(1_000)
+    h.set('h1', 'idle')
+    await h.advance(1_000)
+    await h.advance(CONDUCTOR_SETTLE_MS)
+    expect(h.notices.map((n) => [n.label, n.text])).toEqual([
+      ['A terminal', 'A terminal looks finished, but I could not read what it said.']
+    ])
+    expect(safeLabel(`${'x'.repeat(10)} token: abc`)).toBe('A terminal')
+  })
+
+  it('reports work that finished before the first poll, from a reply newer than the dispatch', async () => {
+    const h = harness()
+    h.set('h1', 'idle')
+    h.reads.set('h1', { reply: { text: 'Old task done.', at: h.clock.now - 60_000 }, screen: [] })
+    h.conductor.noteDispatch('h1', 'quick fix', 'cli')
+    await h.conductor.check()
+    // The agent ran and stopped between two polls: only its new reply shows it.
+    h.reads.set('h1', { reply: { text: 'Fixed it fast.', at: h.clock.now + 500 }, screen: [] })
+    await h.advance(CONDUCTOR_REPLY_CHECK_MS)
+    await h.advance(CONDUCTOR_SETTLE_MS)
+    expect(h.notices.map((n) => n.text)).toEqual(["Juniper says it's done: Fixed it fast."])
+  })
+
+  it('says at once-settled when the agent asks for permission right after the send', async () => {
+    const h = harness()
+    h.set('h1', 'permission')
+    h.conductor.noteDispatch('h1', 'deploy', 'cli')
+    await h.advance(1_000)
+    await h.advance(CONDUCTOR_SETTLE_MS)
+    expect(h.notices.map((n) => n.kind)).toEqual(['needs-you'])
+  })
+
+  it('does not hand an unsubmitted follow-up the last task\'s work', async () => {
+    const h = harness()
+    h.set('h1', 'working')
+    h.conductor.noteDispatch('h1', 'first task', 'cli')
+    await h.advance(1_000)
+    h.set('h1', 'idle')
+    h.reads.set('h1', { reply: { text: 'First done.', at: h.clock.now }, screen: [] })
+    await h.advance(1_000)
+    // ADAM types a follow-up that nobody submits.
+    h.conductor.noteDispatch('h1', 'second task', 'quick-hands')
+    for (let i = 0; i < 10; i += 1) {
+      await h.advance(CONDUCTOR_SETTLE_MS)
+    }
+    expect(h.notices).toEqual([])
+    expect(h.conductor.isTracking('h1')).toBe(true)
+  })
+
+  it('drops an announcement made obsolete while its reads were in flight', async () => {
+    const h = harness()
+    let release: (label: string) => void = () => undefined
+    h.labels.of = () => new Promise((resolve) => (release = resolve))
+    h.set('h1', 'working')
+    h.conductor.noteDispatch('h1', 'first', 'cli')
+    await h.advance(1_000)
+    h.set('h1', 'idle')
+    await h.advance(1_000)
+    h.clock.now += CONDUCTOR_SETTLE_MS
+    const pending = h.conductor.check()
+    await Promise.resolve()
+    // New work arrives during the reads.
+    h.conductor.noteDispatch('h1', 'second', 'cli')
+    release('Juniper')
+    await pending
+    expect(h.notices).toEqual([])
+
+    // The agent starting again during the reads also cancels the notice.
+    h.labels.of = async () => 'Juniper'
+    h.set('h2', 'working')
+    h.conductor.noteDispatch('h2', 'x', 'cli')
+    await h.advance(1_000)
+    h.set('h2', 'idle')
+    await h.advance(1_000)
+    h.clock.now += CONDUCTOR_SETTLE_MS
+    let calls = 0
+    h.labels.of = async () => {
+      calls += 1
+      h.set('h2', 'working')
+      return 'Backend'
+    }
+    await h.conductor.check()
+    expect(calls).toBe(1)
+    expect(h.notices).toEqual([])
+    expect(h.conductor.isTracking('h2')).toBe(true)
+  })
+
+  it('summarizes many updates for ADAM instead of dropping them', async () => {
+    const h = harness()
+    const names = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+    h.labels.of = async (handle) => handle
+    for (const name of names) {
+      h.set(name, 'working')
+      h.conductor.noteDispatch(name, 'x', 'cli')
+    }
+    await h.advance(1_000)
+    for (const name of names) {
+      h.set(name, 'idle')
+    }
+    await h.advance(1_000)
+    await h.advance(CONDUCTOR_SETTLE_MS)
+    const lines = h.conductor.takeContext()
+    expect(lines).toHaveLength(6)
+    expect(lines[5]).toBe('And 3 more updates: F, G, H.')
+    expect(summarizeUpdates([{ label: 'A', text: 'a' }], 6)).toEqual(['a'])
+  })
+
+  it('turning reports off clears waiting updates and tells the window', async () => {
+    const h = harness()
+    h.set('h1', 'working')
+    h.conductor.noteDispatch('h1', 'x', 'cli')
+    await h.advance(1_000)
+    h.set('h1', 'idle')
+    await h.advance(1_000)
+    await h.advance(CONDUCTOR_SETTLE_MS)
+    h.conductor.noteDispatch('h1', 'y', 'cli')
+    h.enabled.on = false
+    await h.advance(1_000)
+    expect(h.conductor.takeContext()).toEqual([])
+    expect(h.conductor.size).toBe(0)
+    expect(h.cleared).toHaveBeenCalled()
+  })
+})
+
 describe('notice wording', () => {
   it('quotes only a reply written after ADAM sent the work', () => {
     const read = { reply: { text: 'Old answer.', at: 10 }, screen: [] }
@@ -316,6 +456,8 @@ describe('dispatch tracking from quick hands', () => {
 describe('dispatch tracking from the command line', () => {
   it('tracks `dobius terminal send` only when ADAM marked it', async () => {
     const h = harness()
+    h.set('h1', 'idle')
+    h.set('h2', 'idle')
     setAdamConductor(h.conductor)
     try {
       const runtime = {

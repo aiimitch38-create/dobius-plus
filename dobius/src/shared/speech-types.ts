@@ -163,8 +163,14 @@ export type LiveDelegateResult =
   | { ok: false; error: string }
 
 /** Main tells the window owning a live call about the spending cap. */
-/** `report`: the conductor's "X says it's done" line, said when Carson and ADAM are quiet. */
-export type LiveVoiceNotice = { kind: 'cap-warning' | 'cap-reached' | 'report'; text: string }
+/**
+ * `report`: the conductor's "X says it's done" line (with the terminal's safe
+ * name), said when Carson and ADAM are quiet. `reports-cleared`: drop held reports.
+ */
+export type LiveVoiceNotice =
+  | { kind: 'cap-warning' | 'cap-reached'; text: string }
+  | { kind: 'report'; text: string; label: string }
+  | { kind: 'reports-cleared'; text: '' }
 
 /** Session events the window reports to main's spend meter. */
 export type LiveVoiceSessionReport = {

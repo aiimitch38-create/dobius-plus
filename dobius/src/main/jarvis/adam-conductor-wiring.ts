@@ -22,7 +22,7 @@ function reportToCarson(notice: ConductorNotice, thread: () => AdamThreadStore):
   void thread()
     .append({ ...row, conductor: true })
     .catch((error) => console.warn('ADAM conductor row could not be saved:', error))
-  sendLiveReport(notice.text)
+  sendLiveReport({ kind: 'report', text: notice.text, label: notice.label })
 }
 
 export function startAdamConductor(
@@ -34,9 +34,16 @@ export function startAdamConductor(
     new AdamConductor({
       ...createRuntimeConductorDeps(() => runtime),
       report: (notice) => reportToCarson(notice, thread),
+      cleared: () => void sendLiveReport({ kind: 'reports-cleared', text: '' }),
       enabled: () => conductorEnabled(store)
     })
   )
+  // Why at once: switched off mid-call, nothing queued may still be said or handed to ADAM.
+  store.onSettingsChanged((_updates, settings) => {
+    if (settings.voice?.adamReportsFinishedWork === false) {
+      adamConductor()?.clear()
+    }
+  })
   // Why: a hook fires the moment an agent starts or stops, so a short task
   // between two polls is still seen.
   agentHookServer.subscribeStatusChanges(() => adamConductor()?.poke())

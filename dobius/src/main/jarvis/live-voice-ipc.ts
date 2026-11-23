@@ -176,13 +176,13 @@ function setActiveLiveSession(owner: LiveSender, sessionId: string | null, callT
 /**
  * Hands a conductor report to the window that owns the live call, which says
  * it once Carson and ADAM are both quiet. False when no call is open.
+ * `reports-cleared` drops reports the window still holds (reports turned off).
  */
-export function sendLiveReport(text: string): boolean {
+export function sendLiveReport(notice: LiveVoiceNotice): boolean {
   const owner = activeLiveSession?.owner
   if (!owner || owner.isDestroyed()) {
     return false
   }
-  const notice: LiveVoiceNotice = { kind: 'report', text }
   owner.send(LIVE_NOTICE_CHANNEL, notice)
   return true
 }

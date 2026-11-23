@@ -17,11 +17,32 @@ vi.mock('../agent-hooks/server', () => ({
   }
 }))
 vi.mock('./live-voice-ipc', () => ({
-  sendLiveReport: (text: string) => {
-    hooks.said.push(text)
+  sendLiveReport: (notice: { kind: string; text: string }) => {
+    hooks.said.push(notice.kind === 'report' ? notice.text : notice.kind)
     return true
   }
 }))
+
+function fakeStore(voice: Record<string, unknown>): {
+  store: Store
+  change: (voice: Record<string, unknown>) => void
+} {
+  let listener: ((updates: unknown, settings: unknown) => void) | null = null
+  const store = {
+    getSettings: () => ({ voice }),
+    onSettingsChanged: (next: typeof listener) => {
+      listener = next
+      return () => undefined
+    }
+  } as unknown as Store
+  return {
+    store,
+    change: (next) => {
+      Object.assign(voice, next)
+      listener?.({ voice: next }, { voice })
+    }
+  }
+}
 
 let directory: string
 beforeEach(async () => {
@@ -51,7 +72,7 @@ describe('startAdamConductor', () => {
       getTerminalAgentStatus: async () => ({ isRunningAgent: true, status: state.status })
     }
     const thread = new AdamThreadStore(join(directory, 'thread.json'), () => undefined)
-    const store = { getSettings: () => ({ voice: {} }) } as unknown as Store
+    const { store } = fakeStore({})
     // Nothing here can reach Hermes: the conductor is handed only the thread and the live call.
     startAdamConductor(store, runtime as never, () => thread)
     const conductor = adamConductor()!
@@ -75,11 +96,26 @@ describe('startAdamConductor', () => {
 
   it('stays quiet when "ADAM reports finished work" is off', async () => {
     const thread = new AdamThreadStore(join(directory, 'thread.json'), () => undefined)
-    const store = {
-      getSettings: () => ({ voice: { adamReportsFinishedWork: false } })
-    } as unknown as Store
+    const { store } = fakeStore({ adamReportsFinishedWork: false })
     startAdamConductor(store, {} as never, () => thread)
     adamConductor()!.noteDispatch('h1', 'x', 'cli')
     expect(adamConductor()!.size).toBe(0)
+  })
+
+  it('turning reports off forgets the terminals, the unsaid updates and the window queue', async () => {
+    const thread = new AdamThreadStore(join(directory, 'thread.json'), () => undefined)
+    const { store, change } = fakeStore({})
+    const runtime = {
+      getTerminalAgentStatus: async () => ({ isRunningAgent: true, status: 'working' }),
+      readTerminal: async () => ({}),
+      listTerminals: async () => ({ terminals: [] })
+    }
+    startAdamConductor(store, runtime as never, () => thread)
+    const conductor = adamConductor()!
+    conductor.noteDispatch('h1', 'x', 'cli')
+    change({ adamReportsFinishedWork: false })
+    expect(conductor.size).toBe(0)
+    expect(conductor.takeContext()).toEqual([])
+    expect(hooks.said).toEqual(['reports-cleared'])
   })
 })
