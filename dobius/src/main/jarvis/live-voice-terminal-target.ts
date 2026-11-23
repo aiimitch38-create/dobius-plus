@@ -184,14 +184,13 @@ export function isStopReply(reply: string): boolean {
   )
 }
 
-/** The one candidate whose value equals `said`; null for none or several. */
-function only(
+/** Every candidate with a value equal to one of `forms`. */
+function matching(
   candidates: QuickTerminal[],
-  said: string,
+  forms: string[],
   values: (terminal: QuickTerminal) => string[]
-): QuickTerminal | null {
-  const hits = candidates.filter((terminal) => values(terminal).some((value) => value === said))
-  return hits.length === 1 ? hits[0] : null
+): QuickTerminal[] {
+  return candidates.filter((terminal) => values(terminal).some((value) => forms.includes(value)))
 }
 
 /**
@@ -218,21 +217,32 @@ export function pickCandidate(reply: string, candidates: QuickTerminal[]): Quick
     return candidates[at >= 0 ? at : spoken] ?? null
   }
   const bare = said.replace(/^(?:the\s+)?(?:one\s+)?(?:(?:in|from|on)\s+)?(?:the\s+)?/, '')
-  const forms = [...new Set([bare.replace(/\s+(?:one|terminal|tab)$/, ''), bare])]
-    .map(spokenWords)
-    .filter(Boolean)
+  const whole = spokenWords(bare)
+  const stripped = spokenWords(bare.replace(/\s+(?:one|terminal|tab)$/, ''))
   const labels = (terminal: QuickTerminal): string[] =>
     (terminal.labels ?? [terminal.name]).map(spokenWords)
   const project = (terminal: QuickTerminal): string => spokenWords(terminal.project ?? '')
-  for (const form of forms) {
-    const hit =
-      only(candidates, form, labels) ??
-      only(candidates, form, (terminal) => [project(terminal)]) ??
-      only(candidates, form, (terminal) =>
-        labels(terminal).map((label) => `${label} in ${project(terminal)}`)
-      )
-    if (hit) {
-      return hit
+  const withProject = (terminal: QuickTerminal): string[] =>
+    labels(terminal).map((label) => `${label} in ${project(terminal)}`)
+  // Why tiers: "Release One" must pick the terminal titled "Release One" over
+  // one in project "Release" (the answer minus its "one"). A tier that fits
+  // several candidates is ambiguous, so nothing is picked rather than a guess.
+  const fallback = [...new Set([stripped, whole])].filter(Boolean)
+  const tiers: QuickTerminal[][] = [
+    whole
+      ? [...new Set([...matching(candidates, [whole], labels), ...matching(candidates, [whole], withProject)])]
+      : [],
+    [
+      ...new Set([
+        ...matching(candidates, fallback, labels),
+        ...matching(candidates, fallback, (terminal) => [project(terminal)]),
+        ...matching(candidates, fallback, withProject)
+      ])
+    ]
+  ]
+  for (const hits of tiers) {
+    if (hits.length > 0) {
+      return hits.length === 1 ? hits[0] : null
     }
   }
   return null

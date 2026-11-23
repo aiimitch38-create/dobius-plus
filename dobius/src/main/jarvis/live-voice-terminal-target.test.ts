@@ -155,6 +155,24 @@ describe('pickCandidate', () => {
     expect(pickCandidate('the one in SMID', panes)?.handle).toBe('x')
     expect(pickCandidate('the website terminal', panes)?.handle).toBe('y')
   })
+
+  it('a whole label beats a project that equals the answer minus "one"', () => {
+    const panes: QuickTerminal[] = [
+      { handle: 'a', name: 'Terminal 1', labels: ['Terminal 1', 'Release One'], project: 'Website' },
+      { handle: 'b', name: 'Terminal 1', project: 'Release' }
+    ]
+    expect(pickCandidate('Release One', panes)?.handle).toBe('a')
+    expect(pickCandidate('the release one', panes)?.handle).toBe('a')
+    expect(pickCandidate('the one in Release', panes)?.handle).toBe('b')
+  })
+
+  it('an answer that fits several candidates picks nothing', () => {
+    const panes: QuickTerminal[] = [
+      { handle: 'a', name: 'Terminal 1', labels: ['Terminal 1', 'Release'], project: 'Website' },
+      { handle: 'b', name: 'Terminal 1', project: 'Release' }
+    ]
+    expect(pickCandidate('release terminal', panes)).toBeNull()
+  })
 })
 
 describe('isStopReply', () => {
