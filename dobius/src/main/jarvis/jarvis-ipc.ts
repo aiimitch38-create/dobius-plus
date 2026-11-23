@@ -199,7 +199,8 @@ function createJarvisDeps(store: Store): JarvisServiceDeps {
         source: 'voice',
         said: utterance
       }),
-    cancelAgent: () => adamVoice?.cancel(),
+    // Why the whole turn, not only the voice: a stop must also drop a waiting thread message.
+    cancelAgent: cancelAdamTurn,
     lookingAt: () => lastLookingAt
   }
 }
