@@ -26,6 +26,7 @@ import { createRuntimeQuickHands, type QuickHandsRuntime } from './live-voice-qu
 import { adamConductor } from './adam-conductor'
 import { trackedQuickHands, type ConductorRuntime } from './adam-conductor-runtime'
 import { startAdamConductor } from './adam-conductor-wiring'
+import { startAdamSpeaksUp } from './adam-speaks-up-wiring'
 
 export { forceEndLiveCallForTest, getActiveLiveSessionForTest } from './live-voice-ipc'
 import { migrateElevenLabsKeyOutOfSettings } from './elevenlabs-key-store'
@@ -118,6 +119,8 @@ function getAdamVoice(): AdamHermesVoice {
 }
 
 let adamConversation: AdamConversation | null = null
+// Why once: the taps, stale alerts and morning brief outlive a recreated main window.
+let adamSpeaksUp: ReturnType<typeof startAdamSpeaksUp> | null = null
 
 /**
  * The single entry point to ADAM for every caller in main (voice turns, the
@@ -227,8 +230,9 @@ export function registerJarvisIpcHandlers(
   })
   // Why once: the main window is recreated on macOS re-activation, and the
   // terminals ADAM is waiting on must stay tracked across that.
+  adamSpeaksUp ??= startAdamSpeaksUp(store, getAdamThread, { ask: askAdam, isBusy: isAdamBusy }, runtime)
   if (runtime && !adamConductor()) {
-    startAdamConductor(store, runtime, getAdamThread)
+    startAdamConductor(store, runtime, getAdamThread, (notice) => adamSpeaksUp?.overnight.record(notice))
   }
   wireWakeWordObservation(store, service)
   restorePersistedMode(store, service)

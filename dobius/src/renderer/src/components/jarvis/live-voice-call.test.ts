@@ -425,6 +425,24 @@ describe('conductor reports', () => {
     expect(JSON.parse(thinkingEvent('Juniper finished.')).delegation_id).toBeNull()
   })
 
+  it('says ADAM\'s own message once quiet, framed as his, and keeps it past a reports clear', async () => {
+    const call = makeCall()
+    await connected(call)
+    call.notice({ kind: 'adam-says', text: 'The deploy waits on you.' })
+    call.notice({ kind: 'reports-cleared', text: '' })
+    peer().channel.emit({ type: 'session.input_transcript.delta', delta: ' so' })
+    await vi.advanceTimersByTimeAsync(LIVE_REPORT_QUIET_MS - 300)
+    const said = (): string[] =>
+      peer()
+        .channel.sent.filter((event: { type?: string }) => event.type === 'session.instructions.append')
+        .map((event: { content?: unknown }) => String(event.content))
+    expect(said()).toEqual([])
+    await vi.advanceTimersByTimeAsync(LIVE_REPORT_QUIET_MS + 600)
+    expect(said()).toEqual([
+      'ADAM asked you to pass Carson a message from him. Tell Carson it is from ADAM and say it briefly, then continue. ADAM\'s message: "The deploy waits on you."'
+    ])
+  })
+
   it('restarts the quiet window on every transcript word, even with a silent mic', async () => {
     const call = makeCall()
     await connected(call)

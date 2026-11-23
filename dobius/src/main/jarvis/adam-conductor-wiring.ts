@@ -47,12 +47,17 @@ function progressToCarson(update: ConductorProgress): void {
 export function startAdamConductor(
   store: Store,
   runtime: ConductorRuntime,
-  thread: () => AdamThreadStore
+  thread: () => AdamThreadStore,
+  /** Every notice, also kept for the morning brief (adam-morning-brief-facts.ts). */
+  onNotice?: (notice: ConductorNotice) => void
 ): void {
   setAdamConductor(
     new AdamConductor({
       ...createRuntimeConductorDeps(() => runtime),
-      report: (notice) => reportToCarson(notice, thread),
+      report: (notice) => {
+        reportToCarson(notice, thread)
+        onNotice?.(notice)
+      },
       progress: progressToCarson,
       progressEnabled: () => progressEnabled(store),
       cleared: () => void sendLiveReport({ kind: 'reports-cleared', text: '' }),

@@ -102,3 +102,32 @@ describe('adam CLI', () => {
     )
   })
 })
+
+describe('adam notify CLI', () => {
+  it('is refused outside ADAM’s own Hermes session', async () => {
+    vi.stubEnv('HERMES_HOME', '/Users/c/.hermes/profiles/adam')
+    vi.stubEnv('DOBIUS_CALLER', 'adam')
+    vi.stubEnv('DOBIUS_ADAM_CALLER_ID', '')
+    await expect(run(['adam', 'notify', '--text', 'hi'])).rejects.toThrow(/Only ADAM/)
+    vi.stubEnv('DOBIUS_ADAM_CALLER_ID', 'id-1')
+    vi.stubEnv('HERMES_HOME', '/Users/c/.hermes/profiles/other')
+    await expect(run(['adam', 'notify', '--text', 'hi'])).rejects.toThrow(/Only ADAM/)
+  })
+
+  it('sends the text, --urgent and the caller id for ADAM', async () => {
+    vi.stubEnv('HERMES_HOME', '/Users/c/.hermes/profiles/adam')
+    vi.stubEnv('DOBIUS_CALLER', 'adam')
+    vi.stubEnv('DOBIUS_ADAM_CALLER_ID', 'id-1')
+    const call = await run(['adam', 'notify', '--text', 'PR waits', '--urgent'], {
+      delivered: 'spoken',
+      savedInThread: true
+    })
+    expect(call).toHaveBeenCalledWith('adam.notify', {
+      text: 'PR waits',
+      urgent: true,
+      caller: 'adam',
+      callerId: 'id-1'
+    })
+    expect(logged.join('\n')).toContain('Carson will hear it on the live call')
+  })
+})

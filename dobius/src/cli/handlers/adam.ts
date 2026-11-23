@@ -74,7 +74,36 @@ function getModeState(flags: Map<string, string | boolean>): boolean {
   throw new RuntimeClientError('invalid_argument', 'Mode must be on or off')
 }
 
+type NotifyResult = { delivered: 'spoken' | 'notification'; savedInThread: boolean }
+
+export function formatNotifyResult(result: NotifyResult): string {
+  const how =
+    result.delivered === 'spoken'
+      ? 'Carson will hear it on the live call once it is quiet.'
+      : 'Shown to Carson as a Mac notification.'
+  return result.savedInThread ? `${how} Saved in your thread.` : `${how} It could not be saved in your thread.`
+}
+
 export const ADAM_HANDLERS: Record<string, CommandHandler> = {
+  'adam notify': async ({ flags, client, json }) => {
+    // Why: only ADAM's own Hermes process carries the caller id (adam-caller-id.ts in main).
+    const callerId = process.env.DOBIUS_ADAM_CALLER_ID?.trim() ?? ''
+    if (process.env.DOBIUS_CALLER !== 'adam' || !callerId || !isInsideAdamHermes()) {
+      throw new RuntimeClientError(
+        'invalid_argument',
+        'Only ADAM can use dobius adam notify (from his own Hermes session).'
+      )
+    }
+    const text = getRequiredStringFlag(flags, 'text')
+    const urgent = getBooleanFlag(flags, 'urgent')
+    const result = await client.call<NotifyResult>('adam.notify', {
+      text,
+      ...(urgent ? { urgent: true } : {}),
+      caller: 'adam',
+      callerId
+    })
+    printResult(result, json, formatNotifyResult)
+  },
   'adam ask': async ({ flags, client, json }) => {
     if (isInsideAdamHermes()) {
       throw new RuntimeClientError(

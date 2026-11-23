@@ -81,6 +81,19 @@ export type Tracked = {
   /** First time the agent was seen working on this dispatch, and the last progress line. */
   workingSince: number | null
   progressAt: number
+  /** The status at the last check (null = not checked yet), for the stale alerts. */
+  lastStatus?: ConductorStatus['status']
+}
+
+/** A tracked job as the stale alerts see it (adam-stale-watch.ts). */
+export type ConductorStaleJob = {
+  id: number
+  handle: string
+  /** When Carson was told this job needs him; null while it does not. */
+  needsYouSince: number | null
+  /** When the job was first seen working; null unless it is working now. */
+  workingSince: number | null
+  sentAt: number
 }
 
 /** A tracked job as a model may hear it: a speakable name and a fixed status. */

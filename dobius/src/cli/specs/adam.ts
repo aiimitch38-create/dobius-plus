@@ -35,6 +35,22 @@ export const ADAM_COMMAND_SPECS: CommandSpec[] = [
     examples: ['dobius adam say --text "The build is done."']
   },
   {
+    path: ['adam', 'notify'],
+    summary: 'ADAM only: tap Carson on the shoulder with a short message',
+    usage: 'dobius adam notify --text <message> [--urgent] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'text', 'urgent'],
+    notes: [
+      'For ADAM, from his own Hermes session, when something needs Carson or has sat too long. Refused anywhere else.',
+      'Always saved in his thread. Said out loud on a live call (once Carson and the voice are quiet), else shown as a Mac notification.',
+      'At most 300 characters, one line, no secrets. At most 4 an hour and 1 every 5 minutes; --urgent skips the 5 minute gap (at most 2 urgent an hour).',
+      'Carson can turn it off in Settings, Voice: "ADAM can tap me on the shoulder".'
+    ],
+    examples: [
+      'dobius adam notify --text "The deploy has been waiting on your approval for an hour."',
+      'dobius adam notify --text "Production is down; the health check fails." --urgent'
+    ]
+  },
+  {
     path: ['adam', 'status'],
     summary: 'Show whether ADAM is busy and whether voice mode is on',
     usage: 'dobius adam status [--json]',

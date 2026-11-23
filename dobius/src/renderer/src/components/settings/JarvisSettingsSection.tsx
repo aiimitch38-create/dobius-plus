@@ -6,6 +6,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Separator } from '../ui/separator'
+import { AdamSpeaksUpSettings } from './AdamSpeaksUpSettings'
 import { LiveVoiceSettingsSection } from './LiveVoiceSettingsSection'
 
 type JarvisSettingsSectionProps = {
@@ -203,6 +204,10 @@ export function JarvisSettingsSection({
         voiceSettings={voiceSettings}
         onUpdateVoiceSettings={onUpdateVoiceSettings}
         onOpenOpenAiDialog={onOpenOpenAiDialog}
+      />
+      <AdamSpeaksUpSettings
+        voiceSettings={voiceSettings}
+        onUpdateVoiceSettings={onUpdateVoiceSettings}
       />
       <div className="space-y-1.5 py-2">
         <Label htmlFor="jarvis-elevenlabs-key">ElevenLabs voice (optional)</Label>

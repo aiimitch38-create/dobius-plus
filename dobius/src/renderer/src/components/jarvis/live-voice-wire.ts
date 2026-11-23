@@ -132,6 +132,18 @@ export function sayNowEvent(update: string): string {
   })
 }
 
+/**
+ * ADAM's own message to Carson (`dobius adam notify`), said now. Why JSON
+ * inside the instruction: his words stay one quoted value, framed as his.
+ */
+export function adamSaysEvent(message: string): string {
+  return JSON.stringify({
+    type: LIVE_EVENT.instructions,
+    content: `ADAM asked you to pass Carson a message from him. Tell Carson it is from ADAM and say it briefly, then continue. ADAM's message: ${JSON.stringify(message.slice(0, LIVE_COMMENTARY_MAX_CHARS))}`,
+    delegation_id: null
+  })
+}
+
 /** Quiet context for later answers; never spoken. Same templated update. */
 export function thinkingEvent(update: string): string {
   return JSON.stringify({

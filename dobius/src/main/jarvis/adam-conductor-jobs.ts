@@ -2,7 +2,12 @@
 // (7.13). Only a speakable name and a fixed status leave here: never a
 // terminal title or anything an agent wrote.
 import { speakableName } from '../../shared/conductor-speech'
-import type { ConductorDeps, ConductorJob, Tracked } from './adam-conductor-types'
+import type {
+  ConductorDeps,
+  ConductorJob,
+  ConductorStaleJob,
+  Tracked
+} from './adam-conductor-types'
 
 export const CONDUCTOR_JOBS_MAX = 8
 
@@ -25,4 +30,15 @@ export async function conductorJobs(
       return { name: speakableName(identity?.agentName, identity?.project), status: statusOf(entry) }
     })
   )
+}
+
+/** Each job's waiting and working clocks, for the stale alerts (adam-stale-watch.ts). */
+export function conductorStaleJobs(tracked: Iterable<Tracked>): ConductorStaleJob[] {
+  return [...tracked].map((entry) => ({
+    id: entry.id,
+    handle: entry.handle,
+    needsYouSince: entry.lastStatus === 'working' ? null : entry.askedAt,
+    workingSince: entry.lastStatus === 'working' ? entry.workingSince : null,
+    sentAt: entry.sentAt
+  }))
 }

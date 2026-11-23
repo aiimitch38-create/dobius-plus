@@ -3,6 +3,7 @@ import {
   isSpeakableName,
   type ConductorSpoken
 } from '../../../../shared/conductor-speech'
+import { ADAM_NOTIFY_MAX_CHARS } from '../../../../shared/adam-speaks-up'
 import type { LiveVoiceNotice } from '../../../../shared/speech-types'
 import { LiveVoiceCall } from './live-voice-call'
 import {
@@ -16,7 +17,10 @@ import {
 } from './live-voice-call-types'
 import { LiveProgressNotes } from './live-voice-progress-notes'
 import { tapLiveMessages } from './live-voice-tap'
-import { parseLiveEvent, sayNowEvent, thinkingEvent } from './live-voice-wire'
+import { adamSaysEvent, parseLiveEvent, sayNowEvent, thinkingEvent } from './live-voice-wire'
+
+// Why a cap: main rate-limits ADAM's taps; this only bounds a burst held through noise.
+const ADAM_SAYS_HELD_MAX = 4
 
 const isProgress = (update: ConductorSpoken): boolean =>
   update.event === 'started' || update.event === 'progress'
@@ -38,6 +42,8 @@ const isProgress = (update: ConductorSpoken): boolean =>
  */
 export class LiveVoiceReportingCall extends LiveVoiceCall {
   private reports: ConductorSpoken[] = []
+  /** ADAM's own messages (`dobius adam notify`), said with the reports once quiet. */
+  private adamSays: string[] = []
   private quietSince: number | null = null
   private lastHeardInputAt = Number.NEGATIVE_INFINITY
   private lastProgressAt = Number.NEGATIVE_INFINITY
@@ -77,6 +83,10 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
       }
       return
     }
+    if (notice.kind === 'adam-says') {
+      this.holdAdamSays(notice.text)
+      return
+    }
     if (notice.kind !== 'report') {
       super.notice(notice)
       return
@@ -102,8 +112,21 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
 
   protected override teardown(): void {
     super.teardown()
+    this.adamSays = []
     this.dropReports()
     this.progressNotes.reset()
+  }
+
+  private holdAdamSays(text: unknown): void {
+    if (!this.active || typeof text !== 'string' || !text.trim()) {
+      return
+    }
+    this.adamSays = [...this.adamSays, text.trim().slice(0, ADAM_NOTIFY_MAX_CHARS)].slice(
+      -ADAM_SAYS_HELD_MAX
+    )
+    if (this.timer === null) {
+      this.watch()
+    }
   }
 
   private dropReports(): void {
@@ -112,6 +135,10 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
     if (this.timer !== null) {
       this.clearTimer(this.timer)
       this.timer = null
+    }
+    // Why: ADAM's own messages are not conductor reports; they still wait for quiet.
+    if (this.adamSays.length > 0) {
+      this.watch()
     }
   }
 
@@ -147,7 +174,7 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
 
   private watch(): void {
     this.timer = null
-    if (this.reports.length === 0) {
+    if (this.reports.length === 0 && this.adamSays.length === 0) {
       return
     }
     const now = this.now()
@@ -163,6 +190,11 @@ export class LiveVoiceReportingCall extends LiveVoiceCall {
   }
 
   private sayHeld(): void {
+    const adamSays = this.adamSays
+    this.adamSays = []
+    for (const message of adamSays) {
+      this.send(adamSaysEvent(message))
+    }
     const important = this.reports.some((update) => !isProgress(update))
     // Why checked again: Carson may have spoken, or a line been said, while these waited.
     const updates = important
