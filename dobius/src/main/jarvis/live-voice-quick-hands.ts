@@ -6,7 +6,9 @@
 // or changes settings, and nothing is ever submitted: the only write is typing
 // text the request spelled out, and Enter is never pressed.
 
-export type QuickTerminal = { handle: string; name: string }
+import { matchTerminals, whichOneQuestion, type QuickTerminal } from './live-voice-terminal-target'
+
+export type { QuickTerminal } from './live-voice-terminal-target'
 export type QuickTerminalList = { terminals: QuickTerminal[]; truncated: boolean }
 
 /** Thrown when nothing reached the terminal: ADAM may take the request instead. */
@@ -41,7 +43,7 @@ export type QuickIntent =
 const MAX_NAMED = 5
 const MAX_READ_CHARS = 150
 const MAX_TYPED_CHARS = 500
-const MAX_TARGET_WORDS = 5
+const MAX_TARGET_WORDS = 7
 
 // Words that point at something, not name a terminal ("what's it doing").
 const NOT_A_NAME = new Set([
@@ -107,8 +109,10 @@ const USAGE_PATTERNS = [
 // local scan only knows Claude.
 const USAGE_WORDS = /\b(?:claude|ai|tokens?|usage)\b/
 
-// Any ask to submit what was typed: quick hands never press Enter.
+// Any ask to submit what was typed: quick hands never press Enter. Why the
+// typed text and the end only: a terminal may be called "Submit SMIDs".
 const SUBMIT_ASK = /\b(?:send it|send that|press (?:enter|return)|hit (?:enter|return)|enter key|submit|run it|run that|execute)\b/i
+const SUBMIT_SUFFIX = /[\s,]+(?:and|then)\s+(?:send it|send that|press (?:enter|return)|hit (?:enter|return)|submit(?: it)?|run it|run that|execute it)$/i
 
 /** The spoken name of a terminal, without "the" and a trailing "terminal" or "tab". */
 function cleanTarget(raw: string): string | null {
@@ -141,24 +145,34 @@ function unquote(text: string): string {
 function matchType(request: string): Extract<QuickIntent, { hand: 'type' }> | null {
   const core = coreOfRequest(request)
   const lowered = core.replace(/\s+/g, ' ').toLowerCase()
-  if (!/^type\s/i.test(core) || SUBMIT_ASK.test(core)) {
+  if (!/^type\s/i.test(core) || SUBMIT_SUFFIX.test(core)) {
     return null
   }
   // "type up a plan", "type out the steps": writing, not typing into a terminal.
   if (/^type (?:up|out|in|something|a (?:plan|summary|note|message|list|description))\b/.test(lowered)) {
     return null
   }
-  // Why the LAST " into " (else the last " in "): the typed text may itself say "in".
+  // Why the LAST " into ": the typed text may itself say "in". Without
+  // "into", only one " in " is clear: "type ls in terminal 1 in smid" could
+  // split two ways (a project may follow the name), so ADAM takes it.
   const split =
     /^type\s+([\s\S]*\S)\s+into\s+(\S[\s\S]*)$/i.exec(core) ??
-    /^type\s+([\s\S]*\S)\s+in\s+(\S[\s\S]*)$/i.exec(core)
+    ((core.match(/\sin\s/gi) ?? []).length === 1
+      ? /^type\s+([\s\S]*\S)\s+in\s+(\S[\s\S]*)$/i.exec(core)
+      : null)
   if (!split) {
     return null
   }
   const typed = unquote(split[1])
   const target = cleanTarget(split[2].replace(/\s+/g, ' ').toLowerCase())
-  // oxlint-disable-next-line no-control-regex -- a control character could submit or escape; refuse it
-  if (!typed.trim() || /[\u0000-\u001F\u007F]/.test(typed) || !target || typed.length > MAX_TYPED_CHARS) {
+  if (
+    !typed.trim() ||
+    // oxlint-disable-next-line no-control-regex -- a control character could submit or escape; refuse it
+    /[\u0000-\u001F\u007F]/.test(typed) ||
+    SUBMIT_ASK.test(typed) ||
+    !target ||
+    typed.length > MAX_TYPED_CHARS
+  ) {
     return null
   }
   return { hand: 'type', text: typed, target }
@@ -205,30 +219,6 @@ export function matchQuickHand(request: string): QuickIntent | null {
     return matchType(request)
   }
   return matchRead(text)
-}
-
-function words(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-}
-
-/** The one terminal whose name contains the spoken name as whole words; null for none or several. */
-export function findTerminal(
-  terminals: QuickTerminal[],
-  target: string,
-  exact = false
-): QuickTerminal | null {
-  const wanted = words(target)
-  if (!wanted) {
-    return null
-  }
-  const found = terminals.filter((terminal) => {
-    const name = words(terminal.name)
-    return exact ? name === wanted : ` ${name} `.includes(` ${wanted} `)
-  })
-  return found.length === 1 ? found[0] : null
 }
 
 // oxlint-disable-next-line no-control-regex -- stripping terminal escapes is the point
@@ -301,9 +291,13 @@ async function runIntent(
       // Why exact and complete: typing goes to one terminal only, so the
       // spoken name must be that terminal's whole label, and a cut-off list
       // could hide a second terminal with the same label.
-      const terminal = list.truncated ? null : findTerminal(list.terminals, intent.target, true)
-      if (!terminal) {
+      if (list.truncated) {
         return null
+      }
+      const hits = matchTerminals(list.terminals, intent.target, 'exact')
+      const terminal = hits.length === 1 ? hits[0] : null
+      if (!terminal) {
+        return whichOneQuestion(hits)
       }
       try {
         await deps.typeInto(terminal.handle, intent.text, isCurrent)
@@ -325,9 +319,10 @@ async function runIntent(
       if (!isCurrent()) {
         return CANCELLED
       }
-      const terminal = findTerminal(terminals, intent.target, intent.exact)
+      const hits = matchTerminals(terminals, intent.target, intent.exact ? 'exact' : 'words')
+      const terminal = hits.length === 1 ? hits[0] : null
       if (!terminal) {
-        return null
+        return whichOneQuestion(hits)
       }
       const line = lastSpokenLine(await deps.readTail(terminal.handle))
       if (!isCurrent()) {

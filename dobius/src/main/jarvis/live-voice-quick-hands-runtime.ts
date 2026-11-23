@@ -1,15 +1,26 @@
 // The live runtime behind the quick hands: the same terminal list, read and
 // send calls `dobius terminal` uses, and the Claude usage store `dobius usage` reads.
-import type { RuntimeTerminalRead, RuntimeTerminalSummary } from '../../shared/runtime-types'
+import { basename } from 'node:path'
+import type {
+  RuntimeTerminalRead,
+  RuntimeTerminalSummary,
+  RuntimeTerminalVisualLayout,
+  RuntimeTerminalVisualLayoutNode
+} from '../../shared/runtime-types'
 import { usageSummaryForRuntime } from '../ipc/usage-access'
 import { QuickHandCancelled, QuickHandRefused, type QuickHandsDeps } from './live-voice-quick-hands'
+import { branchLabel, cleanTitle, type QuickTerminal } from './live-voice-terminal-target'
 
 /** The runtime calls the quick hands use; the same ones `dobius terminal list/send/read` serve. */
 export type QuickHandsRuntime = {
   listTerminals: (
     worktreeSelector?: string,
     limit?: number
-  ) => Promise<{ terminals: RuntimeTerminalSummary[]; truncated?: boolean }>
+  ) => Promise<{
+    terminals: RuntimeTerminalSummary[]
+    truncated?: boolean
+    visualLayouts?: RuntimeTerminalVisualLayout[]
+  }>
   readTerminal: (handle: string, opts?: { limit?: number }) => Promise<RuntimeTerminalRead>
   sendTerminal: (
     handle: string,
@@ -26,6 +37,47 @@ const READ_TAIL_LINES = 40
 // Why above the runtime's default of 200: a cut-off list makes "type" refuse.
 const LIST_LIMIT = 1_000
 
+/**
+ * A terminal as the voice names it. Why the tab title first: it is the tab's
+ * label as the window resolves it, so Carson's own rename wins there; the
+ * pane title (Claude's topic) also answers. A terminal with neither is
+ * called by its branch.
+ */
+export function quickTerminalOf(
+  summary: Pick<RuntimeTerminalSummary, 'handle' | 'title' | 'branch' | 'worktreePath'>,
+  tabTitle: string | null | undefined
+): QuickTerminal {
+  const titles = [...new Set([cleanTitle(tabTitle), cleanTitle(summary.title)].filter(Boolean))]
+  const labels = titles.length > 0 ? titles : [branchLabel(summary.branch)].filter(Boolean)
+  return {
+    handle: summary.handle,
+    name: labels[0] ?? 'terminal',
+    labels,
+    project: summary.worktreePath ? basename(summary.worktreePath) : ''
+  }
+}
+
+/** Tab id -> the tab's title, from the listing's window layouts. */
+export function tabTitlesOf(layouts: RuntimeTerminalVisualLayout[] | undefined): Map<string, string> {
+  const titles = new Map<string, string>()
+  const walk = (node: RuntimeTerminalVisualLayoutNode): void => {
+    if (node.type === 'group') {
+      for (const tab of node.tabs) {
+        if (tab.title) {
+          titles.set(tab.tabId, tab.title)
+        }
+      }
+    } else {
+      walk(node.first)
+      walk(node.second)
+    }
+  }
+  for (const layout of layouts ?? []) {
+    walk(layout.root)
+  }
+  return titles
+}
+
 /** Quick hands backed by the live runtime and the Claude usage store. */
 export function createRuntimeQuickHands(
   getRuntime: () => QuickHandsRuntime | null
@@ -40,12 +92,12 @@ export function createRuntimeQuickHands(
   return {
     listTerminals: async () => {
       const result = await runtime().listTerminals(undefined, LIST_LIMIT)
+      const tabTitles = tabTitlesOf(result.visualLayouts)
       return {
         truncated: result.truncated === true,
-        terminals: result.terminals.map((terminal) => ({
-          handle: terminal.handle,
-          name: terminal.title?.trim() || terminal.branch || 'terminal'
-        }))
+        terminals: result.terminals.map((terminal) =>
+          quickTerminalOf(terminal, tabTitles.get(terminal.tabId))
+        )
       }
     },
     typeInto: async (handle, text, isCurrent) => {

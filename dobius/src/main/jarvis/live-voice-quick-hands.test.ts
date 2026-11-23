@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   coreOfRequest,
-  findTerminal,
   lastSpokenLine,
   looksSecret,
   matchQuickHand,
@@ -11,6 +10,7 @@ import {
   type QuickHandsDeps,
   type QuickTerminal
 } from './live-voice-quick-hands'
+import { findTerminal } from './live-voice-terminal-target'
 import { createRuntimeQuickHands, type QuickHandsRuntime } from './live-voice-quick-hands-runtime'
 
 const TERMINALS: QuickTerminal[] = [
@@ -72,6 +72,9 @@ describe('matchQuickHand: type into a terminal', () => {
     'type ls into backend and hit enter',
     'type git push into backend, then send it',
     'type ls into backend and submit',
+    'type ls into backend and submit it',
+    'type submit the form into backend',
+    'type ls and press enter into backend',
     'type rm -rf build into backend and run it'
   ])('never submits: %s goes to ADAM', (phrase) => {
     expect(matchQuickHand(phrase)).toBeNull()
@@ -318,10 +321,39 @@ describe('createRuntimeQuickHands', () => {
     return {
       listTerminals: vi.fn(async () => ({
         terminals: [
-          { handle: 't1', title: 'Backend', branch: 'main' },
-          { handle: 't2', title: null, branch: 'feature/x' }
+          {
+            handle: 't1',
+            tabId: 'tab-1',
+            title: '⠦ Backend',
+            branch: 'main',
+            worktreePath: '/p/SMID'
+          },
+          {
+            handle: 't2',
+            tabId: 'tab-2',
+            title: null,
+            branch: 'refs/heads/aiimitch38-create/FEATURES-HUB',
+            worktreePath: '/p/dobius-plus/FEATURES-HUB'
+          }
         ] as never,
-        truncated
+        truncated,
+        visualLayouts: [
+          {
+            worktreeId: 'w',
+            worktreePath: '/p/SMID',
+            root: {
+              type: 'split',
+              direction: 'horizontal',
+              first: {
+                type: 'group',
+                groupId: null,
+                activeTabId: 'tab-1',
+                tabs: [{ tabId: 'tab-1', title: 'My API', activeLeafId: null, panes: {} }]
+              },
+              second: { type: 'group', groupId: null, activeTabId: null, tabs: [] }
+            }
+          }
+        ] as never
       })),
       readTerminal: async (handle) => ({ handle, tail: ['ok'] }) as never,
       sendTerminal: vi.fn(async (_handle, _action, options) => {
@@ -332,14 +364,14 @@ describe('createRuntimeQuickHands', () => {
     }
   }
 
-  it('names terminals by title, else branch, asks for a large list, and reports truncation', async () => {
+  it('names terminals by tab rename, then glyph-free pane title, else clean branch', async () => {
     const runtime = fakeRuntime('idle', undefined, true)
     const hands = createRuntimeQuickHands(() => runtime)
     expect(await hands.listTerminals()).toEqual({
       truncated: true,
       terminals: [
-        { handle: 't1', name: 'Backend' },
-        { handle: 't2', name: 'feature/x' }
+        { handle: 't1', name: 'My API', labels: ['My API', 'Backend'], project: 'SMID' },
+        { handle: 't2', name: 'FEATURES-HUB', labels: ['FEATURES-HUB'], project: 'FEATURES-HUB' }
       ]
     })
     expect(runtime.listTerminals).toHaveBeenCalledWith(undefined, 1_000)
