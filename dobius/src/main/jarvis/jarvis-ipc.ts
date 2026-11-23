@@ -1,7 +1,6 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { getDefaultVoiceSettings } from '../../shared/constants'
-import type { AdamLookingAt, JarvisAskResult, VoiceSettings } from '../../shared/speech-types'
+import type { AdamLookingAt, JarvisAskResult } from '../../shared/speech-types'
 import {
   ADAM_THREAD_CHANNEL,
   ADAM_THREAD_UNSAVED_CHANNEL,
@@ -9,7 +8,6 @@ import {
   adamThreadRowOf
 } from './adam-thread-store'
 import type { Store } from '../persistence'
-import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { adamProjectDirectory } from '../adam-connection'
 import {
   ADAM_STATUS_CHANNEL,
@@ -21,22 +19,20 @@ import {
   type AdamAskOptions
 } from './adam-conversation'
 import { AdamHermesVoice } from './adam-hermes-voice'
-import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
-import { fetchAgentSignedUrl } from './elevenlabs-agent'
+import { registerElevenLabsAgentHandlers } from './elevenlabs-agent-ipc'
 import { registerLiveVoiceIpc } from './live-voice-ipc'
 import { createRuntimeQuickHands, type QuickHandsRuntime } from './live-voice-quick-hands-runtime'
+import { adamConductor } from './adam-conductor'
+import { trackedQuickHands, type ConductorRuntime } from './adam-conductor-runtime'
+import { startAdamConductor } from './adam-conductor-wiring'
 
 export { forceEndLiveCallForTest, getActiveLiveSessionForTest } from './live-voice-ipc'
-import { migrateElevenLabsKeyOutOfSettings, resolveElevenLabsApiKey } from './elevenlabs-key-store'
+import { migrateElevenLabsKeyOutOfSettings } from './elevenlabs-key-store'
 import { registerElevenLabsKeyHandlers } from './elevenlabs-key-ipc'
 import { registerSelfEditHandlers } from './self-edit-ipc'
-import { fetchRecentConversationSummaries, formatConversationMemory } from './conversation-memory'
 import { pickJarvisTargetWindow } from './jarvis-target-window'
-import {
-  JARVIS_SHORTCUT_ACCELERATOR,
-  getJarvisService,
-  tapSttFinalTranscripts
-} from './jarvis-service'
+import { JARVIS_SHORTCUT_ACCELERATOR, getJarvisService } from './jarvis-service'
+import { applyJarvisMode, restorePersistedMode, wireWakeWordObservation } from './jarvis-mode'
 import type {
   JarvisBroadcastPort,
   JarvisService,
@@ -147,7 +143,8 @@ export function askAdam(text: string, options: AdamAskOptions): ReturnType<AdamC
             })
         }
         broadcast(ADAM_TURN_CHANNEL, event)
-      }
+      },
+      () => adamConductor()?.takeContext() ?? []
     )
   }
   return adamConversation.ask(text, options)
@@ -161,17 +158,6 @@ export function isAdamBusy(): boolean {
 /** What the window's voice indicator reads (`jarvis:status`). */
 function jarvisStatusOf(service: JarvisService): JarvisVoiceStatus {
   return { shortcutActive: service.isShortcutActive(), phase: service.getPhase() }
-}
-
-/** Turns voice mode on or off and keeps the setting only when that worked (`jarvis:setMode`). */
-function applyJarvisMode(store: Store, service: JarvisService, active: boolean): { ok: boolean } {
-  const ok = service.toggle(active)
-  // Why only-on-success: persisting jarvisEnabled=true when the shortcut was
-  // refused would retry a broken grab on every relaunch.
-  if (ok) {
-    persistVoicePatch(store, { jarvisEnabled: active })
-  }
-  return { ok }
 }
 
 /** Hands the runtime RPC (`dobius adam ...`) the very same ADAM and voice service. */
@@ -206,15 +192,10 @@ function createJarvisDeps(store: Store): JarvisServiceDeps {
   }
 }
 
-function persistVoicePatch(store: Store, patch: Partial<VoiceSettings>): void {
-  const current = store.getSettings().voice ?? getDefaultVoiceSettings()
-  store.updateSettings({ voice: { ...current, ...patch } }, { notifyListeners: true })
-}
-
 export function registerJarvisIpcHandlers(
   store: Store,
   mainWindow: BrowserWindow,
-  runtime?: QuickHandsRuntime
+  runtime?: QuickHandsRuntime & ConductorRuntime
 ): void {
   jarvisHostWindow = mainWindow
   // Why (#24): move a plaintext settings key into the protected store before
@@ -231,8 +212,13 @@ export function registerJarvisIpcHandlers(
     cancelAdam: cancelAdamTurn,
     lookingAt: () => lastLookingAt,
     thread: getAdamThread,
-    quickHands: runtime ? createRuntimeQuickHands(() => runtime) : undefined
+    quickHands: runtime ? trackedQuickHands(createRuntimeQuickHands(() => runtime), adamConductor) : undefined
   })
+  // Why once: the main window is recreated on macOS re-activation, and the
+  // terminals ADAM is waiting on must stay tracked across that.
+  if (runtime && !adamConductor()) {
+    startAdamConductor(store, runtime, getAdamThread)
+  }
   wireWakeWordObservation(store, service)
   restorePersistedMode(store, service)
 }
@@ -342,47 +328,11 @@ function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.removeHandler('jarvis:getAdamProjectDirectory')
   ipcMain.handle('jarvis:getAdamProjectDirectory', () => adamProjectDirectory())
 
-  // Live agent: the renderer owns the websocket (it has the mic and speakers),
-  // main only mints the signed URL so the API key never leaves this process.
-  // Why exposed: a refused ⌘T grab is otherwise invisible — the setting still
-  // reads "on" while the shortcut belongs to another app.
-  ipcMain.removeHandler('jarvis:agentContext')
-  ipcMain.handle('jarvis:agentContext', () =>
-    buildAgentContext(join(getUserDataRoot(), 'terminal-history'))
-  )
-
+  registerElevenLabsAgentHandlers(store)
   registerSelfEditHandlers((event) => trustedLiveSender(event) !== null)
-
-  // Why a separate call from agentContext: this hits the ElevenLabs API, so it
-  // is fetched after the call connects rather than delaying the connection.
-  ipcMain.removeHandler('jarvis:conversationMemory')
-  ipcMain.handle('jarvis:conversationMemory', async () => {
-    const voice = store.getSettings().voice
-    const summaries = await fetchRecentConversationSummaries(
-      resolveElevenLabsApiKey(voice),
-      voice?.elevenlabsAgentId ?? ''
-    )
-    return formatConversationMemory(summaries)
-  })
-
-  ipcMain.removeHandler('jarvis:agentOpening')
-  ipcMain.handle('jarvis:agentOpening', () =>
-    buildOpeningLine(join(getUserDataRoot(), 'terminal-history'))
-  )
-
-  ipcMain.removeHandler('jarvis:runDobius')
-  ipcMain.handle('jarvis:runDobius', (_event, command: string) =>
-    runDobiusCommand(typeof command === 'string' ? command : '')
-  )
 
   ipcMain.removeHandler('jarvis:status')
   ipcMain.handle('jarvis:status', () => jarvisStatusOf(service))
-
-  ipcMain.removeHandler('jarvis:agentSignedUrl')
-  ipcMain.handle('jarvis:agentSignedUrl', () => {
-    const voice = store.getSettings().voice
-    return fetchAgentSignedUrl(resolveElevenLabsApiKey(voice), voice?.elevenlabsAgentId ?? '')
-  })
 
   // Why a text-only ask: during a live conversation the AGENT speaks, so
   // service.ask() would talk over it with a second voice.
@@ -397,27 +347,4 @@ function registerHandlers(store: Store, service: JarvisService): void {
           })
         : ADAM_UNTRUSTED_SENDER
   )
-}
-
-function wireWakeWordObservation(store: Store, service: JarvisService): void {
-  // The matcher inside the service no-ops unless voice.jarvisWakeWord is on,
-  // so the tap stays permanently installed and cheap while dictation is idle.
-  tapSttFinalTranscripts(getSpeechSttService(store), (text) =>
-    service.handleAmbientTranscript(text)
-  )
-}
-
-function restorePersistedMode(store: Store, service: JarvisService): void {
-  if (store.getSettings().voice?.jarvisEnabled !== true) {
-    return
-  }
-  // Why the stored flag is left on (#122-F9): writing false here silently
-  // turned the user's switch off whenever another app held ⌘T at launch.
-  // The error state toggle() broadcasts here is sent before the renderer
-  // listens, so it is not what surfaces this: the renderer asks jarvis:status
-  // on mount and toasts (use-jarvis-turn), Settings shows it too, and toggling
-  // off and on retries.
-  if (!service.toggle(true)) {
-    console.warn('[jarvis] Cmd+T is held by another app; Jarvis stays on without the shortcut')
-  }
 }

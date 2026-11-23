@@ -107,6 +107,9 @@ export const TERMINAL_HANDLERS: Record<string, CommandHandler> = {
         interrupt: flags.get('interrupt') === true,
         ...(expectedRuntimeId ? { expectedRuntimeId } : {}),
         ...(requireAgentStatus ? { requireAgentStatus } : {}),
+        // Why: ADAM's Hermes process runs with DOBIUS_CALLER=adam, so Dobius+
+        // can tell Carson when this terminal finishes the work ADAM sent.
+        ...(process.env.DOBIUS_CALLER === 'adam' ? { dispatchedBy: 'adam' } : {}),
         client: { id: 'dobius-cli', type: 'desktop' }
       }
     )

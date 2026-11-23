@@ -1,3 +1,4 @@
+import type { ConductorEvent } from './conductor-speech'
 export type SpeechModelType = 'transducer' | 'paraformer' | 'whisper' | 'openai' | 'vps'
 export type SpeechModelProvider = 'local' | 'openai' | 'vps'
 
@@ -112,6 +113,13 @@ export type VoiceSettings = {
   liveVoiceDailyCapUsd?: number
   /** Seconds of silence before an OpenAI Live session drops to standby. */
   liveVoiceIdleTimeoutSec?: number
+  /**
+   * ADAM tells Carson when a terminal he sent work to finishes or needs him
+   * (thread row, and out loud on a live call). On unless explicitly false.
+   */
+  adamReportsFinishedWork?: boolean
+  /** Short "still working" lines on a live call while those jobs run. On unless false. */
+  adamProgressUpdates?: boolean
 }
 
 export type LiveVoiceEngine = 'hermes' | 'elevenlabs' | 'openai-live'
@@ -158,7 +166,22 @@ export type LiveDelegateResult =
   | { ok: false; error: string }
 
 /** Main tells the window owning a live call about the spending cap. */
-export type LiveVoiceNotice = { kind: 'cap-warning' | 'cap-reached'; text: string }
+/**
+ * `report`: a conductor update ("Juniper finished."), said when Carson and
+ * ADAM are quiet. `reports-cleared`: drop held reports (reports turned off).
+ */
+export type LiveVoiceNotice =
+  | { kind: 'cap-warning' | 'cap-reached'; text: string }
+  | {
+      kind: 'report'
+      /** Template only (conductor-speech.ts); the window rebuilds it from event + name. */
+      text: string
+      event: ConductorEvent
+      name: string
+      minutes?: number
+    }
+  /** `only: 'progress'`: drop held progress lines only (progress updates turned off). */
+  | { kind: 'reports-cleared'; text: ''; only?: 'progress' }
 
 /** Session events the window reports to main's spend meter. */
 export type LiveVoiceSessionReport = {

@@ -10,6 +10,7 @@ import {
   collectAdamBoards,
   hermesAdamTransport,
   talkToAdam,
+  threadTurns,
   type AdamThreadContext
 } from './adam-thread'
 import { isAdamCompacting } from './adam-status'
@@ -111,11 +112,7 @@ export function useBoardPlanner(input: {
         worktreeId,
         stateOf: consoleDeliveryState
       })
-      const turns = conductor.messages.flatMap((m) =>
-        !m.transient && (m.role === 'user' || m.role === 'assistant')
-          ? [{ role: m.role, text: m.text }]
-          : []
-      )
+      const turns = threadTurns(conductor.messages)
       const askAdam = (): Promise<void> =>
         talkToAdam({
           transport: hermesAdamTransport,

@@ -50,6 +50,16 @@ export const LIVE_CAP_HANG_UP_GRACE_MS = 4_000
 export const LIVE_IDLE_HANGUP_MS = 20 * 60_000
 export const LIVE_CONNECT_TIMEOUT_MS = 20_000
 export const LIVE_MAX_PENDING_DELEGATIONS = 2
+// - REPORT_QUIET: a conductor report waits until Carson has been quiet this long,
+//   so ADAM never starts talking into the gap between two of his phrases.
+export const LIVE_REPORT_QUIET_MS = 2_500
+// Why 100ms: the microphone is sampled between checks too, so a word said
+// between two samples still restarts the quiet window.
+export const LIVE_REPORT_POLL_MS = 100
+// - PROGRESS_*: "still working" lines are skipped when Carson spoke in the last
+//   30 seconds, and at most one is said every 2 minutes.
+export const LIVE_PROGRESS_AFTER_SPEECH_MS = 30_000
+export const LIVE_PROGRESS_MIN_GAP_MS = 2 * 60_000
 
 export const LIVE_NOT_HEARD_TEXT = 'Sorry, I did not catch that. Could you say it again?'
 export const LIVE_UNREACHABLE_TEXT = 'I could not reach ADAM just now. Try again in a moment.'
