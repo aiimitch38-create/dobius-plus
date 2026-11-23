@@ -326,6 +326,67 @@ describe('formatTerminalList', () => {
 })
 
 describe('formatTerminalRead', () => {
+  it('prints screen and transcript sections with honesty warnings', () => {
+    const output = formatTerminalRead({
+      terminal: {
+        handle: 'term_1',
+        status: 'running',
+        tail: ['raw'],
+        truncated: false,
+        nextCursor: '1',
+        screen: {
+          available: true,
+          source: 'headless-emulator',
+          cols: 80,
+          rows: 24,
+          alternateScreen: false,
+          scrollback: ['old line'],
+          screen: ['visible line'],
+          limited: true,
+          scrollbackRowsRetained: 5000,
+          scrollbackCapacity: 5000,
+          scrollbackMayBeEvicted: true
+        },
+        transcript: {
+          available: true,
+          source: 'transcript',
+          agent: 'claude',
+          sessionId: 's1',
+          path: '/x.jsonl',
+          messages: [
+            { role: 'assistant', text: 'Done.', timestamp: null, clipped: false, chars: 5 }
+          ],
+          olderMessagesOmitted: true,
+          fileBytes: 10,
+          scannedBytes: 10
+        }
+      }
+    })
+    expect(output.indexOf('raw')).toBeLessThan(output.indexOf('--- scrollback ---'))
+    expect(output.indexOf('old line')).toBeLessThan(output.indexOf('visible line'))
+    expect(output).toContain('warning: scrollback is at capacity; older rows have been evicted')
+    expect(output).toContain('warning: more retained scrollback exists; raise --limit')
+    expect(output).toContain('--- transcript (claude s1) ---')
+    expect(output).toContain('note: older messages omitted')
+    expect(output).toContain('[assistant]\nDone.')
+  })
+
+  it('prints why screen and transcript are unavailable', () => {
+    const output = formatTerminalRead({
+      terminal: {
+        handle: 'term_1',
+        status: 'running',
+        tail: [],
+        truncated: false,
+        nextCursor: '0',
+        screen: { available: false, source: 'headless-emulator', reason: 'no mirror' },
+        transcript: { available: false, source: 'transcript', reason: 'no session' }
+      }
+    })
+    expect(output).toContain('--- screen: unavailable (no mirror) ---')
+    expect(output).toContain('--- transcript: unavailable (no session) ---')
+  })
+
   it('warns limited cursor reads to continue with the next cursor', () => {
     const output = formatTerminalRead({
       terminal: {

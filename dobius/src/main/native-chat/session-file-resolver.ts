@@ -28,6 +28,18 @@ function codexSessionsDirs(): string[] {
   return candidates.filter((dir, index) => candidates.indexOf(dir) === index)
 }
 
+/** The directories this host's agent transcripts live under. Callers that hand
+ *  a transcript to a less trusted reader confine reads to these roots. */
+export function agentTranscriptRoots(agent: AgentType): string[] {
+  if (agent === 'claude') {
+    return [claudeProjectsDir()]
+  }
+  if (agent === 'codex') {
+    return codexSessionsDirs()
+  }
+  return []
+}
+
 export type ResolveSessionFileOptions = {
   /** Override the Claude projects root (used by tests / isolated scans). */
   claudeProjectsDir?: string

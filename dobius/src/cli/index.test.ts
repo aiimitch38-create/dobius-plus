@@ -1075,7 +1075,15 @@ describe('dobius cli worktree awareness', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
-      ['worktree', 'set', '--worktree', 'id:repo::/tmp/repo/child', '--purpose', 'Backend', '--json'],
+      [
+        'worktree',
+        'set',
+        '--worktree',
+        'id:repo::/tmp/repo/child',
+        '--purpose',
+        'Backend',
+        '--json'
+      ],
       '/tmp/repo'
     )
     await main(
@@ -3042,6 +3050,46 @@ describe('dobius cli worktree awareness', () => {
       'Checking files',
       'Waiting for input'
     ])
+  })
+
+  it('passes --screen and --transcript-limit through terminal.read', async () => {
+    queueFixtures(
+      callMock,
+      okFixture('req_terminal_read', {
+        terminal: {
+          handle: 'term_worker',
+          status: 'running',
+          tail: [],
+          truncated: false,
+          nextCursor: '0',
+          screen: { available: false, source: 'headless-emulator', reason: 'none' },
+          transcript: { available: false, source: 'transcript', reason: 'none' }
+        }
+      })
+    )
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await main(
+      [
+        'terminal',
+        'read',
+        '--terminal',
+        'term_worker',
+        '--screen',
+        '--transcript-limit',
+        '5',
+        '--json'
+      ],
+      '/tmp/repo'
+    )
+
+    expect(callMock).toHaveBeenCalledWith('terminal.read', {
+      terminal: 'term_worker',
+      limit: undefined,
+      screen: true,
+      transcript: true,
+      transcriptLimit: 5
+    })
   })
 
   it('keeps interactive Codex startup commands backgrounded unless focus is explicit', async () => {
