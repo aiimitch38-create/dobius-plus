@@ -29,6 +29,9 @@ export type LiveTranscriptLine = { role: 'user' | 'assistant'; text: string; ite
 // Why each number:
 // - SPEAKING_QUIET: the Live API sends no "reply finished" event (design doc
 //   section 1.5), so the voice counts as done after this much transcript quiet.
+// - SPEAKING_SILENCE / OUTPUT_AUDIBLE: the transcript runs ahead of the audio, so
+//   speaking also lasts until the played-back level has been below AUDIBLE for
+//   this long. One grace window across word gaps keeps the state from flapping.
 // - DELEGATION_SETTLE: a delegation can arrive before Carson's last words are
 //   transcribed; wait for the input transcript to go quiet, up to the max.
 // - INTENT_SETTLE: "stop" and "hang up" are checked on a finished phrase,
@@ -36,6 +39,9 @@ export type LiveTranscriptLine = { role: 'user' | 'assistant'; text: string; ite
 // - IDLE_HANGUP: design doc rule 6, close a call that sat idle for 20 minutes.
 // - CONNECT_TIMEOUT: an answer that never turns into session.started is dead.
 export const LIVE_SPEAKING_QUIET_MS = 900
+export const LIVE_SPEAKING_SILENCE_MS = 1_000
+export const LIVE_SPEAKING_POLL_MS = 100
+export const LIVE_OUTPUT_AUDIBLE_LEVEL = 0.03
 export const LIVE_DELEGATION_SETTLE_MS = 500
 export const LIVE_DELEGATION_SETTLE_MAX_MS = 2_000
 export const LIVE_INTENT_SETTLE_MS = 700

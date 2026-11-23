@@ -339,6 +339,8 @@ describe('BoardCommandBar status', () => {
   it('shows nothing while ADAM is idle or only listening', () => {
     draw(false)
     expect(status()).toBe('')
+    // The live region stays mounted while empty so its first update is announced.
+    expect(container.querySelector('[role="status"]')?.getAttribute('aria-live')).toBe('polite')
     act(() => publishVoiceOrbPresentation({ state: 'listening', activitySource: 'input' }))
     expect(status()).toBe('')
   })

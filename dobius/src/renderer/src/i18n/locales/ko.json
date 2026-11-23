@@ -12735,7 +12735,10 @@
       "inputLabel": "Command",
       "placeholder": "Hold space to speak · @ to direct…",
       "send": "Send",
-      "placeholderAsk": "Hold space to speak · ask “what can you do?”"
+      "placeholderAsk": "Hold space to speak · ask “what can you do?”",
+      "statusSpeaking": "말하는 중…",
+      "statusThinking": "생각하는 중…",
+      "statusWorking": "작업 중…"
     },
     "group": {
       "deleteTitle": "Delete {{name}}?",

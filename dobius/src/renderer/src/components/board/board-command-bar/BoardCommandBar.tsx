@@ -306,7 +306,9 @@ export function BoardCommandBar({
           <span
             role="status"
             aria-live="polite"
-            className="shrink-0 text-[12px] text-[var(--board-text-muted)] empty:hidden"
+            // Why not display:none when empty: the live region must stay in the
+            // accessibility tree, or the first announcement can be missed.
+            className="shrink-0 text-[12px] text-[var(--board-text-muted)] empty:pointer-events-none empty:absolute empty:size-px empty:overflow-hidden"
           >
             {status}
           </span>

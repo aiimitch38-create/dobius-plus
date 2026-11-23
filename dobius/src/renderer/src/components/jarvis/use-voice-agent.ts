@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Conversation } from '@elevenlabs/client'
 import { useAppStore } from '../../store'
 
-export type VoiceAgentState = 'idle' | 'connecting' | 'listening' | 'speaking' | 'error'
+export type VoiceAgentState =
+  | 'idle'
+  | 'connecting'
+  | 'listening'
+  | 'thinking'
+  | 'speaking'
+  | 'error'
 
 /**
  * Hang up after this much silence.
@@ -41,6 +47,9 @@ export function useVoiceAgent(): VoiceAgent {
   // and two sessions would each hold the microphone.
   const startingRef = useRef(false)
   const adamRequestsRef = useRef(0)
+  // Why state as well as the ref: the orb and command bar show "Thinking…"
+  // while ask_adam waits on ADAM; the ref alone never re-renders.
+  const [askingAdam, setAskingAdam] = useState(false)
   // Why a generation: stop() can land while start() is still awaiting the
   // signed URL or the SDK connect. Each start owns one generation; stop bumps
   // it, so a start that resumes afterwards knows it was canceled and must
@@ -65,6 +74,7 @@ export function useVoiceAgent(): VoiceAgent {
     const conversation = conversationRef.current
     conversationRef.current = null
     setState('idle')
+    setAskingAdam(false)
     if (conversation) {
       await conversation.endSession().catch(() => undefined)
     }
@@ -118,11 +128,13 @@ export function useVoiceAgent(): VoiceAgent {
               return 'Conversation ended.'
             }
             adamRequestsRef.current += 1
+            setAskingAdam(true)
             try {
               const result = await window.api.jarvis.askAdamText(String(parameters?.request ?? ''))
               return result.text
             } finally {
               adamRequestsRef.current -= 1
+              setAskingAdam(isCurrent() && adamRequestsRef.current > 0)
             }
           },
           // Eyes: what the user is working on right now.
@@ -205,6 +217,7 @@ export function useVoiceAgent(): VoiceAgent {
           if (status === 'disconnected') {
             conversationRef.current = null
             setState('idle')
+            setAskingAdam(false)
           }
         },
         onError: (message) => {
@@ -256,7 +269,8 @@ export function useVoiceAgent(): VoiceAgent {
   }, [])
 
   return {
-    state,
+    // Speaking, connecting and errors outrank a pending ask_adam.
+    state: askingAdam && state === 'listening' ? 'thinking' : state,
     errorText,
     active: state !== 'idle' && state !== 'error',
     toggle,
