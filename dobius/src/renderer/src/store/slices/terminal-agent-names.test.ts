@@ -84,6 +84,26 @@ describe('agent names on new terminals', () => {
     })
   })
 
+  it('re-names a just-created tab, following labels that still show the picked name', () => {
+    const store = createTestStore()
+    seedTwoWorktrees(store)
+    const { id, agentName } = store.getState().createTab(WT_A)
+    const before = store.getState().unifiedTabsByWorktree[WT_A]?.find((t) => t.entityId === id)
+    expect(before?.agentName).toBe(agentName)
+
+    store.getState().setTabAgentName(id, 'Juniper')
+
+    const s = store.getState()
+    expect(s.tabsByWorktree[WT_A].find((tab) => tab.id === id)).toMatchObject({
+      agentName: 'Juniper',
+      title: 'Juniper',
+      defaultTitle: 'Juniper'
+    })
+    expect(s.unifiedTabsByWorktree[WT_A]?.find((t) => t.entityId === id)).toMatchObject({
+      agentName: 'Juniper'
+    })
+  })
+
   it('shows name · topic, then the manual rename, in that precedence', () => {
     const store = createTestStore()
     seedTwoWorktrees(store)
@@ -132,20 +152,91 @@ describe('agent names on new terminals', () => {
     ).toBe('Juniper')
   })
 
-  it('keeps existing unnamed tabs unnamed after hydration', () => {
-    const store = createTestStore()
-    seedTwoWorktrees(store)
-
-    store.getState().hydrateWorkspaceSession({
+  it('names legacy default tabs once on hydration, stable across a second load', () => {
+    const session = {
       activeRepoId: 'repo1',
       activeWorktreeId: WT_A,
       activeTabId: 'tab-old',
       tabsByWorktree: {
-        [WT_A]: [makeTab({ id: 'tab-old', worktreeId: WT_A })]
+        [WT_A]: [
+          makeTab({ id: 'tab-old', worktreeId: WT_A, defaultTitle: 'Terminal 3' }),
+          makeTab({ id: 'tab-typed', worktreeId: WT_A, sortOrder: 1, customTitle: 'Deploy box' }),
+          makeTab({ id: 'tab-named', worktreeId: WT_A, sortOrder: 2, agentName: 'Juniper' })
+        ]
+      },
+      terminalLayoutsByTabId: {
+        'tab-old': makeLayout(),
+        'tab-typed': makeLayout(),
+        'tab-named': makeLayout()
+      }
+    }
+    const load = () => {
+      const store = createTestStore()
+      seedTwoWorktrees(store, {
+        boardsByWorktree: {
+          [WT_A]: {
+            cards: [
+              {
+                id: 'card-old',
+                kind: 'console',
+                tabId: 'tab-old',
+                agentKind: 'claude',
+                title: 'Claude 5'
+              },
+              {
+                id: 'card-typed-title',
+                kind: 'console',
+                tabId: 'tab-named',
+                agentKind: 'claude',
+                title: 'Payments'
+              }
+            ]
+          }
+        } as unknown as AppState['boardsByWorktree'],
+        boardsHydrated: true
+      })
+      store.getState().hydrateWorkspaceSession(session)
+      store.getState().hydrateTabsSession(session)
+      return store.getState()
+    }
+
+    const first = load()
+    const byId = (id: string) => first.tabsByWorktree[WT_A].find((tab) => tab.id === id)!
+    const newName = byId('tab-old').agentName
+    expect(newName && AGENT_NAMES.includes(newName)).toBe(true)
+    expect(newName).not.toBe('Juniper')
+    expect(byId('tab-typed').agentName).toBeUndefined()
+    expect(byId('tab-typed').customTitle).toBe('Deploy box')
+    expect(byId('tab-named').agentName).toBe('Juniper')
+    expect(
+      first.unifiedTabsByWorktree[WT_A]?.find((tab) => tab.entityId === 'tab-old')?.agentName
+    ).toBe(newName)
+    const cards = first.boardsByWorktree[WT_A].cards
+    expect(cards.find((card) => card.id === 'card-old')?.title).toBe(newName)
+    expect(cards.find((card) => card.id === 'card-typed-title')?.title).toBe('Payments')
+
+    const second = load()
+    expect(second.tabsByWorktree[WT_A].find((tab) => tab.id === 'tab-old')?.agentName).toBe(
+      newName
+    )
+    expect(
+      second.boardsByWorktree[WT_A].cards.find((card) => card.id === 'card-old')?.title
+    ).toBe(newName)
+  })
+
+  it('keeps a name already persisted on a reload', () => {
+    const store = createTestStore()
+    seedTwoWorktrees(store)
+    const session = {
+      activeRepoId: 'repo1',
+      activeWorktreeId: WT_A,
+      activeTabId: 'tab-old',
+      tabsByWorktree: {
+        [WT_A]: [makeTab({ id: 'tab-old', worktreeId: WT_A, agentName: 'Cedar' })]
       },
       terminalLayoutsByTabId: { 'tab-old': makeLayout() }
-    })
-
-    expect(store.getState().tabsByWorktree[WT_A][0].agentName).toBeUndefined()
+    }
+    store.getState().hydrateWorkspaceSession(session)
+    expect(store.getState().tabsByWorktree[WT_A][0].agentName).toBe('Cedar')
   })
 })

@@ -11,6 +11,8 @@ import {
 import type { DesktopScreenEndpoint } from './screen/screen-contracts'
 import { DESKTOP_SCREEN_CAPABILITY } from '../../shared/desktop-screen-protocol'
 import { extractOscTitleScanTail } from '../../shared/osc-title-scan-tail'
+import { pickAgentName } from '../../shared/agent-names'
+import { isValidAgentDisplayName } from '../../shared/agent-identity-names'
 import { extractLastOsc7Uri, extractOscScanTail } from '../daemon/osc7-uri-extraction'
 import { parseFileUriPathParts } from '../daemon/osc7-file-uri'
 import type { AgentStatus } from '../../shared/agent-detection'
@@ -951,6 +953,8 @@ type RuntimePtyWorktreeRecord = {
   launchConfig: SleepingAgentLaunchConfig | null
   launchToken: string | null
   launchAgent: TuiAgent | null
+  /** Agent name main picked (or adopted) before spawn, baked into DOBIUS_AGENT_NAME. */
+  agentName: string | null
   foregroundAgent: TuiAgent | null
   connected: boolean
   disconnectedAt: number | null
@@ -1262,6 +1266,8 @@ type RuntimeNotifier = {
       launchConfig?: SleepingAgentLaunchConfig
       launchToken?: string
       launchAgent?: TuiAgent
+      /** Name main baked into DOBIUS_AGENT_NAME; the adopted tab keeps it. */
+      agentName?: string
       activate?: boolean
       presentation?: RuntimeTerminalPresentation
       tabId?: string
@@ -15925,9 +15931,13 @@ export class DobiusRuntimeService {
       const launchToken = launchOpts.launchConfig
         ? (launchOpts.launchToken ?? randomUUID())
         : undefined
+      // Why: this PTY spawns before any renderer tab exists, so main names it
+      // now; the reveal hands the same name to the renderer tab it adopts.
+      const agentName = this.resolveSpawnAgentName(tabId, launchOpts.env)
       const baseEnv = {
         ...launchOpts.env,
-        ...(launchToken ? { DOBIUS_AGENT_LAUNCH_TOKEN: launchToken } : {})
+        ...(launchToken ? { DOBIUS_AGENT_LAUNCH_TOKEN: launchToken } : {}),
+        DOBIUS_AGENT_NAME: agentName
       }
       const claudeAgentTeamsSourceCommand =
         launchOpts.claudeAgentTeamsSourceCommand?.trim() || launchOpts.command?.trim() || undefined
@@ -16034,6 +16044,7 @@ export class DobiusRuntimeService {
           : null
         pty.launchToken = launchToken ?? null
         pty.launchAgent = launchOpts.launchAgent ?? null
+        pty.agentName = agentName
       }
       const handle = pty ? this.issuePtyHandle(pty) : preAllocatedHandle
       if (pty && launchOpts.deferMobileSessionPublish !== true) {
@@ -16063,6 +16074,7 @@ export class DobiusRuntimeService {
             ...(effectiveLaunchConfig ? { launchConfig: effectiveLaunchConfig } : {}),
             ...(launchToken ? { launchToken } : {}),
             ...(launchOpts.launchAgent ? { launchAgent: launchOpts.launchAgent } : {}),
+            agentName,
             activate: presentation === 'focused',
             ...(presentation ? { presentation } : {}),
             tabId,
@@ -16778,6 +16790,7 @@ export class DobiusRuntimeService {
           : {}),
         ...(pty.pty.launchToken ? { launchToken: pty.pty.launchToken } : {}),
         ...(pty.pty.launchAgent ? { launchAgent: pty.pty.launchAgent } : {}),
+        ...(pty.pty.agentName ? { agentName: pty.pty.agentName } : {}),
         ...(pty.pty.tabId !== null ? { tabId: pty.pty.tabId } : {}),
         ...(parsedPaneKey ? { leafId: parsedPaneKey.leafId } : {})
       })
@@ -16891,7 +16904,15 @@ export class DobiusRuntimeService {
       cwd: workspace.path,
       command: opts.command,
       commandDelivery: 'provider',
-      env: this.buildTerminalWorkspaceEnv(workspace, opts.env ?? {}, paneKey, parentTabId),
+      env: this.buildTerminalWorkspaceEnv(
+        workspace,
+        {
+          ...opts.env,
+          ...splitAgentNameEnv(this.tabs.get(parentTabId)?.agentName ?? pty.agentName)
+        },
+        paneKey,
+        parentTabId
+      ),
       envToDelete: opts.envToDelete,
       connectionId: workspace.connectionId,
       worktreeId: workspace.id,
@@ -17367,6 +17388,36 @@ export class DobiusRuntimeService {
       repo,
       folderWorkspace: null
     }
+  }
+
+  /**
+   * The agent name for a PTY main spawns. Keeps a name the caller already
+   * baked into the env (renderer background launches) or the synced tab's
+   * name; otherwise picks one unused by every synced tab and main-owned PTY.
+   */
+  private resolveSpawnAgentName(tabId: string, env: Record<string, string> | undefined): string {
+    const fromEnv = env?.DOBIUS_AGENT_NAME?.trim()
+    if (fromEnv && isValidAgentDisplayName(fromEnv)) {
+      return fromEnv
+    }
+    const fromTab = this.tabs.get(tabId)?.agentName?.trim()
+    if (fromTab) {
+      return fromTab
+    }
+    const used: string[] = []
+    for (const tab of this.tabs.values()) {
+      for (const label of [tab.agentName, tab.title]) {
+        if (label?.trim()) {
+          used.push(label)
+        }
+      }
+    }
+    for (const pty of this.ptysById.values()) {
+      if (pty.agentName) {
+        used.push(pty.agentName)
+      }
+    }
+    return pickAgentName(used)
   }
 
   private buildTerminalWorkspaceEnv(
@@ -18259,6 +18310,7 @@ export class DobiusRuntimeService {
         launchConfig: null,
         launchToken: null,
         launchAgent: null,
+        agentName: null,
         foregroundAgent: null,
         connected: state.connected ?? true,
         disconnectedAt: state.connected === false ? Date.now() : null,
@@ -19661,7 +19713,9 @@ export class DobiusRuntimeService {
       leafId: `pty:${pty.ptyId}`,
       originTabId: pty.tabId,
       title: getLatestPtyTitle(pty),
-      ...terminalNameField(pty.tabId ? this.tabs.get(pty.tabId)?.agentName : null),
+      ...terminalNameField(
+        (pty.tabId ? this.tabs.get(pty.tabId)?.agentName : null) ?? pty.agentName
+      ),
       connected: pty.connected,
       writable: pty.connected,
       lastOutputAt: pty.lastOutputAt,
@@ -24403,6 +24457,11 @@ function getLatestPtyTitle(pty: RuntimePtyWorktreeRecord): string | null {
     { title: pty.title, updatedAt: pty.titleUpdatedAt },
     { title: pty.lastOscTitle, updatedAt: pty.lastOscTitleAt }
   )
+}
+
+function splitAgentNameEnv(agentName: string | null | undefined): Record<string, string> {
+  const name = agentName?.trim()
+  return name ? { DOBIUS_AGENT_NAME: name } : {}
 }
 
 // Why: omitted (not null) for unnamed tabs so the summary stays byte-identical

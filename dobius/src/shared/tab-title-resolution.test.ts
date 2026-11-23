@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { resolveTerminalTabTitle, resolveUnifiedTabLabel } from './tab-title-resolution'
+import {
+  resolveTerminalTabDetectionTitle,
+  resolveTerminalTabTitle,
+  resolveUnifiedTabLabel
+} from './tab-title-resolution'
+import { resolveExplicitTerminalTitleAgentType } from './terminal-title-agent-type'
 
 describe('tab title resolution', () => {
   it('uses live terminal titles when generated titles are disabled', () => {
@@ -121,5 +126,32 @@ describe('tab title resolution', () => {
         resolveTerminalTabTitle({ ...named, generatedTitle: null, title: unified }, false)
       ).toBe(unified)
     })
+  })
+})
+
+describe('agent-named tab detection title', () => {
+  const piTab = {
+    customTitle: null,
+    generatedTitle: null,
+    title: 'π - ~/repo',
+    agentName: 'Juniper'
+  }
+
+  it('keeps the raw provider title for detection while the label shows the name', () => {
+    const label = resolveTerminalTabTitle(piTab, false)
+    const detection = resolveTerminalTabDetectionTitle(piTab, false)
+    expect(label.startsWith('Juniper')).toBe(true)
+    expect(detection).toBe('π - ~/repo')
+    expect(resolveExplicitTerminalTitleAgentType(detection)).toBe('pi')
+    expect(resolveExplicitTerminalTitleAgentType(label)).toBeNull()
+  })
+
+  it('keeps manual and quick-command precedence for detection', () => {
+    expect(resolveTerminalTabDetectionTitle({ ...piTab, customTitle: 'Payments' }, false)).toBe(
+      'Payments'
+    )
+    expect(
+      resolveTerminalTabDetectionTitle({ ...piTab, quickCommandLabel: 'Run tests' }, false)
+    ).toBe('Run tests')
   })
 })

@@ -2052,6 +2052,29 @@ export const createTabsSlice: StateCreator<AppState, [], [], TabsSlice> = (set, 
     for (const workspace of state.folderWorkspaces) {
       validWorktreeIds.add(folderWorkspaceKey(workspace.id))
     }
-    set(buildHydratedTabState(session, validWorktreeIds))
+    // Why: hydrateWorkspaceSession may have just named legacy "Terminal N"
+    // tabs; mirror those names onto the unified tabs it builds from.
+    const agentNameByTabId = new Map<string, string>()
+    for (const tab of Object.values(state.tabsByWorktree).flat()) {
+      if (tab.agentName) {
+        agentNameByTabId.set(tab.id, tab.agentName)
+      }
+    }
+    const namedSession =
+      agentNameByTabId.size === 0
+        ? session
+        : {
+            ...session,
+            tabsByWorktree: Object.fromEntries(
+              Object.entries(session.tabsByWorktree).map(([worktreeId, tabs]) => [
+                worktreeId,
+                tabs.map((tab) => {
+                  const agentName = agentNameByTabId.get(tab.id)
+                  return tab.agentName || !agentName ? tab : { ...tab, agentName }
+                })
+              ])
+            )
+          }
+    set(buildHydratedTabState(namedSession, validWorktreeIds))
   }
 })

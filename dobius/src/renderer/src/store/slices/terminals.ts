@@ -66,6 +66,7 @@ import {
 import { getForegroundTerminalTabIds } from '@/lib/foreground-terminal-tabs'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { pickAgentName } from '../../../../shared/agent-names'
+import { applyDefaultConsoleTitles, nameDefaultTerminalTabs } from './default-agent-names'
 import { getFolderWorkspaceConnectionId } from '@/lib/folder-workspace-connection'
 import { hasWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
 import { sanitizeTerminalLayoutPaneTitles } from '@/lib/terminal-pane-title-sanitization'
@@ -549,6 +550,8 @@ export type TerminalSlice = {
     opts?: { recordInteraction?: boolean }
   ) => void
   setTabColor: (tabId: string, color: string | null) => void
+  /** Re-names a just-created tab before its PTY spawns (a restarted console keeps its name). */
+  setTabAgentName: (tabId: string, agentName: string) => void
   updateTabPtyId: (tabId: string, ptyId: string) => void
   clearTabPtyId: (tabId: string, ptyId?: string) => void
   shutdownWorktreeTerminals: (
@@ -1716,6 +1719,48 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
     if (item) {
       get().setTabCustomLabel(item.id, title, opts)
     }
+  },
+
+  setTabAgentName: (tabId, agentName) => {
+    const name = agentName.trim()
+    set((s) => {
+      const ownerWorktreeId = getTerminalTabOwnerWorktreeId(s.tabsByWorktree, tabId)
+      const current = ownerWorktreeId
+        ? s.tabsByWorktree[ownerWorktreeId]?.find((t) => t.id === tabId)
+        : undefined
+      if (!name || !ownerWorktreeId || !current) {
+        return s
+      }
+      // Why: only labels still showing the picked name follow it; a live
+      // title the pane already reported is left alone.
+      const previous = current.agentName
+      const follow = (value: string): string => (value === previous ? name : value)
+      return {
+        tabsByWorktree: {
+          ...s.tabsByWorktree,
+          [ownerWorktreeId]: s.tabsByWorktree[ownerWorktreeId].map((t) =>
+            t.id === tabId
+              ? {
+                  ...t,
+                  title: follow(t.title),
+                  ...(t.defaultTitle ? { defaultTitle: follow(t.defaultTitle) } : {}),
+                  agentName: name
+                }
+              : t
+          )
+        },
+        unifiedTabsByWorktree: s.unifiedTabsByWorktree[ownerWorktreeId]
+          ? {
+              ...s.unifiedTabsByWorktree,
+              [ownerWorktreeId]: s.unifiedTabsByWorktree[ownerWorktreeId].map((t) =>
+                t.contentType === 'terminal' && t.entityId === tabId
+                  ? { ...t, label: follow(t.label), agentName: name }
+                  : t
+              )
+            }
+          : s.unifiedTabsByWorktree
+      }
+    })
   },
 
   setTabColor: (tabId, color) => {
@@ -2918,7 +2963,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       // again) and any other restored worktrees the user clicks later. The
       // tag is consumed on the first updateTabPtyId/clearTabPtyId per tab,
       // so subsequent legitimate events (codex restart, new pane) still bump.
-      const tabsByWorktree: Record<string, TerminalTab[]> = Object.fromEntries(
+      const hydratedTabsByWorktree: Record<string, TerminalTab[]> = Object.fromEntries(
         Object.entries(session.tabsByWorktree)
           .filter(([worktreeId]) => validWorktreeIds.has(worktreeId))
           .map(([worktreeId, tabs]) => {
@@ -2950,6 +2995,9 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
           })
           .filter(([, tabs]) => tabs.length > 0)
       )
+      // Why: tabs from before agent names still say "Terminal 3"; name them
+      // once here so the next session save persists the name.
+      const tabsByWorktree = nameDefaultTerminalTabs(hydratedTabsByWorktree, s.boardsByWorktree)
 
       const validTabIds = new Set(
         Object.values(tabsByWorktree)
@@ -3196,6 +3244,8 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         )
       }
     })
+    // Why: a console card still titled "Claude 5" takes its tab's new name.
+    applyDefaultConsoleTitles(get())
   },
 
   reconnectPersistedTerminals: async (_signal) => {

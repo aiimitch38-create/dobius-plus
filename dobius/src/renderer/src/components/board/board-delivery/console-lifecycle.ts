@@ -8,7 +8,8 @@ import { useAppStore } from '@/store'
 import { flushBoardPersistence, getBoard, type BoardCardOf } from '@/store/slices/board'
 import { bugFixClaudeArgs, isBugFixWorktreePath } from '../../../../../shared/bug-fix-agent-profile'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
-import type { TuiAgent } from '../../../../../shared/types'
+import type { TerminalTab, TuiAgent } from '../../../../../shared/types'
+import type { AppState } from '@/store/types'
 import { boardSpawnRects } from '../board-canvas/board-spawn-placement'
 import type { BoardPoint } from '../board-canvas/board-viewport'
 import {
@@ -230,6 +231,14 @@ function relaunchInNewTab(
   if (!launched?.tabId) {
     return null
   }
+  // Why: the card keeps its title across a restart, so the replacement tab
+  // (and its DOBIUS_AGENT_NAME) must keep the old tab's name, or routing and
+  // @mentions split between "Juniper" (card) and a fresh "Falcon" (tab). This
+  // runs in the same tick as createTab, before the new pane mounts and spawns.
+  const keptName = findTerminalTab(useAppStore.getState(), card.tabId)?.agentName
+  if (keptName) {
+    useAppStore.getState().setTabAgentName(launched.tabId, keptName)
+  }
   const oldTab = card.tabId
   markConsolePaused(oldTab, false)
   useAppStore
@@ -251,6 +260,19 @@ function relaunchInNewTab(
       )
     }
   )
+}
+
+function findTerminalTab(
+  state: Pick<AppState, 'tabsByWorktree'>,
+  tabId: string
+): TerminalTab | undefined {
+  for (const tabs of Object.values(state.tabsByWorktree)) {
+    const tab = tabs.find((entry) => entry.id === tabId)
+    if (tab) {
+      return tab
+    }
+  }
+  return undefined
 }
 
 /** True when the console has ended: tab gone or back at a bare shell. */

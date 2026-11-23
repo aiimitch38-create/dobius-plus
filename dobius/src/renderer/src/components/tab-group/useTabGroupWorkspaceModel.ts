@@ -141,7 +141,9 @@ export function useTabGroupWorkspaceModel({
                 ...item,
                 quickCommandLabel: item.quickCommandLabel ?? terminalTab?.quickCommandLabel,
                 generatedLabel: item.generatedLabel ?? terminalTab?.generatedTitle,
-                agentName: terminalTab?.agentName ?? item.agentName
+                // Why: raw title for provider/status detection; TabBar composes
+                // the "Name · topic" display label from `agentName` below.
+                agentName: undefined
               },
               worktreeState.generatedTabTitlesEnabled,
               item.label

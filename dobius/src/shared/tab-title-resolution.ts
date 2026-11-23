@@ -18,6 +18,17 @@ export function resolveTerminalTabTitle(
   )
 }
 
+// Why: the "Name · topic" label is display-only. Provider identity and status
+// detection must parse the title without the agent name, or a Pi title like
+// "π - ~/repo" turns into "Juniper" and no longer identifies the agent.
+export function resolveTerminalTabDetectionTitle(
+  tab: Pick<TerminalTab, 'customTitle' | 'quickCommandLabel' | 'generatedTitle' | 'title'>,
+  generatedTitlesEnabled: boolean,
+  fallback = ''
+): string {
+  return resolveTerminalTabTitle({ ...tab, agentName: undefined }, generatedTitlesEnabled, fallback)
+}
+
 export function resolveUnifiedTabLabel(
   tab:
     | (Pick<Tab, 'customLabel' | 'quickCommandLabel' | 'generatedLabel' | 'label'> &

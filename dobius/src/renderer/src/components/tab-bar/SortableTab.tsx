@@ -28,7 +28,10 @@ import { useShortcutKeyDetails } from '@/hooks/useShortcutLabel'
 import { useTabStripPointerActivation } from './tab-strip-pointer-activation'
 
 type SortableTabProps = {
+  /** `tab.title` is the raw live title: agent identity/status detection parses it. */
   tab: TerminalTab
+  /** Display label (e.g. "Juniper · Fix login"); defaults to `tab.title`. */
+  label?: string
   unifiedTabId: string
   groupId: string
   tabCount: number
@@ -61,6 +64,7 @@ export const CLOSE_ALL_CONTEXT_MENUS_EVENT = 'dobius-close-all-context-menus'
 
 export default function SortableTab({
   tab,
+  label,
   unifiedTabId,
   groupId,
   tabCount,
@@ -103,8 +107,11 @@ export default function SortableTab({
 
   // Why: when a provider icon is already shown, stripping the agent's own
   // leading status glyph keeps the tab from presenting two icons for one agent.
+  // Why: the composed "Name · topic" label is display-only; feeding it to
+  // useTabAgent would hide provider titles like "π - ~/repo" behind the name.
+  const composedLabel = label ?? tab.title
   const displayTitle =
-    tab.customTitle ?? (tabAgent ? stripLeadingAgentTitleDecoration(tab.title) : tab.title)
+    tab.customTitle ?? (tabAgent ? stripLeadingAgentTitleDecoration(composedLabel) : composedLabel)
 
   const { attributes, listeners, setNodeRef } = useSortable({
     id: tab.id,
@@ -140,9 +147,9 @@ export default function SortableTab({
     // changes mid-edit (e.g., a shell writes a new title via OSC escape), we
     // intentionally do NOT refresh renameValue — the user's in-progress edit
     // takes precedence so their keystrokes are never silently overwritten.
-    setRenameValue(tab.customTitle ?? tab.title)
+    setRenameValue(tab.customTitle ?? composedLabel)
     setIsEditing(true)
-  }, [tab.customTitle, tab.title])
+  }, [tab.customTitle, composedLabel])
 
   const commitRename = useCallback(() => {
     if (committedOrCancelledRef.current) {
@@ -224,7 +231,7 @@ export default function SortableTab({
     disabled: isEditing
   })
   const closeShortcut = useShortcutKeyDetails('tab.close')
-  const tabTitle = tab.customTitle ?? tab.title
+  const tabTitle = tab.customTitle ?? composedLabel
   const tabRoot = (
     <div
       ref={setNodeRef}
