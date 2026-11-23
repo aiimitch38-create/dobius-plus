@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { buildWorktreeComparator } from '@/components/sidebar/smart-sort'
 import type * as AgentStatusModule from '@/lib/agent-status'
+import { AGENT_NAMES } from '../../../../shared/agent-names'
 import { getDefaultSettings } from '../../../../shared/constants'
 import { createCompatibleRuntimeStatusResponseIfNeeded } from '../../runtime/runtime-compatibility-test-fixture'
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
@@ -1819,7 +1820,7 @@ describe('setActiveWorktree', () => {
     expect(s.activeFileIdByWorktree[wt]).toBe(editorFileId)
   })
 
-  it('reuses the lowest available terminal number after closes', () => {
+  it('names each new terminal with a distinct agent name instead of a number', () => {
     const store = createTestStore()
     const wt = 'repo1::/path/wt1'
 
@@ -1832,14 +1833,13 @@ describe('setActiveWorktree', () => {
     const first = store.getState().createTab(wt)
     const second = store.getState().createTab(wt)
 
-    expect(first.title).toBe('Terminal 1')
-    expect(second.title).toBe('Terminal 2')
-
-    store.getState().closeTab(first.id)
-    store.getState().closeTab(second.id)
-
-    const replacement = store.getState().createTab(wt)
-    expect(replacement.title).toBe('Terminal 1')
+    expect(AGENT_NAMES).toContain(first.agentName)
+    expect(AGENT_NAMES).toContain(second.agentName)
+    expect(first.agentName).not.toBe(second.agentName)
+    expect(first).toMatchObject({ title: first.agentName, defaultTitle: first.agentName })
+    expect(
+      store.getState().unifiedTabsByWorktree[wt]?.find((tab) => tab.entityId === first.id)
+    ).toMatchObject({ label: first.agentName, agentName: first.agentName })
   })
 
   it('preserves cleanup-owned references when there are no orphan terminals', () => {
@@ -2467,7 +2467,7 @@ describe('setActiveWorktree', () => {
     expect(s.unifiedTabsByWorktree[wt]).toEqual([])
   })
 
-  it('keeps terminal numbering stable when a live agent renames an existing tab', () => {
+  it('keeps the agent name stable when a live agent renames an existing tab', () => {
     const store = createTestStore()
     const wt = 'repo1::/path/wt1'
 
@@ -2485,10 +2485,11 @@ describe('setActiveWorktree', () => {
     expect(store.getState().tabsByWorktree[wt]?.[0]).toMatchObject({
       id: first.id,
       title: 'Claude Code',
-      defaultTitle: 'Terminal 1'
+      defaultTitle: first.agentName,
+      agentName: first.agentName
     })
-    expect(second.title).toBe('Terminal 2')
-    expect(second.defaultTitle).toBe('Terminal 2')
+    expect(second.agentName).not.toBe(first.agentName)
+    expect(second.title).toBe(second.agentName)
   })
 
   it('falls back to the stable terminal label when a live title clears', () => {
@@ -2507,8 +2508,8 @@ describe('setActiveWorktree', () => {
 
     expect(store.getState().tabsByWorktree[wt]?.[0]).toMatchObject({
       id: first.id,
-      title: 'Terminal 1',
-      defaultTitle: 'Terminal 1'
+      title: first.agentName,
+      defaultTitle: first.agentName
     })
     expect(
       store
@@ -2517,7 +2518,7 @@ describe('setActiveWorktree', () => {
           (tab) => tab.contentType === 'terminal' && tab.entityId === first.id
         )
     ).toMatchObject({
-      label: 'Terminal 1'
+      label: first.agentName
     })
   })
 
@@ -3256,7 +3257,12 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
   it('does not kill the pane when main cannot accept the sleeping record', async () => {
     const store = createTestStore()
     const { wt, targetLeaf, targetPaneKey } = seedHibernatableAgentPane(store)
-    const target = { paneKey: targetPaneKey, tabId: 'tab-1', leafId: targetLeaf, ptyId: 'pty-agent' }
+    const target = {
+      paneKey: targetPaneKey,
+      tabId: 'tab-1',
+      leafId: targetLeaf,
+      ptyId: 'pty-agent'
+    }
     mockApi.session.patch.mockRejectedValueOnce(new Error('session_patch_failed'))
 
     await expect(

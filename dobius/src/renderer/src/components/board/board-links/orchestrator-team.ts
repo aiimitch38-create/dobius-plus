@@ -9,6 +9,7 @@ import { getBoard, type BoardCardOf, type BoardState } from '@/store/slices/boar
 import type { TuiAgent } from '../../../../../shared/types'
 import { BOARD_CONSOLE_SIZE, boardSpawnPlacements } from '../board-canvas/board-spawn-placement'
 import { awaitMirroredConsoleTabs } from '../board-route/board-await-mirrored-tabs'
+import { consoleTitleForTab } from '../board-route/console-agent-title'
 
 export const MAX_TEAM_SIZE = 12
 const TEAM_GAP = 80
@@ -89,7 +90,11 @@ export function spawnWiredConsoles(
       kind: 'console' as const,
       ...position,
       ...BOARD_CONSOLE_SIZE,
-      title: `${label} ${existing + index + 1}`,
+      title: consoleTitleForTab(
+        useAppStore.getState(),
+        result.tabId,
+        `${label} ${existing + index + 1}`
+      ),
       agentKind: agent
     }
     if (result.tabId) {

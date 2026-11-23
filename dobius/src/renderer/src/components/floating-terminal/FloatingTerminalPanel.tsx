@@ -307,7 +307,10 @@ export function FloatingTerminalPanel({
                 {
                   ...tab,
                   quickCommandLabel: tab.quickCommandLabel ?? terminalTab.quickCommandLabel,
-                  generatedLabel: tab.generatedLabel ?? terminalTab.generatedTitle
+                  generatedLabel: tab.generatedLabel ?? terminalTab.generatedTitle,
+                  // Why: raw title for provider/status detection; TabBar composes
+                  // the "Name · topic" display label from `agentName`.
+                  agentName: undefined
                 },
                 generatedTabTitlesEnabled,
                 tab.label

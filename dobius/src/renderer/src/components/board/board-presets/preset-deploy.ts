@@ -5,6 +5,7 @@ import { boardGhostOf, pushBoardGhosts } from '../board-canvas/board-ghost-store
 import { fitViewportToRects } from '../board-canvas/board-viewport'
 import { awaitMirroredConsoleTabs } from '../board-route/board-await-mirrored-tabs'
 import type { DeployPlan, PlanConsole } from './preset-deploy-plan'
+import { consoleTitleForTab } from '../board-route/console-agent-title'
 
 // Why: each launch starts a PTY and an agent CLI; starting 16 at once stalls
 // the machine, so consoles spawn a few at a time.
@@ -35,13 +36,17 @@ function spawnConsole(
     agentKind: c.agent
   }
   const before = new Set((state.tabsByWorktree[worktreeId] ?? []).map((t) => t.id))
+  const named = (tabId: string) =>
+    c.nameFromTab
+      ? { ...card, tabId, title: consoleTitleForTab(useAppStore.getState(), tabId, c.title) }
+      : { ...card, tabId }
   if (c.agent === 'shell') {
     createNewTerminalTab(worktreeId)
     const tabId = newTabIdAfter(worktreeId, before)
     if (!tabId) {
       return 'failed'
     }
-    pushBoardGhosts([boardGhostOf(card, state.addCard(worktreeId, { ...card, tabId }))])
+    pushBoardGhosts([boardGhostOf(card, state.addCard(worktreeId, named(tabId)))])
     return 'placed'
   }
   const result = launchAgentInNewTab({ agent: c.agent, worktreeId, launchSource: 'unknown' })
@@ -49,9 +54,7 @@ function spawnConsole(
     return 'failed'
   }
   if (result.tabId) {
-    pushBoardGhosts([
-      boardGhostOf(card, state.addCard(worktreeId, { ...card, tabId: result.tabId }))
-    ])
+    pushBoardGhosts([boardGhostOf(card, state.addCard(worktreeId, named(result.tabId)))])
     return 'placed'
   }
   // Host-backed launch: the card appears once the mirrored tab arrives.

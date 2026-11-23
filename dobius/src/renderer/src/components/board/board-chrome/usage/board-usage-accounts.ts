@@ -2,7 +2,10 @@ import { useAppStore } from '@/store'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { getAgentLabel } from '@/lib/agent-catalog'
 import { getBoard } from '@/store/slices/board'
-import type { ConsoleAccountAgent, ConsoleAccountLaunch } from '../../../../../../shared/console-account'
+import type {
+  ConsoleAccountAgent,
+  ConsoleAccountLaunch
+} from '../../../../../../shared/console-account'
 import { BOARD_CHROME_INSETS } from '../../board-canvas/board-reveal'
 import {
   BOARD_CONSOLE_SIZE,
@@ -12,6 +15,7 @@ import {
 import { screenToWorld } from '../../board-canvas/board-viewport'
 import { resolvePinnedAgentCommand } from '../../console-card/console-account-launch'
 import type { ConsoleAccountsSnapshot } from '../../console-card/console-account-options'
+import { consoleTitleForTab } from '../../board-route/console-agent-title'
 
 export type AccountProfileRow = {
   /** null = the system login (no managed profile). */
@@ -96,7 +100,11 @@ export async function openAccountLane(
     kind: 'console',
     ...position,
     ...BOARD_CONSOLE_SIZE,
-    title: `${getAgentLabel(agent)} ${existing + 1}`,
+    title: consoleTitleForTab(
+      useAppStore.getState(),
+      launched.tabId,
+      `${getAgentLabel(agent)} ${existing + 1}`
+    ),
     tabId: launched.tabId,
     agentKind: agent,
     ...(accountId ? { accountId } : {})

@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const launchAgentInNewTab = vi.fn()
 const updateCard = vi.fn()
+const setTabAgentName = vi.fn()
 const closeTerminalTab = vi.fn()
 const resolvePinnedAgentCommand = vi.fn()
 const toastError = vi.fn()
 let worktrees: { id: string; path: string }[] = []
+let tabsByWorktree: Record<string, { id: string; agentName?: string }[]> = {}
 const launchConfigs: Record<string, { launchConfig: { agentCommand?: string; agentArgs: string } }> = {}
 
 vi.mock('@/lib/launch-agent-in-new-tab', () => ({ launchAgentInNewTab }))
@@ -13,8 +15,10 @@ vi.mock('@/components/terminal/terminal-tab-actions', () => ({ closeTerminalTab 
 vi.mock('@/store', () => ({
   useAppStore: { getState: () => ({
       updateCard,
+      setTabAgentName,
       agentLaunchConfigByPaneKey: launchConfigs,
-      allWorktrees: () => worktrees
+      allWorktrees: () => worktrees,
+      tabsByWorktree
     }) }
 }))
 const flushBoardPersistence = vi.fn(async () => {})
@@ -50,10 +54,36 @@ const card = (extra: Partial<Card> = {}): Card =>
 beforeEach(() => {
   vi.clearAllMocks()
   worktrees = []
+  tabsByWorktree = {}
   for (const key of Object.keys(launchConfigs)) {
     delete launchConfigs[key]
   }
   launchAgentInNewTab.mockReturnValue({ tabId: 'new-tab' })
+})
+
+describe('restartConsole agent name', () => {
+  it('gives the replacement tab the old tab name so the card and tab stay one name', async () => {
+    tabsByWorktree = { wt: [{ id: 'old-tab', agentName: 'Juniper' }] }
+    expect(restartConsole('wt', card({ title: 'Juniper' }))).toBe(true)
+    expect(setTabAgentName).toHaveBeenCalledWith('new-tab', 'Juniper')
+    // Why: renamed before the card points at the new tab and before the old one closes.
+    expect(setTabAgentName.mock.invocationCallOrder[0]).toBeLessThan(
+      updateCard.mock.invocationCallOrder[0]!
+    )
+    await vi.waitFor(() => expect(closeTerminalTab).toHaveBeenCalledWith('old-tab'))
+  })
+
+  it('keeps the name on restartConsoleAndWait too', async () => {
+    tabsByWorktree = { wt: [{ id: 'old-tab', agentName: 'Juniper' }] }
+    await expect(restartConsoleAndWait('wt', card())).resolves.toBe(true)
+    expect(setTabAgentName).toHaveBeenCalledWith('new-tab', 'Juniper')
+  })
+
+  it('leaves the fresh name alone for a tab that never had one', () => {
+    tabsByWorktree = { wt: [{ id: 'old-tab' }] }
+    restartConsole('wt', card())
+    expect(setTabAgentName).not.toHaveBeenCalled()
+  })
 })
 
 describe('restartConsole account handling', () => {

@@ -7,6 +7,7 @@ import { getBoard, type BoardCardOf } from '@/store/slices/board'
 import { BLANK_TERMINAL_OPTION_ID } from '../board-chrome/BoardAgentPicker'
 import { agentOrDefault } from '../board-delivery/console-lifecycle'
 import { duplicateCardDraft, duplicateSpot, nextConsoleTitle } from './board-duplicate-spot'
+import { consoleTitleForTab } from './console-agent-title'
 
 /**
  * Copies the given cards and returns the new ids. Plain cards land beside their
@@ -55,9 +56,13 @@ export function duplicateConsole(
       ...position,
       w: source.w,
       h: source.h,
-      title: nextConsoleTitle(
-        translate('board.agentPicker.terminal', 'Terminal'),
-        cards.flatMap((c) => (c.kind === 'console' ? [c.title] : []))
+      title: consoleTitleForTab(
+        state,
+        launched.tabId,
+        nextConsoleTitle(
+          translate('board.agentPicker.terminal', 'Terminal'),
+          cards.flatMap((c) => (c.kind === 'console' ? [c.title] : []))
+        )
       ),
       tabId: launched.tabId,
       agentKind: BLANK_TERMINAL_OPTION_ID,
@@ -77,9 +82,13 @@ export function duplicateConsole(
     ...position,
     w: source.w,
     h: source.h,
-    title: nextConsoleTitle(
-      getAgentLabel(agent),
-      cards.flatMap((c) => (c.kind === 'console' ? [c.title] : []))
+    title: consoleTitleForTab(
+      state,
+      launched.tabId,
+      nextConsoleTitle(
+        getAgentLabel(agent),
+        cards.flatMap((c) => (c.kind === 'console' ? [c.title] : []))
+      )
     ),
     tabId: launched.tabId,
     agentKind: agent,

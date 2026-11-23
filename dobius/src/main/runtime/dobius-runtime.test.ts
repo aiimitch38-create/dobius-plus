@@ -1521,6 +1521,54 @@ describe('DobiusRuntimeService', () => {
     expect(shown.ptyId).toBe('pty-1')
   })
 
+  it('reports the tab agent name as an additive name field, leaving title alone', async () => {
+    const runtime = new DobiusRuntimeService(store)
+
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, {
+      tabs: [
+        {
+          tabId: 'tab-named',
+          worktreeId: 'repo-1::/tmp/worktree-a',
+          title: 'Fix login bug',
+          agentName: 'Juniper',
+          activeLeafId: 'pane:1',
+          layout: null
+        },
+        {
+          tabId: 'tab-legacy',
+          worktreeId: 'repo-1::/tmp/worktree-a',
+          title: 'Terminal 2',
+          activeLeafId: 'pane:2',
+          layout: null
+        }
+      ],
+      leaves: [
+        {
+          tabId: 'tab-named',
+          worktreeId: 'repo-1::/tmp/worktree-a',
+          leafId: 'pane:1',
+          paneRuntimeId: 1,
+          ptyId: 'pty-named'
+        },
+        {
+          tabId: 'tab-legacy',
+          worktreeId: 'repo-1::/tmp/worktree-a',
+          leafId: 'pane:2',
+          paneRuntimeId: 2,
+          ptyId: 'pty-legacy'
+        }
+      ]
+    })
+
+    const { terminals } = await runtime.listTerminals('branch:feature/foo')
+    const named = terminals.find((terminal) => terminal.tabId === 'tab-named')
+    const legacy = terminals.find((terminal) => terminal.tabId === 'tab-legacy')
+    expect(named).toMatchObject({ name: 'Juniper', title: 'Fix login bug' })
+    expect(legacy).toMatchObject({ title: 'Terminal 2' })
+    expect(legacy && 'name' in legacy).toBe(false)
+  })
+
   it('surfaces stale terminal handles for stranded panes and recovers after same-pane wake', async () => {
     const runtime = new DobiusRuntimeService(store)
     const tabId = 'tab-1'
@@ -7367,6 +7415,128 @@ describe('DobiusRuntimeService', () => {
     expect(writes).toEqual(['notes', '\r'])
   })
 
+  it('names main-spawned terminals before spawn: env, reveal and list agree', async () => {
+    const spawn = vi
+      .fn()
+      .mockResolvedValueOnce({ id: 'pty-shown' })
+      .mockResolvedValueOnce({ id: 'pty-hidden' })
+      .mockResolvedValueOnce({ id: 'pty-preset' })
+    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-shown' })
+    const runtime = new DobiusRuntimeService(store)
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    runtime.setNotifier({
+      worktreesChanged: vi.fn(),
+      reposChanged: vi.fn(),
+      activateWorktree: vi.fn(),
+      createTerminal: vi.fn(),
+      revealTerminalSession,
+      splitTerminal: vi.fn(),
+      renameTerminal: vi.fn(),
+      focusTerminal: vi.fn(),
+      closeTerminal: vi.fn(),
+      sleepWorktree: vi.fn(),
+      terminalFitOverrideChanged: vi.fn(),
+      terminalDriverChanged: vi.fn()
+    })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, {
+      tabs: [
+        {
+          tabId: 'tab-existing',
+          worktreeId: TEST_WORKTREE_ID,
+          title: 'Fix login',
+          agentName: 'Juniper',
+          activeLeafId: null,
+          layout: null
+        }
+      ],
+      leaves: []
+    })
+    const envOf = (call: number): Record<string, string> =>
+      (spawn.mock.calls[call]![0] as { env: Record<string, string> }).env
+
+    await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, { command: 'codex' })
+    await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
+      command: 'codex',
+      presentation: 'background'
+    })
+    await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
+      command: 'codex',
+      presentation: 'background',
+      env: { DOBIUS_AGENT_NAME: 'Cedar' }
+    })
+
+    const shownName = envOf(0).DOBIUS_AGENT_NAME
+    const hiddenName = envOf(1).DOBIUS_AGENT_NAME
+    expect(shownName).toMatch(/^[A-Z][A-Za-z]+$/)
+    expect(hiddenName).toMatch(/^[A-Z][A-Za-z]+$/)
+    expect(new Set([shownName, hiddenName, 'Juniper']).size).toBe(3)
+    expect(envOf(2).DOBIUS_AGENT_NAME).toBe('Cedar')
+    // Why: the renderer adopts the revealed tab with this exact name.
+    expect(revealTerminalSession).toHaveBeenCalledTimes(1)
+    expect(revealTerminalSession.mock.calls[0]?.[1]).toMatchObject({ agentName: shownName })
+
+    const { terminals } = await runtime.listTerminals(`path:${TEST_WORKTREE_PATH}`)
+    const byPty = (ptyId: string) => terminals.find((terminal) => terminal.ptyId === ptyId)
+    expect(byPty('pty-hidden')).toMatchObject({ name: hiddenName })
+    expect(byPty('pty-preset')).toMatchObject({ name: 'Cedar' })
+  })
+
+  it('headless splits inherit the parent name, down a chain of splits, and list it', async () => {
+    const spawn = vi
+      .fn()
+      .mockResolvedValueOnce({ id: 'pty-root' })
+      .mockResolvedValueOnce({ id: 'pty-split-1' })
+      .mockResolvedValueOnce({ id: 'pty-split-2' })
+    const runtime = new DobiusRuntimeService(store)
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    runtime.setNotifier({
+      worktreesChanged: vi.fn(),
+      reposChanged: vi.fn(),
+      activateWorktree: vi.fn(),
+      createTerminal: vi.fn(),
+      revealTerminalSession: vi.fn().mockResolvedValue(undefined),
+      splitTerminal: vi.fn(),
+      renameTerminal: vi.fn(),
+      focusTerminal: vi.fn(),
+      closeTerminal: vi.fn(),
+      sleepWorktree: vi.fn(),
+      terminalFitOverrideChanged: vi.fn(),
+      terminalDriverChanged: vi.fn()
+    })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
+    const envOf = (call: number): Record<string, string> =>
+      (spawn.mock.calls[call]![0] as { env: Record<string, string> }).env
+
+    const { handle } = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
+      presentation: 'background'
+    })
+    const first = await runtime.splitTerminal(handle, { direction: 'vertical' })
+    await runtime.splitTerminal(first.handle, { direction: 'vertical' })
+
+    const rootName = envOf(0).DOBIUS_AGENT_NAME
+    expect(rootName).toMatch(/^[A-Z][A-Za-z]+$/)
+    expect(envOf(1).DOBIUS_AGENT_NAME).toBe(rootName)
+    expect(envOf(2).DOBIUS_AGENT_NAME).toBe(rootName)
+    const { terminals } = await runtime.listTerminals(`path:${TEST_WORKTREE_PATH}`)
+    for (const ptyId of ['pty-root', 'pty-split-1', 'pty-split-2']) {
+      expect(terminals.find((terminal) => terminal.ptyId === ptyId)).toMatchObject({
+        name: rootName
+      })
+    }
+  })
+
   it('creates visible terminal sessions without asking the renderer to focus a tab', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-bg' })
     const createTerminal = vi.fn()
@@ -7432,6 +7602,7 @@ describe('DobiusRuntimeService', () => {
     expect(spawnedEnv.DOBIUS_AGENT_LAUNCH_TOKEN).toMatch(UUID_RE)
     expect(revealTerminalSession).toHaveBeenCalledWith(TEST_WORKTREE_ID, {
       ptyId: 'pty-bg',
+      agentName: expect.any(String),
       title: 'worker',
       launchConfig: {
         agentArgs: '--model gpt-5',
@@ -7911,6 +8082,7 @@ describe('DobiusRuntimeService', () => {
     const spawnedLeafId = spawnedEnv.DOBIUS_PANE_KEY.slice(`${spawnedEnv.DOBIUS_TAB_ID}:`.length)
     expect(revealTerminalSession).toHaveBeenCalledWith(TEST_WORKTREE_ID, {
       ptyId: 'pty-bg',
+      agentName: expect.any(String),
       title: null,
       launchConfig: {
         agentCommand: 'claude --teammate-mode in-process',
@@ -8488,6 +8660,7 @@ describe('DobiusRuntimeService', () => {
       const spawnedLeafId = spawnedEnv.DOBIUS_PANE_KEY.slice(`${spawnedEnv.DOBIUS_TAB_ID}:`.length)
       expect(revealTerminalSession).toHaveBeenCalledWith(TEST_WORKTREE_ID, {
         ptyId: 'pty-bg',
+        agentName: expect.any(String),
         title: null,
         activate: false,
         tabId: spawnedEnv.DOBIUS_TAB_ID,
@@ -9539,6 +9712,7 @@ describe('DobiusRuntimeService', () => {
     // an earlier reveal failure still adopts under the paneKey baked into env.
     expect(revealTerminalSession).toHaveBeenLastCalledWith(TEST_WORKTREE_ID, {
       ptyId: 'pty-bg',
+      agentName: expect.any(String),
       title: 'worker',
       tabId: expect.stringMatching(UUID_RE),
       leafId: expect.stringMatching(UUID_RE)
@@ -9589,6 +9763,7 @@ describe('DobiusRuntimeService', () => {
 
     expect(revealTerminalSession).toHaveBeenCalledWith(TEST_WORKTREE_ID, {
       ptyId: 'pty-bg',
+      agentName: expect.any(String),
       title: 'worker',
       launchConfig: {
         agentCommand: 'codex',
@@ -21546,6 +21721,7 @@ describe('DobiusRuntimeService', () => {
     )
     expect(revealTerminalSession).toHaveBeenLastCalledWith(result.worktree.id, {
       ptyId: 'pty-setup',
+      agentName: expect.any(String),
       title: 'Setup',
       activate: false,
       tabId: setupSpawnEnv.DOBIUS_TAB_ID,
@@ -21774,6 +21950,7 @@ describe('DobiusRuntimeService', () => {
     )
     expect(revealTerminalSession).toHaveBeenCalledWith(result.worktree.id, {
       ptyId: 'pty-created-worktree',
+      agentName: expect.any(String),
       title: null,
       activate: false,
       tabId: initialSpawnEnv.DOBIUS_TAB_ID,

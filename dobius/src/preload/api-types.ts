@@ -2985,6 +2985,7 @@ export type PreloadApi = {
         launchConfig?: SleepingAgentLaunchConfig
         launchToken?: string
         launchAgent?: TuiAgent
+        agentName?: string
         title?: string
         ptyId?: string
         activate?: boolean

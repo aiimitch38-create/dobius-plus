@@ -21,6 +21,7 @@ import {
   createBoardPersistence,
   mergeFirstHydration
 } from './board-persistence'
+import { applyDefaultConsoleTitles } from './default-agent-names'
 
 export * from './board-state'
 export { flushBoardPersistence, resetBoardPersistenceForTest } from './board-persistence'
@@ -142,6 +143,7 @@ export const createBoardSlice: StateCreator<AppState, [], [], BoardSlice> = (set
       }
       const merged = boardsHydrated ? incoming : mergeFirstHydration(boardsByWorktree, incoming)
       persistence.whileHydrating(() => set({ boardsByWorktree: merged, boardsHydrated: true }))
+      applyDefaultConsoleTitles(get())
     },
 
     removeBoards: (worktreeIds) => {

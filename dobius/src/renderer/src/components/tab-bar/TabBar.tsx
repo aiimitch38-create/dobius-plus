@@ -25,7 +25,10 @@ import type {
   WorkspaceVisibleTabType
 } from '../../../../shared/types'
 import type { ProjectExecutionRuntimeResolution } from '../../../../shared/project-execution-runtime'
-import { resolveTerminalTabTitle } from '../../../../shared/tab-title-resolution'
+import {
+  resolveTerminalTabDetectionTitle,
+  resolveTerminalTabTitle
+} from '../../../../shared/tab-title-resolution'
 import { useAppStore } from '../../store'
 import { buildStatusMap } from '../right-sidebar/status-display'
 import type { OpenFile } from '../../store/slices/editor'
@@ -1115,14 +1118,22 @@ function TabBarInner({
                 color: item.type === 'terminal' ? (item.data.color ?? null) : null
               }
               if (item.type === 'terminal') {
+                // Why: `title` stays the raw resolved title so provider/status
+                // detection sees e.g. "π - ~/repo"; the agent name is composed
+                // into the display label only.
                 const terminalTab = {
                   ...item.data,
-                  title: resolveTerminalTabTitle(
+                  title: resolveTerminalTabDetectionTitle(
                     item.data,
                     generatedTabTitlesEnabled,
                     item.data.title
                   )
                 }
+                const terminalTabLabel = resolveTerminalTabTitle(
+                  item.data,
+                  generatedTabTitlesEnabled,
+                  item.data.title
+                )
                 const unifiedTabForItem = unifiedTabByVisibleId.get(item.id)
                 // Carry the agent *identity* (not just "an agent exists") so the
                 // native-chat gate can reject unsupported agents like Grok.
@@ -1148,6 +1159,7 @@ function TabBarInner({
                   <SortableTab
                     key={item.id}
                     tab={terminalTab}
+                    label={terminalTabLabel}
                     unifiedTabId={item.unifiedTabId}
                     groupId={resolvedGroupId}
                     tabCount={orderedItems.length}

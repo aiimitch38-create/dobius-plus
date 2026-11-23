@@ -26,6 +26,7 @@ export function addDobiusWslInteropEnv(env: Record<string, string>): void {
     'DOBIUS_BOARD_ID/u',
     'DOBIUS_BOARD_CARD_ID/u',
     'DOBIUS_BOARD_CARD_TITLE/u',
+    'DOBIUS_AGENT_NAME/u',
     'DOBIUS_AGENT_LAUNCH_TOKEN/u',
     'DOBIUS_AGENT_HOOK_PORT/u',
     'DOBIUS_AGENT_HOOK_TOKEN/u',
