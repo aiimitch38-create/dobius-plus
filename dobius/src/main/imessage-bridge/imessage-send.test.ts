@@ -43,7 +43,8 @@ describe('#16 AppleScript send cannot be altered by the handle or text', () => {
     expect(args[1]).toBe(firstScript)
     expect(args[1]).not.toContain('555')
     expect(args[1]).not.toContain('do shell script')
-    expect(args.slice(2)).toEqual(['--', '+1 (555) 123-4567', hostileText])
+    // The canonical form of the handle that was approved, not the typed spelling.
+    expect(args.slice(2)).toEqual(['--', '+15551234567', hostileText])
   })
 
   it.each([

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { canonicalHandle } from '../text-intake/contact-handle'
 import { assertApprovedImessageHandle } from './approved-handles'
 import { recordOutbound } from './outbound-ring'
 
@@ -66,8 +67,13 @@ export async function sendImessage(handle: string, text: string): Promise<void> 
   if (!handle) {
     throw new Error('selfHandle not configured')
   }
+  // Why first: canonicalHandle trims, so a hostile spelling must be refused as typed.
+  if (!isValidImessageHandle(handle)) {
+    throw new Error('iMessage handle must be a phone number or email address')
+  }
   assertApprovedImessageHandle(handle)
-  await deliverImessage(handle, text)
+  // Why canonical: Messages gets the exact handle that was approved ("2125550123" -> "+12125550123").
+  await deliverImessage(canonicalHandle(handle), text)
 }
 
 /**

@@ -16,6 +16,7 @@ import {
 import { journalComputerDecision } from '../../../computer/action-decision-journal'
 import {
   namesSelf,
+  resultIsSelf,
   PROTECTED_SELF_UI_REASON,
   protectedSelfUiActive,
   targetsSelf
@@ -71,6 +72,10 @@ async function runDecidedAction(
         throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
       }
     })
+    // Why: the result's tree would show the review list; it is dropped, not handed to the agent.
+    if (protectedSelfUiActive() && resultIsSelf(result)) {
+      throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
+    }
     rememberComputerSnapshot(params.app, result)
     await journalComputerDecision({ ...entry, outcome: 'ok' })
     return result
@@ -135,6 +140,10 @@ export const COMPUTER_METHODS: RpcMethod[] = [
           throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
         }
       })
+      // Why after too: a bundle id or pid target is only known to be Dobius+ once the snapshot names it.
+      if (protectedSelfUiActive() && resultIsSelf(result)) {
+        throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
+      }
       rememberComputerSnapshot(params.app, result)
       return result
     }

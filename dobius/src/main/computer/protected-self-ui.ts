@@ -37,7 +37,21 @@ export async function withProtectedSelfUi<T>(key: string, work: () => Promise<T>
 
 /** Sync check used when a queued action finally runs: by name or pid only. */
 export function namesSelf(app: unknown, selfPid: number = process.pid): boolean {
-  return typeof app === 'string' && (SELF_NAME.test(app) || app.trim() === String(selfPid))
+  if (typeof app !== 'string') {
+    return false
+  }
+  // Why: "1234" and "pid:1234" both target a process; a bundle id with "dobius" matches SELF_NAME.
+  const target = app.trim().replace(/^pid:\s*/i, '')
+  return SELF_NAME.test(app) || target === String(selfPid)
+}
+
+/**
+ * True when a returned snapshot is of Dobius+ itself (by pid). Catches a
+ * target named by bundle id or pid that the name check before the run missed.
+ */
+export function resultIsSelf(result: unknown, selfPid: number = process.pid): boolean {
+  const pid = (result as { snapshot?: { app?: { pid?: unknown } } } | null)?.snapshot?.app?.pid
+  return typeof pid === 'number' && pid === selfPid
 }
 
 // Why a name check too: when the window list cannot be read, the target is

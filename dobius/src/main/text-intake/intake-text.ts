@@ -9,9 +9,11 @@ import { redactString } from '../observability/redactor'
 const OPAQUE_RUN = /[A-Za-z0-9+/=_-]{32,}/g
 // A whole auth header: everything after "Authorization:" to the end of its
 // LINE (Digest keeps nonce, response and more after the scheme), or the next
-// line when the first is empty ("Authorization:\n Basic ..."). Run on the raw
-// text, before newlines are flattened, so the line end is still known.
-const AUTH_HEADER = /\b((?:proxy-)?authorization)["']?[ \t]*[:=][ \t]*(?:(?:\r\n?|\n)[ \t]*)?[^\r\n]*/gi
+// line when the first is empty ("Authorization:\n Basic ..."), plus every
+// folded continuation line (one starting with a space or tab). Run on the raw
+// text, before newlines are flattened, so the line ends are still known.
+const AUTH_HEADER =
+  /\b((?:proxy-)?authorization)["']?[ \t]*[:=][ \t]*(?:(?:\r\n?|\n)[ \t]*)?[^\r\n]*(?:(?:\r\n?|\n)[ \t]+[^\r\n]*)*/gi
 // Second pass on the flattened text, in case a line break hid the value from
 // the first: the header's scheme and its token.
 const AUTH_HEADER_TOKEN =

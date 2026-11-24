@@ -119,7 +119,11 @@ describe('P2: redaction takes whole values', () => {
     ['Authorization:\n  Basic dXNlcjpwYXNz', 'dXNlcjpwYXNz'],
     ['Authorization:\r\nBearer abc.def.ghijkl end', 'abc.def'],
     ['"Authorization":\n"Basic dXNlcjpwYXNz"', 'dXNlcjpwYXNz'],
-    ['Proxy-Authorization:   \n\tNegotiate YIIBhgYGKwYBBQUC', 'YIIBhg']
+    ['Proxy-Authorization:   \n\tNegotiate YIIBhgYGKwYBBQUC', 'YIIBhg'],
+    ['Authorization: Basic\n dXNlcjpwYXNz', 'dXNlcjpwYXNz'],
+    ['Authorization: Basic\r\n\tdXNlcjpwYXNz\nnext line', 'dXNlcjpwYXNz'],
+    ['Authorization: Digest username="c", realm="x",\n  nonce="dcd98b7102dd2f0e",\n  response="6629fae49393a053"', '6629fae4'],
+    ['Authorization: Digest username="c",\n\tnonce="dcd98b7102dd2f0e"', 'dcd98b71']
   ])('redacts %s', (raw, leaked) => {
     const clean = cleanIntakeText(raw)
     expect(clean).not.toContain(leaked)
@@ -130,6 +134,9 @@ describe('P2: redaction takes whole values', () => {
     const late = `${'x '.repeat(600)}"password": "correct horse battery staple"`
     expect(cleanIntakeText(late)).not.toContain('horse')
     expect(cleanIntakeText('The author: Sam. Basic plan is fine.')).toBe('The author: Sam. Basic plan is fine.')
+    const folded = cleanIntakeText('Authorization: Basic\n dXNlcjpwYXNz\nsee you at 3')
+    expect(folded).not.toContain('dXNlcjpwYXNz')
+    expect(folded).toMatch(/\[redacted[^\]]*\] see you at 3$/)
   })
 })
 

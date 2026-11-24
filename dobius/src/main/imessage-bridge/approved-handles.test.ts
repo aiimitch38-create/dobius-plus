@@ -41,6 +41,13 @@ describe('approved iMessage handles', () => {
     expect(touchId).toHaveBeenCalledTimes(1)
   })
 
+  it('Messages gets the same canonical handle that was approved', async () => {
+    expect(await approveImessageHandle('2125550123', async () => null)).toBeNull()
+    expect(saved).toEqual(['+12125550123'])
+    await sendImessage('2125550123', 'hi')
+    expect(execFileMock.mock.calls[0]?.[1]?.slice(-2)).toEqual(['+12125550123', 'hi'])
+  })
+
   it('a refused Touch ID approves nothing', async () => {
     expect(await approveImessageHandle('me@x.com', async () => 'Touch ID was not confirmed.')).toMatch(/not saved/)
     expect(saved).toEqual([])
