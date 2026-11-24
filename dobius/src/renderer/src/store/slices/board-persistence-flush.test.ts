@@ -60,11 +60,56 @@ describe('flushBoardPersistence', () => {
     set.mockRejectedValueOnce(new Error('ipc down'))
     await expect(flushBoardPersistence()).rejects.toThrow('ipc down')
     expect(persistence.dirtyIds().has('wt')).toBe(true)
-    expect(persistence.isEcho(state.boardsByWorktree)).toBe(false)
     // No timer is pending any more, but the failed change is written again.
     await flushBoardPersistence()
     expect(set).toHaveBeenCalledTimes(2)
     expect(persistence.dirtyIds().has('wt')).toBe(false)
+    // Only the retry is awaiting its echo; the refused attempt left nothing pending.
+    expect(persistence.isEcho(state.boardsByWorktree)).toBe(true)
+    expect(persistence.isEcho(state.boardsByWorktree)).toBe(false)
+  })
+
+  it('does not resend boards main already holds, so no-op writes leave nothing awaiting an echo', async () => {
+    // Why: main drops a ui.set equal to its state without broadcasting, so a
+    // resent JSON was never echoed and stayed in the pending set for good: one
+    // whole-boards JSON string per board state that was ever rewritten unchanged.
+    const CYCLES = 10_000
+    const boardsAt = (i: number): AppState['boardsByWorktree'] =>
+      ({ wt: { cards: [{ id: 'card-1', kind: 'console', tabId: `tab-${i}` }] } }) as never
+    let current = boardsAt(0)
+    const persistence = createBoardPersistence(
+      () => ({ boardsHydrated: true, boardsByWorktree: current }) as unknown as AppState,
+      api
+    )
+    for (let i = 0; i < CYCLES; i++) {
+      current = boardsAt(i)
+      persistence.schedule(0)
+      await flushBoardPersistence()
+      // main applied the change and rebroadcast it
+      expect(persistence.isEcho(current)).toBe(true)
+      // a later write with identical content (e.g. a card re-set to the same tab)
+      persistence.schedule(0)
+      await flushBoardPersistence()
+    }
+    let stillPending = 0
+    for (let i = 0; i < CYCLES; i++) {
+      if (persistence.isEcho(boardsAt(i))) {
+        stillPending++
+      }
+    }
+    expect(stillPending).toBe(0)
+    expect(set).toHaveBeenCalledTimes(CYCLES)
+  })
+
+  it('writes again once another window has changed the boards main holds', async () => {
+    const persistence = createBoardPersistence(() => state, api)
+    persistence.schedule(0)
+    await flushBoardPersistence()
+    expect(persistence.isEcho(state.boardsByWorktree)).toBe(true)
+    expect(persistence.isEcho({ wt: { cards: [] } })).toBe(false)
+    persistence.schedule(0)
+    await flushBoardPersistence()
+    expect(set).toHaveBeenCalledTimes(2)
   })
 
   it('logs (does not throw) when a debounced write fails', async () => {

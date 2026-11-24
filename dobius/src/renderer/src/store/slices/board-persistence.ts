@@ -15,6 +15,10 @@ let persistDueAt = 0
 // sent JSON would then miss it, mark it "external," and let it clobber a
 // since-moved card back to the older position mid-drag.
 const pendingPersistedJsons = new Set<string>()
+// The boards JSON main is known to hold: the last broadcast seen or write acked.
+// Why: main skips the broadcast for a write equal to what it already has, so a
+// no-op write never echoes and its (whole-boards) JSON would stay pending forever.
+let mainBoardsJson: string | null = null
 // Worktrees changed locally since the last write; a broadcast never overwrites these.
 const dirtyWorktrees = new Set<string>()
 // Set by the live persistence so flushBoardPersistence() can reach it.
@@ -43,6 +47,7 @@ export function resetBoardPersistenceForTest(): void {
   lastWriteFailed = false
   pendingPersistedJsons.clear()
   dirtyWorktrees.clear()
+  mainBoardsJson = null
 }
 
 function toPersistedBoards(boards: Record<string, BoardState>): Record<string, BoardState> {
@@ -82,10 +87,15 @@ export function createBoardPersistence(
     const json = JSON.stringify(payload)
     const written = [...dirtyWorktrees]
     dirtyWorktrees.clear()
+    if (json === mainBoardsJson) {
+      lastWriteFailed = false
+      return
+    }
     pendingPersistedJsons.add(json)
     try {
       await window.api.ui.set({ boardsByWorktree: payload })
       lastWriteFailed = false
+      mainBoardsJson = json
     } catch (error) {
       // Why: main does not have these changes, so a broadcast must still not
       // overwrite them, and the next flush must write them again.
@@ -157,6 +167,7 @@ export function createBoardPersistence(
     schedule,
     isEcho: (raw) => {
       const json = JSON.stringify(raw ?? {})
+      mainBoardsJson = json
       return pendingPersistedJsons.delete(json)
     },
     dirtyIds: () => dirtyWorktrees,
