@@ -83,7 +83,14 @@ export class LibraryStore {
     ).map((row) => row.key)
   }
 
+  /** Text bytes of deleted chunks whose FTS tombstones have not been merged away yet. */
+  tombstoneBytes = 0
+
   private deleteChunks(docId: number): void {
+    const gone = this.db
+      .prepare('SELECT COALESCE(SUM(LENGTH(text)), 0) AS bytes FROM chunks WHERE doc_id = ?')
+      .get(docId) as { bytes: number }
+    this.tombstoneBytes += Number(gone.bytes)
     if (this.fts) {
       // Why: an external-content index needs the old values to remove a row.
       this.db
@@ -227,6 +234,28 @@ export class LibraryStore {
   mergeIndex(pages = 500): void {
     if (this.fts) {
       this.db.prepare("INSERT INTO chunks_fts(chunks_fts, rank) VALUES('merge', ?)").run(pages)
+    }
+  }
+
+  /**
+   * Drop the tombstones that deleted chunks leave in the FTS segments, so
+   * their pages go back to the free list. Bounded: merge rounds stop once the
+   * used pages stop shrinking, or after `maxRounds`.
+   */
+  reclaimIndex(maxRounds = 8, pagesPerRound = 500): void {
+    this.tombstoneBytes = 0
+    if (!this.fts) {
+      return
+    }
+    let before = this.pageBytes()
+    for (let round = 0; round < maxRounds; round += 1) {
+      // Why negative: merge even when a level has fewer segments than usual.
+      this.db.prepare("INSERT INTO chunks_fts(chunks_fts, rank) VALUES('merge', ?)").run(-pagesPerRound)
+      const after = this.pageBytes()
+      if (after >= before) {
+        return
+      }
+      before = after
     }
   }
 

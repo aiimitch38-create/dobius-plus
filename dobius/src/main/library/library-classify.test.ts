@@ -7,10 +7,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DocClass } from './library-classify'
 import { addClaudeSignals, addCodexSignals, classifyDocument, emptySignals } from './library-classify'
 import { COMPACT_AFTER_MS, COMPACT_MAX_CHARS, compactText, nextShrinkStep } from './library-compact'
-import { refreshLibrary } from './library-indexer'
+import { refreshLibrary, walReserve } from './library-indexer'
 import { classCounts, searchLibrary } from './library-search'
 import { LibraryStore } from './library-store'
-import type { LibraryDocument, LibrarySource } from './library-types'
+import type { LibraryCandidate, LibraryDocument, LibrarySource } from './library-types'
 
 const FAKE_KEY = `sk-proj-${'Q1w2E3r4'.repeat(5)}`
 
@@ -145,6 +145,56 @@ describe('class order and compaction in the store', () => {
       'evict done-old',
       'evict note-old'
     ])
+  })
+
+  const fast = { yieldNow: () => Promise.resolve(), freeBytes: async () => 1e12 }
+  const words = (seed: number, count: number): string =>
+    Array.from({ length: count }, (_, i) => `w${seed}x${i}`).join(' ')
+
+  it('reclaims FTS space after compacting, so the cap holds (was 926 kB against 400 kB)', async () => {
+    const cap = 400 * 1024
+    const docs = Array.from({ length: 20 }, (_, n) => ({
+      key: `work-${n}`,
+      source: 'claude' as const,
+      path: `/work-${n}.jsonl`,
+      // Recent, so nothing is compacted at read time; only the cap compacts.
+      mtimeMs: Date.now() - 60_000 + n,
+      size: 1,
+      load: async () =>
+        transcript([`User: Fix part ${n}`, `Claude: ${words(n, 4000)}`, 'Claude: Fixed and committed.'], {
+          toolCalls: 3,
+          edits: 1,
+          gitWrites: 1
+        })
+    }))
+    const ingesters = [{ source: 'claude' as const, list: async () => docs }]
+    await refreshLibrary(store, ingesters, { capBytes: 400 * 1024 * 1024, ...fast })
+    // Same files, now over a small cap: only the shrink runs.
+    const report = await refreshLibrary(store, ingesters, { capBytes: cap, ...fast })
+    expect(report.unchanged).toBe(20)
+    expect(store.pageBytes()).toBeLessThanOrEqual(cap - walReserve(cap))
+    // Compacting alone should make room: done work outlives the space it gave back.
+    expect(classCounts(store).find((entry) => entry.kind === 'work-done')?.documents).toBeGreaterThan(0)
+  })
+
+  it('reads an older small note when it still fits, after a larger newer one was evicted', async () => {
+    const cap = 400 * 1024
+    const note = (key: string, mtimeMs: number, text: string): LibraryCandidate => ({
+      key,
+      source: 'project',
+      path: `/${key}.md`,
+      mtimeMs,
+      size: text.length,
+      load: async () => ({ project: 'P', title: key, sections: [{ text, at: mtimeMs }] })
+    })
+    const candidates = [
+      note('mid', 2000, words(1, 20_000)),
+      note('big', 3000, words(2, 60_000)),
+      note('small', 1000, 'The small old note about the blue accent.')
+    ]
+    await refreshLibrary(store, [{ source: 'project', list: async () => candidates }], { capBytes: cap, ...fast })
+    expect(store.getDoc('small')?.evicted).toBe(false)
+    expect(searchLibrary(store, { query: 'blue accent' }).map((hit) => hit.title)).toEqual(['small'])
   })
 
   it('stores old work compacted and still searchable, and counts each class', async () => {

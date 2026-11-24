@@ -4,7 +4,6 @@
 // thread; it still yields between batches so a stop request is seen quickly.
 import { statfs } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import type { DocClass } from './library-classify'
 import { classifyDocument } from './library-classify'
 import { cleanDocument } from './library-clean'
 import { agedWorkDocs, COMPACT_AFTER_MS, compactStoredDoc, compactText, nextShrinkStep } from './library-compact'
@@ -62,36 +61,39 @@ export function walReserve(capBytes: number): number {
 }
 
 /**
- * Compact or evict, in the order of nextShrinkStep, until under the cap. True
- * when `justAdded` itself was evicted.
+ * Compact or evict, in the order of nextShrinkStep, until under the cap. Why
+ * reclaim before evicting: deleted chunks stay in the FTS segments as
+ * tombstones until a merge, so right after compacting the pages still look
+ * full; without it a fixture evicted every compacted doc and ended at 1 MB
+ * against a 400 kB cap, where the reclaimed file needed 53 kB.
  */
-function enforceCap(
-  store: LibraryStore,
-  capBytes: number,
-  justAdded: number,
-  report: LibraryRefreshReport
-): boolean {
+function enforceCap(store: LibraryStore, capBytes: number, report: LibraryRefreshReport): void {
   const pageCap = capBytes - walReserve(capBytes)
-  const shrunkBefore = report.evicted + report.compacted
-  let removedJustAdded = false
+  // Why a threshold: a reclaim per eviction made a 60 MiB pass run past 10 minutes.
+  const reclaimAt = Math.max(64 * 1024, Math.floor(capBytes / 50))
+  let shrunk = false
   while (store.pageBytes() > pageCap) {
     const step = nextShrinkStep(store)
-    if (!step) {
-      break
+    if (!step || (step.action === 'evict' && store.tombstoneBytes >= reclaimAt)) {
+      if (store.tombstoneBytes === 0) {
+        break
+      }
+      store.reclaimIndex()
+      continue
     }
     if (step.action === 'compact') {
       compactStoredDoc(store, step.id)
       report.compacted += 1
+      shrunk = true
       continue
     }
     store.evictDoc(step.id)
     report.evicted += 1
-    removedJustAdded ||= step.id === justAdded
+    shrunk = true
   }
-  if (report.evicted + report.compacted > shrunkBefore) {
+  if (shrunk) {
     store.mergeIndex()
   }
-  return removedJustAdded
 }
 
 function emptyReport(started: number): LibraryRefreshReport {
@@ -136,7 +138,6 @@ type Pass = {
   report: LibraryRefreshReport
   yieldNow: () => Promise<void>
   lowDisk: (needed: number) => Promise<boolean>
-  floorMs: number
 }
 
 /** Index one candidate. False means stop the pass (low disk or disk full). */
@@ -148,12 +149,6 @@ async function indexOne(pass: Pass, candidate: LibraryCandidate): Promise<boolea
     path: scrubText(candidate.path).text,
     mtimeMs: candidate.mtimeMs,
     size: candidate.size
-  }
-  if (candidate.mtimeMs <= pass.floorMs) {
-    // ponytail: an unread marker has no class; it holds no text, so the guess only shows in counts.
-    const kind: DocClass = candidate.source === 'project' || candidate.source === 'obsidian' ? 'reference' : 'chat'
-    store.putDoc({ ...meta, project: null, title: '', kind }, [], true)
-    return true
   }
   const loaded = await candidate.load()
   const kind = loaded ? classifyDocument(candidate.source, loaded) : 'chat'
@@ -178,12 +173,9 @@ async function indexOne(pass: Pass, candidate: LibraryCandidate): Promise<boolea
   store.finishDoc(docId, candidate.mtimeMs)
   store.checkpointPassive()
   report.indexed += 1
-  // Why only reference: reference notes go last, so once a new one is evicted
-  // everything older, of every class, would go the same way; the rest is only
-  // marked, never read. An evicted chat says nothing about older notes.
-  if (enforceCap(store, pass.options.capBytes, docId, report) && kind === 'reference') {
-    pass.floorMs = candidate.mtimeMs
-  }
+  // Why every document is read: a smaller older one may still fit after a
+  // bigger newer one was evicted, so only an evaluated document is marked.
+  enforceCap(store, pass.options.capBytes, report)
   return true
 }
 
@@ -206,7 +198,6 @@ export async function refreshLibrary(
     options,
     report,
     yieldNow: options.yieldNow ?? defaultYield,
-    floorMs: -Infinity,
     lowDisk: async (needed) => {
       if ((await freeBytes()) - needed >= minFree) {
         return false
@@ -252,7 +243,7 @@ export async function refreshLibrary(
     report.errors.push(`compacting old work: ${errorText(error)}`)
   }
   // Why once more: compaction and the last markers can leave the file over the cap.
-  enforceCap(store, options.capBytes, -1, report)
+  enforceCap(store, options.capBytes, report)
   return finish(store, report, started, listing)
 }
 
