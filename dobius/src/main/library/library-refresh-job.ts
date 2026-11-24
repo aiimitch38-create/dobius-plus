@@ -18,13 +18,15 @@ export type LibraryWorkerReply =
 
 export async function runRefreshJob(
   job: LibraryRefreshJob,
-  shouldStop: () => boolean
+  shouldStop: () => boolean,
+  freeBytes?: () => Promise<number>
 ): Promise<LibraryRefreshReport> {
   const store = new LibraryStore(job.dbPath)
   try {
     return await refreshLibrary(store, libraryIngesters(job.roots), {
       capBytes: job.capBytes,
-      shouldStop
+      shouldStop,
+      freeBytes
     })
   } finally {
     store.close()

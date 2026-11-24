@@ -165,7 +165,7 @@ describe('refresh job and service', () => {
     const roots = { ...defaultLibraryRoots(userData, join(dir, 'home')) }
     mkdirSync(dirname(join(roots.obsidianVault, 'Note.md')), { recursive: true })
     writeFileSync(join(roots.obsidianVault, 'Note.md'), '# Gallery\nThe epoxy gallery page.')
-    const report = await runRefreshJob({ dbPath: join(dir, 'job.sqlite'), roots, capBytes: 1e9 }, () => false)
+    const report = await runRefreshJob({ dbPath: join(dir, 'job.sqlite'), roots, capBytes: 1e9 }, () => false, plenty.freeBytes)
     expect(report.indexed).toBe(1)
     const reader = new LibraryStore(join(dir, 'job.sqlite'))
     expect(searchLibrary(reader, { query: 'gallery' })[0].source).toBe('obsidian')

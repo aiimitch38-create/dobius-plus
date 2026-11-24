@@ -9,7 +9,8 @@ import type { LibraryCandidate, LibraryIngester, LibrarySource } from './library
 
 let dir: string
 let store: LibraryStore
-const noYield = { yieldNow: () => Promise.resolve() }
+// Why freeBytes: the real disk may be under the 2 GB floor, which stops every pass.
+const noYield = { yieldNow: () => Promise.resolve(), freeBytes: async () => 1e12 }
 const FAKE_KEY = `sk-proj-${'Q7w8E9r0'.repeat(5)}`
 
 beforeEach(() => {
