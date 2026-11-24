@@ -159,3 +159,20 @@ describe('board writes in flight', () => {
     expect(set).toHaveBeenLastCalledWith({ boardsByWorktree: boardsA })
   })
 })
+
+describe('flushBoardPersistence with a write in flight', () => {
+  it('rejects when main refuses the write still in flight', async () => {
+    const persistence = createBoardPersistence(() => state, api)
+    let refuse: (error: Error) => void = () => {}
+    set.mockImplementationOnce(
+      () => new Promise<void>((_resolve, reject) => (refuse = reject))
+    )
+    persistence.schedule(0)
+    await vi.advanceTimersByTimeAsync(0)
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const flushed = flushBoardPersistence()
+    refuse(new Error('ipc down'))
+    await expect(flushed).rejects.toThrow('ipc down')
+    error.mockRestore()
+  })
+})

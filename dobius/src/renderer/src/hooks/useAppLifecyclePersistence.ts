@@ -7,7 +7,11 @@ import {
 } from './useIpcEvents'
 import { getSystemPrefersDarkSnapshot } from '../components/terminal-pane/use-system-prefers-dark'
 import { shutdownBufferCaptures } from '../components/terminal-pane/shutdown-buffer-captures'
-import { dispatchWindowCloseRequest } from '../components/window-close-request-coordinator'
+import {
+  dispatchWindowCloseRequest,
+  registerWindowCloseGuard
+} from '../components/window-close-request-coordinator'
+import { flushBoardsBeforeClose } from '@/store/slices/board-persistence-close-guard'
 import {
   canSkipRuntimeMobileSessionSyncKeyBuild,
   getRuntimeMobileSessionSyncKey,
@@ -199,4 +203,8 @@ export function useAppLifecyclePersistence(
   useEffect(() => {
     return window.api.ui.onWindowCloseRequested(dispatchWindowCloseRequest)
   }, [])
+
+  // Why: a board write queued behind an in-flight one is not in the sync
+  // shutdown save, so land it before the window confirms the close.
+  useEffect(() => registerWindowCloseGuard(() => flushBoardsBeforeClose()), [])
 }

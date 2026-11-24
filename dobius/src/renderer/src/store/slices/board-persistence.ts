@@ -80,6 +80,8 @@ export function createBoardPersistence(
   // never races a write still in flight (main holds A, B in flight, a revert
   // to A would otherwise be skipped and main would keep B).
   let writeChain: Promise<void> | null = null
+  // The newest write, unswallowed, so a flush can report main refusing it.
+  let latestWrite: Promise<void> | null = null
 
   const writeNow = async (): Promise<void> => {
     const { boardsHydrated, boardsByWorktree } = get()
@@ -121,9 +123,11 @@ export function createBoardPersistence(
       () => undefined
     )
     writeChain = settled
+    latestWrite = run
     void settled.then(() => {
       if (writeChain === settled) {
         writeChain = null
+        latestWrite = null
       }
     })
     return run
@@ -146,7 +150,8 @@ export function createBoardPersistence(
 
   flushPending = async () => {
     if (!persistTimer && !lastWriteFailed) {
-      return writeChain ?? undefined
+      // Why: rejects when main refuses the write still in flight.
+      return latestWrite ?? undefined
     }
     if (persistTimer) {
       clearTimeout(persistTimer)
