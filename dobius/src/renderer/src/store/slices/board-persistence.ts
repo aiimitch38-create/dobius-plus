@@ -76,9 +76,12 @@ export function createBoardPersistence(
   whileHydrating: (fn: () => void) => void
 } {
   let hydrating = false
+  // Why: writes run one at a time, so the comparison with mainBoardsJson below
+  // never races a write still in flight (main holds A, B in flight, a revert
+  // to A would otherwise be skipped and main would keep B).
+  let writeChain: Promise<void> | null = null
 
-  const write = async (): Promise<void> => {
-    persistTimer = null
+  const writeNow = async (): Promise<void> => {
     const { boardsHydrated, boardsByWorktree } = get()
     if (!boardsHydrated) {
       return
@@ -108,6 +111,24 @@ export function createBoardPersistence(
     }
   }
 
+  const write = (): Promise<void> => {
+    persistTimer = null
+    // Why: start at once when idle, so ui.set goes out in the same tick as before.
+    const run = writeChain ? writeChain.then(writeNow) : writeNow()
+    // Why: the caller of run gets (and reports) its rejection; the chain only orders writes.
+    const settled = run.then(
+      () => undefined,
+      () => undefined
+    )
+    writeChain = settled
+    void settled.then(() => {
+      if (writeChain === settled) {
+        writeChain = null
+      }
+    })
+    return run
+  }
+
   // Why: one debounced write per burst; writes wait for hydration so an empty
   // boot state never overwrites the saved boards.
   const schedule = (delayMs: number): void => {
@@ -125,7 +146,7 @@ export function createBoardPersistence(
 
   flushPending = async () => {
     if (!persistTimer && !lastWriteFailed) {
-      return
+      return writeChain ?? undefined
     }
     if (persistTimer) {
       clearTimeout(persistTimer)

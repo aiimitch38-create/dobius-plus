@@ -122,3 +122,40 @@ describe('flushBoardPersistence', () => {
     error.mockRestore()
   })
 })
+
+describe('board writes in flight', () => {
+  it('sends a revert to the confirmed boards after an in-flight write of other boards lands', async () => {
+    const boardsA = { wt: { cards: [{ id: 'card-1', kind: 'console', tabId: 'a' }] } }
+    const boardsB = { wt: { cards: [{ id: 'card-1', kind: 'console', tabId: 'b' }] } }
+    let current: unknown = boardsA
+    const persistence = createBoardPersistence(
+      () => ({ boardsHydrated: true, boardsByWorktree: current }) as unknown as AppState,
+      api
+    )
+    // main holds A
+    persistence.schedule(0)
+    await flushBoardPersistence()
+    expect(persistence.isEcho(boardsA)).toBe(true)
+
+    // B goes out and stays in flight
+    let landB: () => void = () => {}
+    set.mockImplementationOnce(() => new Promise<void>((resolve) => (landB = resolve)))
+    current = boardsB
+    persistence.schedule(0)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(set).toHaveBeenLastCalledWith({ boardsByWorktree: boardsB })
+
+    // the user reverts to A while B is still in flight
+    current = boardsA
+    persistence.schedule(0)
+    await vi.advanceTimersByTimeAsync(0)
+
+    // B lands and main rebroadcasts it
+    expect(persistence.isEcho(boardsB)).toBe(true)
+    landB()
+    await flushBoardPersistence()
+
+    expect(set).toHaveBeenCalledTimes(3)
+    expect(set).toHaveBeenLastCalledWith({ boardsByWorktree: boardsA })
+  })
+})
