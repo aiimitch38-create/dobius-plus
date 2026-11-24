@@ -104,7 +104,8 @@ describe('URL passwords in any scheme', () => {
     ['the same in an https URL', (p: string) => `https://app:ab@${p}@db.internal/app`, 'https://[redacted]@db.internal/app'],
     ['an encoded "@"', (p: string) => `redis://app:ab%40${p}@db.internal/0`, 'redis://[redacted]@db.internal/0'],
     ['a token with no user', (p: string) => `https://tok${p}@github.com/a/b.git`, 'https://[redacted]@github.com/a/b.git'],
-    ['an uppercase scheme', (p: string) => `POSTGRES://app:${p}@db.internal/app`, 'POSTGRES://[redacted]@db.internal/app']
+    ['an uppercase scheme', (p: string) => `POSTGRES://app:${p}@db.internal/app`, 'POSTGRES://[redacted]@db.internal/app'],
+    ['a password with "#" and "?"', (p: string) => `postgres://app:a#b?${p}@db.internal/app`, 'postgres://[redacted]@db.internal/app']
   ])('redacts %s whole', (_name, url, want) => {
     const text = `Connect with ${url(pass)} today.`
     for (const out of [scrubText(text).text, scrubSnippet(text, 300)]) {

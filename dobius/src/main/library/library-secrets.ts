@@ -62,8 +62,9 @@ export function isSecretOrSkippedPath(path: string): boolean {
 
 // Why on top of the redactor: its userinfo rule knows only http(s), and a
 // database or broker URL (postgres://user:pass@host) carries a password the same way.
-// Why greedy to the LAST "@" before the path: a password may itself hold an "@".
-const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]+@/gi
+// Why greedy to the LAST "@" before the path, through "?" and "#": a password may
+// itself hold "@", "?" or "#". Over-redacting "x.com?q=a@b" is the safe side.
+const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/]+@/gi
 
 function redact(text: string): string {
   return redactString(text).replace(URL_USERINFO, '$1[redacted]@')
