@@ -58,6 +58,7 @@ import { logStartupMilestone } from '../startup/startup-diagnostics'
 import { registerTearOffWindowHandlers } from './tear-off-window'
 import { registerFloatingPhoneWindowHandlers } from './floating-phone-window'
 import { registerJarvisIpcHandlers } from '../jarvis/jarvis-ipc'
+import { flushBoardsBeforeExit } from './flush-renderer-boards'
 
 const UPDATER_SETUP_FALLBACK_MS = 15_000
 
@@ -200,7 +201,10 @@ export function attachMainWindowServices(
       getLastUpdateCheckAt: () => store.getUI().lastUpdateCheckAt,
       onBeforeQuit: async () => {
         try {
-          await options?.onBeforeUpdateQuit?.()
+          // Why: update install drops the window close listeners, so the
+          // renderer's board close guard never runs. In parallel so the board
+          // wait does not eat the 2.5 s pre-quit budget of the other cleanup.
+          await Promise.all([flushBoardsBeforeExit(mainWindow), options?.onBeforeUpdateQuit?.()])
         } finally {
           store.flush()
         }

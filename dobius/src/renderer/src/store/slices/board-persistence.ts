@@ -6,6 +6,9 @@ export const PERSIST_DEBOUNCE_MS = 300
 // Why: pan/zoom changes only the camera; wait until the gesture has clearly
 // settled before rewriting the whole boards map.
 export const VIEWPORT_PERSIST_SETTLE_MS = 1_000
+// ponytail: 10 s before a ui.set that never settles counts as refused, so it
+// cannot stall every later board write behind it.
+export const BOARD_WRITE_TIMEOUT_MS = 10_000
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 let persistDueAt = 0
@@ -48,6 +51,14 @@ export function resetBoardPersistenceForTest(): void {
   pendingPersistedJsons.clear()
   dirtyWorktrees.clear()
   mainBoardsJson = null
+}
+
+function settleWithin(promise: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`board write timed out after ${ms} ms`)), ms)
+  })
+  return Promise.race([promise.then(() => undefined), timedOut]).finally(() => clearTimeout(timer))
 }
 
 function toPersistedBoards(boards: Record<string, BoardState>): Record<string, BoardState> {
@@ -98,7 +109,7 @@ export function createBoardPersistence(
     }
     pendingPersistedJsons.add(json)
     try {
-      await window.api.ui.set({ boardsByWorktree: payload })
+      await settleWithin(window.api.ui.set({ boardsByWorktree: payload }), BOARD_WRITE_TIMEOUT_MS)
       lastWriteFailed = false
       mainBoardsJson = json
     } catch (error) {

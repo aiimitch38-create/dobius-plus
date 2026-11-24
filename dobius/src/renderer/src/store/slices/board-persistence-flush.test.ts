@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StoreApi } from 'zustand'
 import type { AppState } from '../types'
 import {
+  BOARD_WRITE_TIMEOUT_MS,
   createBoardPersistence,
   flushBoardPersistence,
+  PERSIST_DEBOUNCE_MS,
   resetBoardPersistenceForTest
 } from './board-persistence'
 
@@ -173,6 +175,74 @@ describe('flushBoardPersistence with a write in flight', () => {
     const flushed = flushBoardPersistence()
     refuse(new Error('ipc down'))
     await expect(flushed).rejects.toThrow('ipc down')
+    error.mockRestore()
+  })
+})
+
+describe('a board write that never settles', () => {
+  it('times out and lets later writes and flushes complete', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const boardsAt = (tabId: string): unknown => ({
+      wt: { cards: [{ id: 'card-1', kind: 'console', tabId }] }
+    })
+    let current = boardsAt('a')
+    const listeners: ((s: AppState, prev: AppState) => void)[] = []
+    const subscribing = {
+      subscribe: (listener: (s: AppState, prev: AppState) => void) => {
+        listeners.push(listener)
+        return () => {}
+      }
+    } as unknown as Pick<StoreApi<AppState>, 'subscribe'>
+    const persistence = createBoardPersistence(
+      () => ({ boardsHydrated: true, boardsByWorktree: current }) as unknown as AppState,
+      subscribing
+    )
+    set.mockImplementationOnce(() => new Promise<void>(() => {}))
+    listeners[0](
+      { boardsHydrated: true, boardsByWorktree: current } as unknown as AppState,
+      { boardsHydrated: true, boardsByWorktree: {} } as unknown as AppState
+    )
+    await vi.advanceTimersByTimeAsync(PERSIST_DEBOUNCE_MS)
+    expect(set).toHaveBeenCalledTimes(1)
+
+    // a change queued behind the hung write
+    current = boardsAt('b')
+    persistence.schedule(0)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(set).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(BOARD_WRITE_TIMEOUT_MS)
+    // the hung write timed out (logged as refused) and the queued one went out
+    expect(error).toHaveBeenCalled()
+    expect(set).toHaveBeenCalledTimes(2)
+    expect(set).toHaveBeenLastCalledWith({ boardsByWorktree: boardsAt('b') })
+
+    current = boardsAt('c')
+    persistence.schedule(0)
+    await flushBoardPersistence()
+    expect(set).toHaveBeenLastCalledWith({ boardsByWorktree: boardsAt('c') })
+    error.mockRestore()
+  })
+})
+
+describe('a lone board write that never settles', () => {
+  it('stays dirty after the timeout and the next flush writes it again', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const listeners: ((s: AppState, prev: AppState) => void)[] = []
+    const subscribing = {
+      subscribe: (listener: (s: AppState, prev: AppState) => void) => {
+        listeners.push(listener)
+        return () => {}
+      }
+    } as unknown as Pick<StoreApi<AppState>, 'subscribe'>
+    const persistence = createBoardPersistence(() => state, subscribing)
+    set.mockImplementationOnce(() => new Promise<void>(() => {}))
+    listeners[0](state, { ...state, boardsByWorktree: {} } as AppState)
+    await vi.advanceTimersByTimeAsync(PERSIST_DEBOUNCE_MS + BOARD_WRITE_TIMEOUT_MS)
+    expect(persistence.dirtyIds().has('wt')).toBe(true)
+    await flushBoardPersistence()
+    expect(set).toHaveBeenCalledTimes(2)
+    expect(persistence.dirtyIds().has('wt')).toBe(false)
     error.mockRestore()
   })
 })

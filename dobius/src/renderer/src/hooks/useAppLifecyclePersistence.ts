@@ -207,4 +207,12 @@ export function useAppLifecyclePersistence(
   // Why: a board write queued behind an in-flight one is not in the sync
   // shutdown save, so land it before the window confirms the close.
   useEffect(() => registerWindowCloseGuard(() => flushBoardsBeforeClose()), [])
+  // Why: update install and relaunch skip the close flow, so main asks directly.
+  useEffect(
+    () =>
+      window.api.ui.onBoardsFlushRequested?.(async () => {
+        await flushBoardsBeforeClose()
+      }),
+    []
+  )
 }

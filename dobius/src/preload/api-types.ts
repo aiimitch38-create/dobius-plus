@@ -3087,6 +3087,7 @@ export type PreloadApi = {
     popupMenu: () => void
     onWindowCloseRequested: (callback: (data: { isQuitting: boolean }) => void) => () => void
     confirmWindowClose: () => void
+    onBoardsFlushRequested: (callback: () => Promise<void>) => () => void
   }
   runtime: {
     syncWindowGraph: (graph: RuntimeSyncWindowGraph) => Promise<RuntimeSyncWindowGraphResult>
