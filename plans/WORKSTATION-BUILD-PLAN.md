@@ -121,7 +121,7 @@ The table below is superseded by this list where they differ.
 | ID | Task | Source | Size |
 |---|---|---|---|
 | 1.1 | Port "Report a problem" (status bar, plus send through a linked teammate) | origin/main #18, #21, 2026-11-18 commits | M |
-| 1.2 | Port Phone mode: drive a tab's Claude from the phone, with question and permission cards | origin/main #12, phone question-card commits | L |
+| 1.2 | DROPPED 2026-11-24 (Carson: "I already have this in my app"): Port Phone mode: drive a tab's Claude from the phone, with question and permission cards | origin/main #12, phone question-card commits | L |
 | 1.3 | Port the iPhone share sheet | origin/main 2026-11-19 | M |
 | 1.4 | Port Team linking over Tailscale, plus Windows support | origin/feat/team-cross-tailnet, feat/team-cli-windows | L |
 | 1.5 | Port Chat improvements: fold older turns, answer question cards in Chat | origin/main #24, #26 | M |
