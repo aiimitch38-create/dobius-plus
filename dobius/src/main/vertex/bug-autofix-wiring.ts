@@ -14,7 +14,7 @@ import { BUG_FIX_EVIDENCE_DIR } from '../../shared/bug-fix-agent-profile'
 import { isInsideAttachmentsRoot, vertexAttachmentsRoot } from './vertex-attachment-paths'
 import { vertexTaskStore } from './vertex-task-store'
 
-function projectIdOf(repoPath: string): string | null {
+export function projectIdOf(repoPath: string): string | null {
   try {
     return readLeadConfig(repoPath).projectId
   } catch (error) {
@@ -28,8 +28,37 @@ const LIVENESS_TERMINAL_LIMIT = 100
 
 type WorktreeLike = { id: string; path: string; branch?: string; displayName?: string }
 
-function toFound(worktree: WorktreeLike): BugAutoFixWorktree {
+export function toFound(worktree: WorktreeLike): BugAutoFixWorktree {
   return { worktreeId: worktree.id, worktreePath: worktree.path, branch: worktree.branch }
+}
+
+/** The managed workspace with this folder name: null only when git answered
+ *  that it does not exist, 'unknown' when the list could not be read. */
+export async function findManagedWorktreeByName(
+  runtime: DobiusRuntimeService,
+  repoId: string,
+  name: string,
+  /** The kitchen matches the folder name only; a display name anyone can set never counts. */
+  options: { exactFolderOnly?: boolean } = {}
+): Promise<BugAutoFixWorktree | null | 'unknown'> {
+  let listed: Awaited<ReturnType<DobiusRuntimeService['listDetectedManagedWorktrees']>>
+  try {
+    // Why this scan: it says whether git answered (authoritative) or it
+    // fell back to metadata; the cached list turns a scan timeout into [].
+    listed = await runtime.listDetectedManagedWorktrees(repoId)
+  } catch (error) {
+    console.warn('[bug-autofix] workspace list unavailable:', error)
+    return 'unknown'
+  }
+  const match = (listed.worktrees as WorktreeLike[]).find(
+    (worktree) =>
+      basename(worktree.path) === name ||
+      (!options.exactFolderOnly && worktree.displayName === name)
+  )
+  if (match) {
+    return toFound(match)
+  }
+  return listed.authoritative ? null : 'unknown'
 }
 
 /** Copies the card's screenshots into the new workspace, so the agent works
@@ -112,24 +141,7 @@ export function wireBugAutoFix(store: Store, runtime: DobiusRuntimeService): voi
       }
       return false
     },
-    findWorktree: async (repoId, name) => {
-      let listed: Awaited<ReturnType<DobiusRuntimeService['listDetectedManagedWorktrees']>>
-      try {
-        // Why this scan: it says whether git answered (authoritative) or it
-        // fell back to metadata; the cached list turns a scan timeout into [].
-        listed = await runtime.listDetectedManagedWorktrees(repoId)
-      } catch (error) {
-        console.warn('[bug-autofix] workspace list unavailable:', error)
-        return 'unknown'
-      }
-      const match = (listed.worktrees as WorktreeLike[]).find(
-        (worktree) => basename(worktree.path) === name || worktree.displayName === name
-      )
-      if (match) {
-        return toFound(match)
-      }
-      return listed.authoritative ? null : 'unknown'
-    },
+    findWorktree: (repoId, name) => findManagedWorktreeByName(runtime, repoId, name),
     createWorktree: async ({ repoId, name, prompt, comment, screenshots }) => {
       const result = await runtime.createManagedWorktree({
         repoSelector: repoId,

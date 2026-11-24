@@ -17,6 +17,7 @@ import {
 } from '../vertex/vertex-task-attachments'
 import { withClaimingWindow, withLostClaimCheck } from '../vertex/vertex-dispatch-recovery'
 import { onVertexTaskCreated } from '../vertex/bug-autofix'
+import { registerVertexTaskKitchenHandler } from './vertex-task-kitchen'
 import { isRegisteredRendererWebContents } from '../window/renderer-window-registry'
 import {
   isVertexTaskStatus,
@@ -98,11 +99,15 @@ export function registerVertexTaskHandlers(): void {
       // Why: autoFix is main's "already started" mark; a renderer must not clear it.
       delete args.patch.autoFix
       delete args.patch.provenance
+      // Why: only vertexTasks:setKitchen may send a card to the kitchen.
+      delete args.patch.kitchen
       return withClaimingWindow(event.sender.id, () =>
         vertexTaskStore.update(args.taskId, args.patch),
       )
     },
   )
+
+  registerVertexTaskKitchenHandler(isOperatorSender)
 
   // Why: a window's board dispatcher calls this on every poll. Claims it made
   // before a reload, or whose settle write failed, have no promise left to

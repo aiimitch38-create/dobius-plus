@@ -30,6 +30,10 @@ export const BUG_FIX_PROFILE_FLAG = '--restricted'
 /** Worktree folder names start with this (see bugFixWorktreeName in main). */
 export const BUG_FIX_WORKTREE_PREFIX = 'autofix-'
 
+/** Kitchen cooks (main/vertex/kitchen.ts) run under this same profile; their
+ *  workspace folders start with this. */
+export const KITCHEN_WORKTREE_PREFIX = 'kitchen-cook-'
+
 /** The card's screenshots are copied here, inside the fix agent's workspace,
  *  so the agent never gets access to the originals. */
 export const BUG_FIX_EVIDENCE_DIR = '.dobius/bug-report'
@@ -99,11 +103,12 @@ export function isBugFixProfileLaunch(commandOrArgs: string | null | undefined):
   return /(^|\s)['"]?--restricted['"]?(?=\s|$)/.test(commandOrArgs ?? '')
 }
 
-/** True for a fix agent's workspace folder. The folder name never changes,
- *  unlike a display name or comment, so a restart can always recognise it. */
+/** True for a fix agent's (or kitchen cook's) workspace folder. The folder
+ *  name never changes, unlike a display name or comment, so a restart can
+ *  always recognise it. */
 export function isBugFixWorktreePath(worktreePath: string | null | undefined): boolean {
   const name = (worktreePath ?? '').split(/[\\/]/).filter(Boolean).at(-1) ?? ''
-  return name.startsWith(BUG_FIX_WORKTREE_PREFIX)
+  return name.startsWith(BUG_FIX_WORKTREE_PREFIX) || name.startsWith(KITCHEN_WORKTREE_PREFIX)
 }
 
 /** Launch inputs that replace Settings and captured ones whenever Claude

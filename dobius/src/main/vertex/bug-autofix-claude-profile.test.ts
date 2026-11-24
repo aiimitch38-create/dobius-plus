@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import {
+  bugFixClaudeArgs,
+  bugFixLaunchOverrides,
+  isBugFixWorktreePath
+} from '../../shared/bug-fix-agent-profile'
 
 import {
   BUG_FIX_AGENT,
@@ -67,5 +72,15 @@ describe('bug fix agent launch profile', () => {
 
   it('never gives the agent an extra folder outside its workspace', () => {
     expect(startup.command).not.toContain('--add-dir')
+  })
+
+  it('keeps a kitchen cook on the restricted profile on every relaunch path', () => {
+    const cook = bugFixLaunchOverrides('claude', '/repo/kitchen-cook-add-tooltip-abc12345')
+    expect(cook?.agentArgs).toBe(bugFixClaudeArgs())
+    expect(cook?.agentArgs).toContain('--restricted')
+    expect(cook?.agentArgs).not.toContain('dangerously')
+    expect(cook?.agentEnv).toEqual({})
+    expect(isBugFixWorktreePath('/repo/kitchen-cook-x/')).toBe(true)
+    expect(bugFixLaunchOverrides('claude', '/repo/kitchen')).toBeNull()
   })
 })

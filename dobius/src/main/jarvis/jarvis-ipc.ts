@@ -26,7 +26,8 @@ import { createRuntimeQuickHands, type QuickHandsRuntime } from './live-voice-qu
 import { adamConductor } from './adam-conductor'
 import { trackedQuickHands, type ConductorRuntime } from './adam-conductor-runtime'
 import { startAdamConductor } from './adam-conductor-wiring'
-import { startAdamSpeaksUp } from './adam-speaks-up-wiring'
+import { kitchenToCarson, startAdamSpeaksUp } from './adam-speaks-up-wiring'
+import { setKitchenReporter, takeKitchenContext } from '../vertex/kitchen-notice'
 import { registerBriefHandleIpc } from './adam-brief-handle-ipc'
 import { setJarvisHostWindow, trustedLiveSender } from './jarvis-host-window'
 
@@ -154,7 +155,7 @@ export function askAdam(text: string, options: AdamAskOptions): ReturnType<AdamC
         }
         broadcast(ADAM_TURN_CHANNEL, event)
       },
-      () => adamConductor()?.takeContext() ?? []
+      () => [...(adamConductor()?.takeContext() ?? []), ...takeKitchenContext()]
     )
   }
   return adamConversation.ask(text, options)
@@ -237,6 +238,10 @@ export function registerJarvisIpcHandlers(
   if (runtime && !adamConductor()) {
     startAdamConductor(store, runtime, getAdamThread, (notice) => adamSpeaksUp?.overnight.record(notice))
   }
+  setKitchenReporter((report) => {
+    kitchenToCarson(report, getAdamThread)
+    adamSpeaksUp?.overnight.record(report)
+  })
   wireWakeWordObservation(store, service)
   restorePersistedMode(store, service)
 }

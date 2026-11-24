@@ -230,6 +230,7 @@ export function isCommandGroup(commandPath: string[]): boolean {
         'tabs',
         'skills',
         'crew',
+        'kitchen',
         'git',
         'pr',
         'adam',

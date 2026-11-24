@@ -53,6 +53,7 @@ import { TAB_SNOOZE_METHODS } from './tab-snooze'
 import { BOARD_WEB_TILE_METHODS } from './board-web-tiles'
 import { AGENT_CONTROL_METHODS } from './agent-control'
 import { CREW_METHODS } from './crew'
+import { KITCHEN_METHODS } from './kitchen'
 import { LEAD_METHODS } from './leads'
 import { ADAM_METHODS } from './adam'
 import { ADAM_NOTIFY_METHODS } from './adam-notify'
@@ -138,6 +139,7 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...BOARD_WEB_TILE_METHODS,
   ...AGENT_CONTROL_METHODS,
   ...CREW_METHODS,
+  ...KITCHEN_METHODS,
   ...LEAD_METHODS,
   ...ADAM_METHODS,
   ...ADAM_NOTIFY_METHODS,

@@ -25,6 +25,7 @@ import { LEAD_COMMAND_SPECS } from './lead'
 import { TABS_COMMAND_SPECS } from './tabs'
 import { SYSTEM_COMMAND_SPECS } from './system'
 import { CREW_COMMAND_SPECS } from './crew'
+import { KITCHEN_COMMAND_SPECS } from './kitchen'
 import { GIT_COMMAND_SPECS } from './git'
 import { PR_COMMAND_SPECS } from './pr'
 import { ACCOUNT_COMMAND_SPECS } from './accounts'
@@ -60,6 +61,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
   ...TABS_COMMAND_SPECS,
   ...SYSTEM_COMMAND_SPECS,
   ...CREW_COMMAND_SPECS,
+  ...KITCHEN_COMMAND_SPECS,
   ...GIT_COMMAND_SPECS,
   ...PR_COMMAND_SPECS,
   ...ADAM_COMMAND_SPECS,
