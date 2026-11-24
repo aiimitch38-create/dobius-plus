@@ -92,7 +92,7 @@ describe('computer-use recheck at execution time', () => {
     resetProtectedSelfUiForTest()
     await expect(method('computer.getAppState').handler({ app: 'com.dobius.plus' }, {})).resolves.toBe(self)
     holdProtectedSelfUi('open')
-    for (const app of [`pid:${process.pid}`, `PID: ${process.pid}`, String(process.pid)]) {
+    for (const app of [`pid:${process.pid}`, `PID: ${process.pid}`, String(process.pid), `pid:0${process.pid}`, `pid:+${process.pid}`]) {
       await expect(method('computer.getAppState').handler({ app }, {})).rejects.toThrow(PROTECTED_SELF_UI_REASON)
       await expect(method('computer.click').handler({ app, elementIndex: 1 }, {})).rejects.toThrow(PROTECTED_SELF_UI_REASON)
     }

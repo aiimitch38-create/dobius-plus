@@ -42,7 +42,8 @@ export function namesSelf(app: unknown, selfPid: number = process.pid): boolean 
   }
   // Why: "1234" and "pid:1234" both target a process; a bundle id with "dobius" matches SELF_NAME.
   const target = app.trim().replace(/^pid:\s*/i, '')
-  return SELF_NAME.test(app) || target === String(selfPid)
+  // Why numeric: the native side parses Int32, so "pid:01234" or "+1234" still reach pid 1234.
+  return SELF_NAME.test(app) || (/^[+]?\d+$/.test(target) && Number(target) === selfPid)
 }
 
 /**
