@@ -6,6 +6,9 @@ export const PERSIST_DEBOUNCE_MS = 300
 // Why: pan/zoom changes only the camera; wait until the gesture has clearly
 // settled before rewriting the whole boards map.
 export const VIEWPORT_PERSIST_SETTLE_MS = 1_000
+// ponytail: 10 s before a ui.set that never settles counts as refused, so it
+// cannot stall every later board write behind it.
+export const BOARD_WRITE_TIMEOUT_MS = 10_000
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 let persistDueAt = 0
@@ -15,6 +18,10 @@ let persistDueAt = 0
 // sent JSON would then miss it, mark it "external," and let it clobber a
 // since-moved card back to the older position mid-drag.
 const pendingPersistedJsons = new Set<string>()
+// The boards JSON main is known to hold: the last broadcast seen or write acked.
+// Why: main skips the broadcast for a write equal to what it already has, so a
+// no-op write never echoes and its (whole-boards) JSON would stay pending forever.
+let mainBoardsJson: string | null = null
 // Worktrees changed locally since the last write; a broadcast never overwrites these.
 const dirtyWorktrees = new Set<string>()
 // Set by the live persistence so flushBoardPersistence() can reach it.
@@ -43,6 +50,15 @@ export function resetBoardPersistenceForTest(): void {
   lastWriteFailed = false
   pendingPersistedJsons.clear()
   dirtyWorktrees.clear()
+  mainBoardsJson = null
+}
+
+function settleWithin(promise: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`board write timed out after ${ms} ms`)), ms)
+  })
+  return Promise.race([promise.then(() => undefined), timedOut]).finally(() => clearTimeout(timer))
 }
 
 function toPersistedBoards(boards: Record<string, BoardState>): Record<string, BoardState> {
@@ -71,9 +87,14 @@ export function createBoardPersistence(
   whileHydrating: (fn: () => void) => void
 } {
   let hydrating = false
+  // Why: writes run one at a time, so the comparison with mainBoardsJson below
+  // never races a write still in flight (main holds A, B in flight, a revert
+  // to A would otherwise be skipped and main would keep B).
+  let writeChain: Promise<void> | null = null
+  // The newest write, unswallowed, so a flush can report main refusing it.
+  let latestWrite: Promise<void> | null = null
 
-  const write = async (): Promise<void> => {
-    persistTimer = null
+  const writeNow = async (): Promise<void> => {
     const { boardsHydrated, boardsByWorktree } = get()
     if (!boardsHydrated) {
       return
@@ -82,10 +103,15 @@ export function createBoardPersistence(
     const json = JSON.stringify(payload)
     const written = [...dirtyWorktrees]
     dirtyWorktrees.clear()
+    if (json === mainBoardsJson) {
+      lastWriteFailed = false
+      return
+    }
     pendingPersistedJsons.add(json)
     try {
-      await window.api.ui.set({ boardsByWorktree: payload })
+      await settleWithin(window.api.ui.set({ boardsByWorktree: payload }), BOARD_WRITE_TIMEOUT_MS)
       lastWriteFailed = false
+      mainBoardsJson = json
     } catch (error) {
       // Why: main does not have these changes, so a broadcast must still not
       // overwrite them, and the next flush must write them again.
@@ -96,6 +122,26 @@ export function createBoardPersistence(
       lastWriteFailed = true
       throw error
     }
+  }
+
+  const write = (): Promise<void> => {
+    persistTimer = null
+    // Why: start at once when idle, so ui.set goes out in the same tick as before.
+    const run = writeChain ? writeChain.then(writeNow) : writeNow()
+    // Why: the caller of run gets (and reports) its rejection; the chain only orders writes.
+    const settled = run.then(
+      () => undefined,
+      () => undefined
+    )
+    writeChain = settled
+    latestWrite = run
+    void settled.then(() => {
+      if (writeChain === settled) {
+        writeChain = null
+        latestWrite = null
+      }
+    })
+    return run
   }
 
   // Why: one debounced write per burst; writes wait for hydration so an empty
@@ -115,7 +161,8 @@ export function createBoardPersistence(
 
   flushPending = async () => {
     if (!persistTimer && !lastWriteFailed) {
-      return
+      // Why: rejects when main refuses the write still in flight.
+      return latestWrite ?? undefined
     }
     if (persistTimer) {
       clearTimeout(persistTimer)
@@ -157,6 +204,7 @@ export function createBoardPersistence(
     schedule,
     isEcho: (raw) => {
       const json = JSON.stringify(raw ?? {})
+      mainBoardsJson = json
       return pendingPersistedJsons.delete(json)
     },
     dirtyIds: () => dirtyWorktrees,

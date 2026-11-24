@@ -3991,6 +3991,17 @@ const api = {
     /** Tell the main process to proceed with the window close. */
     confirmWindowClose: (): void => {
       ipcRenderer.send('window:confirm-close')
+    },
+    /** Main asks for pending board writes to land before an update install or relaunch. */
+    onBoardsFlushRequested: (callback: () => Promise<void>): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: { requestId?: unknown }) => {
+        const requestId = data?.requestId
+        void callback().finally(() => {
+          ipcRenderer.send('boards:flushNowReply', { requestId })
+        })
+      }
+      ipcRenderer.on('boards:flushNow', listener)
+      return () => ipcRenderer.removeListener('boards:flushNow', listener)
     }
   } satisfies PreloadApi['ui'],
 

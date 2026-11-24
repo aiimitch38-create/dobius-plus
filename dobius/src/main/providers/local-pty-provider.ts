@@ -491,15 +491,12 @@ export class LocalPtyProvider implements IPtyProvider {
       // autodetection, bat/delta paging hints). Sourced from DOBIUS_APP_VERSION
       // which main/index.ts seeds from app.getVersion() at startup; the
       // fallback keeps tests and non-Electron runs working.
-      TERM_PROGRAM_VERSION: process.env.DOBIUS_APP_VERSION ?? '0.0.0-dev',
-      // Why: opt tools (Claude Code, ls --hyperlink, etc.) into emitting OSC 8
-      // hyperlinks. The `supports-hyperlinks` npm package gates on a hard-coded
-      // TERM_PROGRAM allowlist (iTerm.app / WezTerm / vscode) and returns false
-      // for TERM_PROGRAM=Dobius, so callers drop OSC 8 output entirely and emit
-      // bare text instead. xterm.js in Dobius parses OSC 8 and the pane's
-      // linkHandler routes clicks, so forcing the advertisement is safe and
-      // restores clickable refs like `owner/repo#123` / `PR#123`.
-      FORCE_HYPERLINK: '1'
+      TERM_PROGRAM_VERSION: process.env.DOBIUS_APP_VERSION ?? '0.0.0-dev'
+      // Why no FORCE_HYPERLINK: Claude Code then emits an id-less OSC 8 link
+      // on every repaint, and xterm keeps a link entry + buffer marker per
+      // open until the row leaves scrollback (a renderer OOM after ~10 h of
+      // agents). Without it Claude prints `text (url)`; the web-links addon
+      // and file-path link provider keep those clickable.
     } as Record<string, string>
     // Why: Dobius can be launched from an Dobius terminal while developing. Pane
     // identity belongs to the child PTY, not the parent shell that spawned app.

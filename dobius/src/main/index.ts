@@ -213,6 +213,7 @@ import { resolveTuiAgentPermissionMode } from '../shared/tui-agent-permissions'
 import { KeybindingService } from './keybindings/keybinding-service'
 import { applyElectronProxySettings } from './network/proxy-settings'
 import { preserveAgentAuthBeforeRestart } from './agent-auth-restart-preservation'
+import { flushBoardsBeforeExit } from './window/flush-renderer-boards'
 import { CliInstaller } from './cli/cli-installer'
 import { installLinuxBareDobiusDispatcher } from './cli/linux-bare-dobius-dispatcher'
 import { selfHealRuntimeEnvironmentFocus } from './runtime-environment-focus-self-heal'
@@ -969,6 +970,8 @@ function openMainWindow(): BrowserWindow {
       dataCatalog,
       onBeforeRelaunch: async () => {
         isQuitting = true
+        // Why: app.exit(0) skips the window-close flow and its board save guard.
+        await flushBoardsBeforeExit(window)
         await preserveAgentAuthBeforeRestart({ codexRuntimeHome, claudeRuntimeAuth, store })
       }
     }

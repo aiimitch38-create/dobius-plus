@@ -191,10 +191,10 @@ describe('board slice', () => {
     expect(sanitizeBoardsByWorktree(arg.boardsByWorktree)[WT].viewport.x).toBe(3)
   })
 
-  it('hydrate-before-write: edits made before hydration never overwrite saved boards', () => {
+  it('hydrate-before-write: edits made before hydration never overwrite saved boards', async () => {
     const fresh = createTestStore()
     fresh.getState().addCard(WT, note({ id: 'boot-edit' }))
-    vi.runAllTimers()
+    await vi.runAllTimersAsync()
     expect(mockApi.ui.set).not.toHaveBeenCalled()
 
     const saved = {
@@ -212,7 +212,7 @@ describe('board slice', () => {
     expect(getBoard(fresh.getState(), WT).cards.map((c) => c.id)).toEqual(['saved', 'boot-edit'])
 
     fresh.getState().setTool(WT, 'pen')
-    vi.runAllTimers()
+    await vi.runAllTimersAsync()
     const [arg] = mockApi.ui.set.mock.calls[0] as unknown as [{ boardsByWorktree: unknown }]
     expect(sanitizeBoardsByWorktree(arg.boardsByWorktree)[WT].cards.map((c) => c.id)).toEqual([
       'saved',
@@ -220,9 +220,9 @@ describe('board slice', () => {
     ])
   })
 
-  it('ignores its own echoed write and reloads that land while an edit is pending', () => {
+  it('ignores its own echoed write and reloads that land while an edit is pending', async () => {
     store.getState().setViewport(WT, { x: 5 })
-    vi.runAllTimers()
+    await vi.runAllTimersAsync()
     const [arg] = mockApi.ui.set.mock.calls[0] as unknown as [{ boardsByWorktree: unknown }]
     const before = store.getState().boardsByWorktree
     store.getState().hydrateBoards(JSON.parse(JSON.stringify(arg.boardsByWorktree)))
@@ -232,27 +232,27 @@ describe('board slice', () => {
     store.getState().hydrateBoards({})
     expect(board().viewport.x).toBe(9)
 
-    vi.runAllTimers()
+    await vi.runAllTimersAsync()
     store.getState().hydrateBoards({})
     expect(store.getState().boardsByWorktree).toEqual({})
   })
 
-  it('ignores a stale echo that arrives after a newer write already landed', () => {
+  it('ignores a stale echo that arrives after a newer write already landed', async () => {
     // Two debounced writes in a row (e.g. two frames of a drag spanning a
     // persist cycle). Main doesn't guarantee its broadcasts return in send
     // order, so the first write's echo can arrive after the second's.
     const a = store.getState().addCard(WT, note({ x: 0, y: 0 }))
-    vi.runAllTimers()
+    await vi.runAllTimersAsync()
     mockApi.ui.set.mockClear()
 
     store.getState().moveCards(WT, [a], 1, 0)
-    vi.advanceTimersByTime(300)
+    await vi.advanceTimersByTimeAsync(300)
     const [firstWrite] = mockApi.ui.set.mock.calls[0] as unknown as [
       { boardsByWorktree: unknown }
     ]
 
     store.getState().moveCards(WT, [a], 1, 0)
-    vi.advanceTimersByTime(300)
+    await vi.advanceTimersByTimeAsync(300)
     expect(mockApi.ui.set).toHaveBeenCalledTimes(2)
 
     // The first write's echo shows up late, after the second has already sent.
@@ -313,14 +313,14 @@ describe('board slice', () => {
     expect(getBoard(store.getState(), 'other').viewport.x).toBe(7)
   })
 
-  it('removeBoards drops removed worktrees and persists the removal', () => {
+  it('removeBoards drops removed worktrees and persists the removal', async () => {
     store.getState().setTool(WT, 'pen')
     store.getState().setTool('wt-2', 'pen')
-    vi.runAllTimers()
+    await vi.runAllTimersAsync()
     mockApi.ui.set.mockClear()
     store.getState().removeBoards([WT, 'never-had-one'])
     expect(store.getState().boardsByWorktree[WT]).toBeUndefined()
-    vi.runAllTimers()
+    await vi.runAllTimersAsync()
     const [arg] = mockApi.ui.set.mock.calls[0] as unknown as [
       { boardsByWorktree: Record<string, unknown> }
     ]
