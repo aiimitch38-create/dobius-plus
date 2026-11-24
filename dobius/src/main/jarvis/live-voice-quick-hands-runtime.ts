@@ -1,5 +1,6 @@
 // The live runtime behind the quick hands: the same terminal list, read and
-// send calls `dobius terminal` uses, and the Claude usage store `dobius usage` reads.
+// send calls `dobius terminal` uses, the Claude usage store `dobius usage` reads,
+// and the library `dobius library search` searches.
 import { basename } from 'node:path'
 import type {
   RuntimeTerminalRead,
@@ -9,6 +10,8 @@ import type {
   RuntimeTerminalVisualPaneNode
 } from '../../shared/runtime-types'
 import { usageSummaryForRuntime } from '../ipc/usage-access'
+import { lookUpInLibrary } from '../library/library-app'
+import { LIBRARY_HAND_MAX_HITS } from './live-voice-library-hand'
 import { QuickHandCancelled, QuickHandRefused, type QuickHandsDeps } from './live-voice-quick-hands'
 import { branchLabel, cleanTitle, type QuickTerminal } from './live-voice-terminal-target'
 
@@ -102,7 +105,9 @@ export function paneSpotsOf(layouts: RuntimeTerminalVisualLayout[] | undefined):
 
 /** Quick hands backed by the live runtime and the Claude usage store. */
 export function createRuntimeQuickHands(
-  getRuntime: () => QuickHandsRuntime | null
+  getRuntime: () => QuickHandsRuntime | null,
+  searchLibrary: QuickHandsDeps['searchLibrary'] = async (query, everyWord) =>
+    lookUpInLibrary({ query, everyWord, limit: LIBRARY_HAND_MAX_HITS })
 ): QuickHandsDeps {
   const runtime = (): QuickHandsRuntime => {
     const current = getRuntime()
@@ -112,6 +117,7 @@ export function createRuntimeQuickHands(
     return current
   }
   return {
+    searchLibrary,
     listTerminals: async () => {
       const result = await runtime().listTerminals(undefined, LIST_LIMIT)
       const spots = paneSpotsOf(result.visualLayouts)

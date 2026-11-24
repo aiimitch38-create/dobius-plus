@@ -62,15 +62,34 @@ export class LibraryService {
     return searchLibrary(this.open(), query)
   }
 
+  /** The last pass's report; null until a first pass has ended. */
+  lastRefresh(): LibraryRefreshReport | null {
+    const last = this.open().getMeta('lastRefresh')
+    return last ? (JSON.parse(last) as LibraryRefreshReport) : null
+  }
+
+  /**
+   * A search that owns up to an unready index: null when no pass has ended
+   * yet, or when nothing matched and the last pass stopped early (low disk),
+   * so "nothing matches" is only said of a library that was read through.
+   */
+  lookUp(query: LibrarySearchQuery): LibraryHit[] | null {
+    const last = this.lastRefresh()
+    if (!last) {
+      return null
+    }
+    const hits = this.search(query)
+    return hits.length === 0 && last.stopped ? null : hits
+  }
+
   status(): LibraryStatus {
     const store = this.open()
-    const last = store.getMeta('lastRefresh')
     return {
       fullTextSearch: store.fts,
       sizeBytes: store.fileBytes(),
       capBytes: this.capBytes,
       refreshing: this.running !== null,
-      lastRefresh: last ? (JSON.parse(last) as LibraryRefreshReport) : null,
+      lastRefresh: this.lastRefresh(),
       sources: sourceCounts(store),
       classes: classCounts(store)
     }

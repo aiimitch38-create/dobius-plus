@@ -4,8 +4,16 @@
 // doubt (odd phrasing, no terminal or several terminals by that name) returns
 // null and the request goes to him unchanged. Nothing here closes, switches
 // or changes settings, and nothing is ever submitted: the only write is typing
-// text the request spelled out, and Enter is never pressed.
+// text the request spelled out, and Enter is never pressed. Looking something
+// up reads the local library only.
 
+import type { LibraryHit } from '../library/library-types'
+import {
+  LIBRARY_READ_RECORD,
+  libraryAnswer,
+  matchLibraryLookup,
+  type LibraryLookup
+} from './live-voice-library-hand'
 import { matchTerminals, whichOneQuestion, type QuickTerminal } from './live-voice-terminal-target'
 import { lastOutputLine, looksSecret, shortForSpeech } from './live-voice-terminal-text'
 
@@ -30,6 +38,11 @@ export type QuickHandsDeps = {
   readTail: (handle: string) => Promise<string[]>
   /** Claude's estimated spend over the last 7 days from the local usage scan; null when unknown. */
   weekUsage?: () => Promise<{ costUsd: number; sessions: number } | null>
+  /**
+   * The local library's best hits (the search `dobius library search` runs);
+   * null when the library is off, not indexed yet, or cannot be read.
+   */
+  searchLibrary?: (query: string, everyWord: boolean) => Promise<LibraryHit[] | null>
 }
 
 export type QuickIntent =
@@ -37,6 +50,7 @@ export type QuickIntent =
   | { hand: 'type'; text: string; target: string }
   | { hand: 'read-terminal'; target: string; exact: boolean }
   | { hand: 'usage'; today: boolean }
+  | LibraryLookup
 
 export type TerminalIntent = Extract<QuickIntent, { hand: 'type' | 'read-terminal' }>
 
@@ -44,7 +58,18 @@ export type TerminalIntent = Extract<QuickIntent, { hand: 'type' | 'read-termina
 export type QuickAsk = { intent: TerminalIntent; candidates: QuickTerminal[] }
 
 export type QuickHandResult =
-  | { name: string; speak: string; cancelled?: false; ask?: QuickAsk }
+  | {
+      name: string
+      speak: string
+      cancelled?: false
+      ask?: QuickAsk
+      /**
+       * What ADAM's thread keeps instead of `speak`. Why: a thread row reaches
+       * ADAM later as his own words, so text read from a terminal or the
+       * library (written by anyone) is spoken once and never stored.
+       */
+      record?: string
+    }
   | { name: string; speak: ''; cancelled: true }
 
 const MAX_NAMED = 5
@@ -223,7 +248,7 @@ export function matchQuickHand(request: string): QuickIntent | null {
   if (/^type\s/.test(text)) {
     return matchType(request)
   }
-  return matchRead(text)
+  return matchLibraryLookup(text) ?? matchRead(text)
 }
 
 function money(usd: number): string {
@@ -231,7 +256,7 @@ function money(usd: number): string {
 }
 
 const CANCELLED = Symbol('cancelled')
-type Said = string | typeof CANCELLED
+type Said = string | typeof CANCELLED | { speak: string; record: string }
 
 /** Does what a terminal intent asks, on the one terminal it means. */
 async function actOn(
@@ -266,14 +291,17 @@ async function actOn(
   // Why the whole line: a key past the cut would still be read in part.
   return looksSecret(line)
     ? `${terminal.name}'s last line looks like it has a secret, so I won't read it out.`
-    : `${terminal.name} last showed: ${shortForSpeech(line)}`
+    : {
+        speak: `${terminal.name} last showed: ${shortForSpeech(line)}`,
+        record: `Read out the last line of ${terminal.name}.`
+      }
 }
 
 async function runIntent(
   intent: QuickIntent,
   deps: QuickHandsDeps,
   isCurrent: () => boolean
-): Promise<Said | { speak: string; ask: QuickAsk } | null> {
+): Promise<Said | { speak: string; ask: QuickAsk; record?: undefined } | null> {
   switch (intent.hand) {
     case 'list-terminals': {
       const { terminals, truncated } = await deps.listTerminals()
@@ -323,6 +351,17 @@ async function runIntent(
       const today = intent.today ? ' There is no separate total for today.' : ''
       return `About ${money(usage.costUsd)} on Claude over the last 7 days, across ${sessions}.${today}`
     }
+    case 'look-up': {
+      if (!deps.searchLibrary) {
+        return null
+      }
+      const hits = await deps.searchLibrary(intent.query, !intent.explicit)
+      if (!isCurrent()) {
+        return CANCELLED
+      }
+      const speak = libraryAnswer(intent, hits)
+      return speak && hits && hits.length > 0 ? { speak, record: LIBRARY_READ_RECORD } : speak
+    }
   }
 }
 
@@ -331,7 +370,9 @@ function resultOf(name: string, said: Awaited<ReturnType<typeof runIntent>>): Qu
     return { name, speak: '', cancelled: true }
   }
   if (said && typeof said === 'object') {
-    return { name, speak: said.speak, ask: said.ask }
+    return 'ask' in said
+      ? { name, speak: said.speak, ask: said.ask }
+      : { name, speak: said.speak, record: said.record }
   }
   return said ? { name, speak: said } : null
 }

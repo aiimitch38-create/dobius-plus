@@ -99,9 +99,12 @@ export function searchLibrary(store: LibraryStore, params: LibrarySearchQuery): 
   const take = limit * 4
   let rows: HitRow[]
   if (store.fts) {
-    rows = ftsRows(store, ftsMatch(terms, 'AND'), params, take)
+    // Why the passage only for everyWord: a title alone holding the words is
+    // not an answer to a spoken "look up X".
+    const every = ftsMatch(terms, 'AND')
+    rows = ftsRows(store, params.everyWord ? `text : (${every})` : every, params, take)
     // Why: a spoken question rarely has every word in one passage.
-    if (rows.length === 0 && terms.length > 1) {
+    if (rows.length === 0 && terms.length > 1 && !params.everyWord) {
       rows = ftsRows(store, ftsMatch(terms, 'OR'), params, take)
     }
   } else {

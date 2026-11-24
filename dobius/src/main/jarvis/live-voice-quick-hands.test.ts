@@ -292,7 +292,8 @@ describe('runQuickHand', () => {
     const deps = fakeDeps()
     expect(await runQuickHand('read the readme', deps)).toEqual({
       name: 'read-terminal',
-      speak: 'readme last showed: ✔ built in 2.1s'
+      speak: 'readme last showed: ✔ built in 2.1s',
+      record: 'Read out the last line of readme.'
     })
     expect(await runQuickHand('read docs', deps)).toBeNull()
   })
@@ -300,7 +301,8 @@ describe('runQuickHand', () => {
   it("reads a terminal's last line", async () => {
     expect(await runQuickHand("what's backend doing", fakeDeps())).toEqual({
       name: 'read-terminal',
-      speak: 'Backend last showed: ✔ built in 2.1s'
+      speak: 'Backend last showed: ✔ built in 2.1s',
+      record: 'Read out the last line of Backend.'
     })
   })
 

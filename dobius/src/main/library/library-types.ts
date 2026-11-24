@@ -50,6 +50,8 @@ export type LibrarySearchQuery = {
   project?: string
   source?: LibrarySource
   limit?: number
+  /** No any-word fallback: the passage itself (not its title) must hold every word. */
+  everyWord?: boolean
 }
 
 export type LibraryRefreshReport = {

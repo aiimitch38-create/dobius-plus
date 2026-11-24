@@ -84,3 +84,38 @@ describe('scrubSnippet', () => {
     expect(scrubSnippet('x '.repeat(400), 300).length).toBeLessThanOrEqual(300)
   })
 })
+
+describe('URL passwords in any scheme', () => {
+  // Built at runtime so no credential-shaped literal sits in the source.
+  const pass = ['hunter', '2'].join('')
+  it.each(['postgres', 'postgresql+asyncpg', 'mysql', 'mongodb+srv', 'redis', 'amqp', 'ftp', 'https'])(
+    'takes the user and password out of a %s URL, at ingest and in a snippet',
+    (scheme) => {
+      const text = `The staging db is ${scheme}://app:${pass}@db.internal/app for now.`
+      const want = `The staging db is ${scheme}://[redacted]@db.internal/app for now.`
+      expect(scrubText(text).text).toBe(want)
+      expect(scrubForIndex(text)).toBe(want)
+      expect(scrubSnippet(text, 300)).toBe(want)
+    }
+  )
+
+  it.each([
+    ['a password with an "@" in it', (p: string) => `postgres://app:ab@${p}@db.internal/app`, 'postgres://[redacted]@db.internal/app'],
+    ['the same in an https URL', (p: string) => `https://app:ab@${p}@db.internal/app`, 'https://[redacted]@db.internal/app'],
+    ['an encoded "@"', (p: string) => `redis://app:ab%40${p}@db.internal/0`, 'redis://[redacted]@db.internal/0'],
+    ['a token with no user', (p: string) => `https://tok${p}@github.com/a/b.git`, 'https://[redacted]@github.com/a/b.git'],
+    ['an uppercase scheme', (p: string) => `POSTGRES://app:${p}@db.internal/app`, 'POSTGRES://[redacted]@db.internal/app']
+  ])('redacts %s whole', (_name, url, want) => {
+    const text = `Connect with ${url(pass)} today.`
+    for (const out of [scrubText(text).text, scrubSnippet(text, 300)]) {
+      expect(out).toBe(`Connect with ${want} today.`)
+      expect(out).not.toContain(pass)
+    }
+  })
+
+  it('leaves URLs without userinfo and plain email addresses alone', () => {
+    const text = 'See postgres://db.internal:5432/app and https://example.com/a@b, or mail bob@example.com.'
+    expect(scrubText(text).text).toBe(text)
+    expect(scrubSnippet(text, 300)).toBe(text)
+  })
+})
