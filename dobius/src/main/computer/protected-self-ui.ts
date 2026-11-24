@@ -1,5 +1,6 @@
 // Approval screens agents should not operate (7.17). While one is open (the
-// "From texts" review list, or the native Send confirm), Dobius+ computer-use
+// "From texts" review list, the native Send confirm, or the kitchen's Touch ID
+// prompt), Dobius+ computer-use
 // refuses actions and snapshots aimed at Dobius+ itself.
 // DEFENSE IN DEPTH ONLY: the main renderer can lift its own hold, and an agent
 // with a shell can script clicks without computer-use. Sending a text is gated
@@ -60,7 +61,7 @@ export function resultIsSelf(result: unknown, selfPid: number = process.pid): bo
 const SELF_NAME = /dobius|electron/i
 
 export const PROTECTED_SELF_UI_REASON =
-  'Dobius+ is showing an approval screen (texts waiting for Carson). Agents may not click, type or press keys in Dobius+ while it is open; Carson does this himself.'
+  'Dobius+ is waiting for Carson to confirm something. Agents may not click, type or press keys in Dobius+ while it is open; Carson does this himself.'
 
 /** True when an action on `app` would land in Dobius+ itself. */
 export async function targetsSelf(
