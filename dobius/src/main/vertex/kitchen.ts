@@ -250,6 +250,12 @@ export function createKitchen(deps: KitchenDeps) {
       if (kitchen?.status !== 'starting' || pending.has(task.id)) {
         continue
       }
+      // Why first: the workspace to stop is already on the card, so the retry
+      // must not wait on a lookup that may be unavailable.
+      if (kitchen.worktreeId && kitchen.stopPending) {
+        await block(task, kitchen.stopPending)
+        continue
+      }
       let found: BugAutoFixWorktree | null | 'unknown' = null
       try {
         found =

@@ -536,6 +536,33 @@ describe('kitchen repo freeze', () => {
   })
 })
 
+describe('kitchen stop retry without a lookup', () => {
+  it('retries a pending stop by the saved workspace id while the workspace list is unavailable', async () => {
+    const h = harness()
+    h.createWorktree.mockResolvedValueOnce({
+      worktreeId: 'repo::/r/dobius-plus',
+      branch: 'main',
+      refusal: 'not a new workspace'
+    } as never)
+    h.stopCook.mockRejectedValueOnce(new Error('pty busy'))
+    h.tasks.push(marked('a'), marked('b'), marked('c'), marked('d'))
+    await h.kitchen.pump()
+    expect(h.task('a').kitchen).toMatchObject({ status: 'starting', stopPending: 'not a new workspace' })
+    expect(h.createWorktree).toHaveBeenCalledTimes(3)
+    // The lookup is down for every card from here on.
+    for (const task of h.tasks) {
+      h.found.set(task.kitchen?.worktreeName ?? '', 'unknown')
+    }
+    await h.tick(MINUTE)
+    expect(h.stopCook).toHaveBeenCalledTimes(2)
+    expect(h.stopCook).toHaveBeenLastCalledWith('repo::/r/dobius-plus')
+    expect(h.task('a')).toMatchObject({ status: 'blocked', kitchen: { status: 'blocked' } })
+    expect(h.told.map((notice) => notice.event)).toEqual(['blocked'])
+    // The slot is free again: the 4th card starts.
+    expect(h.createWorktree).toHaveBeenCalledTimes(4)
+  })
+})
+
 describe('kitchen results', () => {
   it('a finished cook moves its card to Review, never Done, and tells ADAM once', async () => {
     const h = harness()
