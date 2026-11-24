@@ -11,6 +11,7 @@ import {
   captureTerminalWriteScrollIntent,
   enforceTerminalWriteScrollIntent
 } from './terminal-scroll-intent'
+import { withStableOscLinkIds } from './terminal-osc-link-ids'
 
 type TerminalOutputTarget = ForegroundTerminalOutputTarget
 
@@ -796,6 +797,7 @@ export function writeTerminalOutput(
   if (!data) {
     return
   }
+  data = withStableOscLinkIds(data)
 
   if (options.foreground) {
     const entry = queuedByTerminal.get(terminal)
