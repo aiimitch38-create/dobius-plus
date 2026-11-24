@@ -1122,18 +1122,21 @@ const api = {
     accept: (id: string): Promise<TextIntakeResult> => ipcRenderer.invoke('textIntake:accept', id),
     dismiss: (id: string): Promise<TextIntakeResult> =>
       ipcRenderer.invoke('textIntake:dismiss', id),
-    sendDraft: (id: string, text?: string): Promise<TextIntakeResult> =>
-      ipcRenderer.invoke('textIntake:sendDraft', id, text),
+    sendDraft: (id: string, fingerprint: string, text?: string): Promise<TextIntakeResult> =>
+      ipcRenderer.invoke('textIntake:sendDraft', id, fingerprint, text),
+    reviewVisible: (visible: boolean): Promise<void> =>
+      ipcRenderer.invoke('textIntake:reviewVisible', visible),
     discardDraft: (id: string): Promise<TextIntakeResult> =>
       ipcRenderer.invoke('textIntake:discardDraft', id)
   } satisfies PreloadApi['textIntake'],
 
   imessageBridge: {
-    getConfig: (): Promise<ImessageBridgeConfig> => ipcRenderer.invoke('imessageBridge:getConfig'),
+    getConfig: (): Promise<ImessageBridgeConfig | null> =>
+      ipcRenderer.invoke('imessageBridge:getConfig'),
     updateConfig: (
       updates: Partial<Omit<ImessageBridgeConfig, 'lastSeenRowid'>>
     ): Promise<ImessageBridgeConfig> => ipcRenderer.invoke('imessageBridge:updateConfig', updates),
-    status: (): Promise<ImessageBridgeStatus> => ipcRenderer.invoke('imessageBridge:status'),
+    status: (): Promise<ImessageBridgeStatus | null> => ipcRenderer.invoke('imessageBridge:status'),
     openFullDiskAccess: (): Promise<void> =>
       ipcRenderer.invoke('imessageBridge:openFullDiskAccess'),
     testSend: (): Promise<ImessageBridgeSendResult> => ipcRenderer.invoke('imessageBridge:testSend')

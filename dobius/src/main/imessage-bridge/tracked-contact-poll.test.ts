@@ -42,9 +42,24 @@ function seed(): SyncDatabase.Database {
   return db
 }
 
-function sink(spellings: string[]): TrackedContactSink & { seen: { messageId: string; handle: string; text: string }[] } {
-  const seen: { messageId: string; handle: string; text: string }[] = []
-  return { seen, trackedSpellings: () => spellings, ingest: (message) => seen.push(message) }
+type Seen = { messageId: string; handle: string; text: string }
+
+/** A sink tracking `spellings`, each already started at `start` (or never started when null). */
+function sink(spellings: string[], start: number | null = 0): TrackedContactSink & { seen: Seen[]; started: number[] } {
+  const seen: Seen[] = []
+  const started: number[] = []
+  let begin = start
+  return {
+    seen,
+    started,
+    trackedSpellings: () => (begin === null ? [] : spellings.map((spelling) => ({ spelling, start: begin as number }))),
+    needsStart: () => begin === null && spellings.length > 0,
+    startTracking: (rowid) => {
+      started.push(rowid)
+      begin = rowid
+    },
+    ingest: (message) => seen.push(message)
+  }
 }
 
 beforeEach(() => {
@@ -67,7 +82,9 @@ describe('tracked-contact poll', () => {
     const db = seed()
     const marks: (number | undefined)[] = []
     const throwing: TrackedContactSink = {
-      trackedSpellings: () => ['+15550102000'],
+      trackedSpellings: () => [{ spelling: '+15550102000', start: 0 }],
+      needsStart: () => false,
+      startTracking: () => undefined,
       ingest: () => {
         marks.push(mocks.config.lastSeenContactRowid)
         throw new Error('boom')
@@ -88,6 +105,25 @@ describe('tracked-contact poll', () => {
     const later = sink(['+15550102000'])
     pollTrackedContacts(db, later)
     expect(later.seen).toEqual([])
+  })
+
+  it('a newly tracked contact starts at the newest row: their older texts are never read', () => {
+    const db = seed()
+    mocks.config = { lastSeenContactRowid: 0 }
+    const fresh = sink(['+15550102000'], null)
+    pollTrackedContacts(db, fresh)
+    expect(fresh.started).toEqual([5])
+    expect(fresh.seen).toEqual([])
+    db.prepare('INSERT INTO message VALUES (6, ?, ?, NULL, 0, 1)').run('guid-6', 'new one')
+    db.prepare('INSERT INTO chat_message_join VALUES (10, 6)').run()
+    pollTrackedContacts(db, fresh)
+    expect(fresh.seen.map((m) => m.text)).toEqual(['new one'])
+  })
+
+  it('a contact whose start is ahead of the shared mark skips the rows in between', () => {
+    const late = sink(['+15550102000'], 3)
+    pollTrackedContacts(seed(), late)
+    expect(late.seen.map((m) => m.messageId)).toEqual(['guid-5'])
   })
 
   it('does nothing before intake has started', () => {

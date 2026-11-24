@@ -14,6 +14,11 @@ import {
   rememberComputerSnapshot
 } from '../../../computer/action-decision'
 import { journalComputerDecision } from '../../../computer/action-decision-journal'
+import {
+  PROTECTED_SELF_UI_REASON,
+  protectedSelfUiActive,
+  targetsSelf
+} from '../../../computer/protected-self-ui'
 import { RuntimeClientError } from '../../../computer/runtime-client-error'
 import type { ComputerActionResult } from '../../../../shared/computer-use-runtime-types'
 import {
@@ -115,6 +120,10 @@ export const COMPUTER_METHODS: RpcMethod[] = [
     name: 'computer.getAppState',
     params: ComputerObserveTarget,
     handler: async (params) => {
+      // Why: the review list shows other people's texts; a snapshot would hand them to an agent.
+      if (protectedSelfUiActive() && (await targetsSelf(params.app, callComputerSidecarListWindows))) {
+        throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
+      }
       const result = await callComputerSidecarSnapshot(params)
       rememberComputerSnapshot(params.app, result)
       return result

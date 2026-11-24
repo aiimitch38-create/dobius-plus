@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  holdProtectedSelfUi,
+  PROTECTED_SELF_UI_REASON,
+  resetProtectedSelfUiForTest
+} from './protected-self-ui'
+import {
   decideComputerAction,
   rememberComputerSnapshot,
   resetComputerDecisionStateForTest,
@@ -67,5 +72,41 @@ describe('computer-use action decision point', () => {
   it('does not confuse element 1 with element 12', () => {
     rememberComputerSnapshot('mail', tree('\t1 button Archive\n\t12 button Send'))
     expect(riskyElementWord('mail', 1)).toBeNull()
+  })
+})
+
+describe('protected Dobius+ approval screens (Codex P1, 7.17)', () => {
+  beforeEach(() => resetProtectedSelfUiForTest())
+
+  const self = (pid: number) => vi.fn(async () => ({ app: { name: 'X', bundleId: null, pid }, windows: [] })) as never
+
+  it('allows actions on Dobius+ when no approval screen is open', async () => {
+    const decision = await decideComputerAction('click', { app: 'Dobius+', elementIndex: 3 }, { listWindows: self(1), selfPid: 1 })
+    expect(decision.verdict).toBe('allow')
+  })
+
+  it.each(['click', 'performSecondaryAction', 'typeText', 'pressKey', 'hotkey', 'pasteText', 'setValue', 'scroll', 'drag'])(
+    'blocks %s aimed at Dobius+ while one is open, even with --confirm-risky',
+    async (method) => {
+      holdProtectedSelfUi('t')
+      const decision = await decideComputerAction(
+        method,
+        { app: 'com.example.something', x: 5, y: 5, windowId: 1, confirmRisky: true },
+        { listWindows: self(4242), selfPid: 4242 }
+      )
+      expect(decision).toMatchObject({ verdict: 'block', rule: 'protected-self-ui', reason: PROTECTED_SELF_UI_REASON })
+    }
+  )
+
+  it('blocks by name when the window list cannot be read, and leaves other apps alone', async () => {
+    holdProtectedSelfUi('t')
+    const failing = vi.fn(async () => {
+      throw new Error('no AX')
+    }) as never
+    for (const app of ['Dobius+', 'Electron', 'com.statusdigital.dobius-plus']) {
+      expect((await decideComputerAction('click', { app, elementIndex: 1 }, { listWindows: failing, selfPid: 9 })).verdict).toBe('block')
+    }
+    const other = await decideComputerAction('click', { app: 'Safari', elementIndex: 1 }, { listWindows: self(77), selfPid: 9 })
+    expect(other.verdict).toBe('allow')
   })
 })

@@ -30,7 +30,17 @@ export function TextIntakeSection(): React.JSX.Element {
   useEffect(() => {
     void refresh()
     const timer = setInterval(() => void refresh(), REFRESH_MS)
-    return () => clearInterval(timer)
+    // Why: while this list is on screen, agents' computer-use may not touch Dobius+.
+    const visible = (on: boolean): void => {
+      void new Promise<void>((resolve, reject) => {
+        window.api.textIntake.reviewVisible(on).then(resolve, reject)
+      }).catch(() => undefined)
+    }
+    visible(true)
+    return () => {
+      clearInterval(timer)
+      visible(false)
+    }
   }, [refresh])
 
   const run = async (action: () => Promise<TextIntakeResult>, done: string): Promise<void> => {
@@ -67,7 +77,7 @@ export function TextIntakeSection(): React.JSX.Element {
         busy={busy}
         onAccept={(id) => void run(() => api.accept(id), 'Added to the Backlog.')}
         onDismiss={(id) => void run(() => api.dismiss(id), 'Dismissed.')}
-        onSend={(id, text) => void run(() => api.sendDraft(id, text), 'Sent.')}
+        onSend={(id, fingerprint, text) => void run(() => api.sendDraft(id, fingerprint, text), 'Sent.')}
         onDiscard={(id) => void run(() => api.discardDraft(id), 'Draft discarded.')}
       />
       {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}

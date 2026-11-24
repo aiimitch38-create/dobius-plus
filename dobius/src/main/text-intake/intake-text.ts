@@ -1,24 +1,39 @@
 // The cheap, model-free rules of text intake (7.17): clean an untrusted
 // incoming text, decide whether it asks Carson for something, and title the
 // suggested card. No model ever sees the text here.
-import { SUGGESTION_TITLE_SNIPPET, TEXT_INTAKE_MAX_TEXT } from '../../shared/text-intake'
+import { TEXT_INTAKE_MAX_TEXT } from '../../shared/text-intake'
 import { redactString } from '../observability/redactor'
 
 // Why the extra run rule: a pasted key with no known prefix still has no
 // business sitting in a stored text (same shape looksSecret refuses).
 const OPAQUE_RUN = /[A-Za-z0-9+/=_-]{32,}/g
-// A credential field, bare or quoted, through to the end of its value.
+// A whole auth header, scheme AND token: "Authorization: Basic dXNlcjpwYXNz".
+const AUTH_HEADER =
+  /\b((?:proxy-)?authorization)["']?\s*[:=]\s*["']?(?:(?:basic|bearer|token|digest|negotiate)\s+)?[^\s"',;]+["']?/gi
+// A bare scheme and token anywhere: "Bearer eyJhbGci...".
+const AUTH_SCHEME = /\b(basic|bearer)\s+[A-Za-z0-9._~+/=-]{8,}/gi
+// A credential field, bare or quoted, with its WHOLE value: a quoted value is
+// taken to its closing quote, so "correct horse battery staple" goes too.
 const CREDENTIAL_FIELD =
-  /\b(password|passwd|pwd|passcode|secret|token|api[\s_-]?key|access[\s_-]?key)s?["']?\s*[:=]\s*\S+/gi
+  /(["']?)\b(password|passwd|pwd|passcode|secret|client[\s_-]?secret|token|api[\s_-]?key|access[\s_-]?key|auth)s?\1\s*[:=]\s*(?:"[^"]*"?|'[^']*'?|\S+)/gi
+// Why bounded: a huge text never stalls the main thread; far past what is kept.
+const REDACT_INPUT_CHARS = 20_000
 
 /** One line, control characters gone, secrets replaced, at most 1,000 characters. */
 export function cleanIntakeText(raw: string): string {
   // oxlint-disable-next-line no-control-regex -- removing control characters is the point
   const flat = raw.replace(/[\u0000-\u001F\u007F\u2028\u2029]/g, ' ').replace(/\s+/g, ' ').trim()
-  // Why cut before redacting too: a huge text never stalls the main thread.
-  const redacted = redactString(flat.slice(0, TEXT_INTAKE_MAX_TEXT * 2))
-    .replace(CREDENTIAL_FIELD, '$1: [redacted]')
-    .replace(OPAQUE_RUN, (run) => (/\d/.test(run) && /[A-Za-z]/.test(run) ? '[redacted]' : run))
+  // Why ours first, then the shared redactor: its labeled-kv rule would eat only
+  // "Authorization: Basic" and leave the token, hiding it from the rules above.
+  const ours = flat
+    .slice(0, REDACT_INPUT_CHARS)
+    .replace(AUTH_HEADER, '$1: [redacted]')
+    .replace(AUTH_SCHEME, '$1 [redacted]')
+    .replace(CREDENTIAL_FIELD, '$2: [redacted]')
+  const redacted = redactString(ours).replace(OPAQUE_RUN, (run) =>
+    /\d/.test(run) && /[A-Za-z]/.test(run) ? '[redacted]' : run
+  )
+  // Redacted in full first, then cut, so a cut never splits a value.
   return redacted.slice(0, TEXT_INTAKE_MAX_TEXT).trim()
 }
 
@@ -46,9 +61,10 @@ export function isActionableText(text: string): boolean {
   return ACTIONABLE_RULES.some((rule) => rule.test(text))
 }
 
-/** "Text from <name>: <first 80 characters>" — a fixed template. */
-export function suggestionTitle(contactName: string, text: string): string {
-  const snippet =
-    text.length > SUGGESTION_TITLE_SNIPPET ? `${text.slice(0, SUGGESTION_TITLE_SNIPPET).trimEnd()}…` : text
-  return `Text from ${contactName}: ${snippet}`
+/**
+ * "Text from <name>": a fixed template. Why no message words: a card title is
+ * interpolated into agent prompts, so untrusted text lives only in the quote.
+ */
+export function suggestionTitle(contactName: string): string {
+  return `Text from ${contactName}`
 }

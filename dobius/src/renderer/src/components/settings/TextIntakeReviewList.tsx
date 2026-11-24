@@ -9,7 +9,7 @@ type Props = {
   busy: boolean
   onAccept: (id: string) => void
   onDismiss: (id: string) => void
-  onSend: (id: string, text?: string) => void
+  onSend: (id: string, fingerprint: string, text?: string) => void
   onDiscard: (id: string) => void
 }
 
@@ -50,7 +50,7 @@ function SuggestionRow(props: {
 function DraftRow(props: {
   draft: TextDraft
   busy: boolean
-  onSend: (id: string, text?: string) => void
+  onSend: (id: string, fingerprint: string, text?: string) => void
   onDiscard: (id: string) => void
 }): React.JSX.Element {
   const { draft } = props
@@ -77,8 +77,8 @@ function DraftRow(props: {
         <Button
           type="button"
           size="sm"
-          disabled={props.busy || sending || !text.trim()}
-          onClick={() => props.onSend(draft.id, text === draft.text ? undefined : text)}
+          disabled={props.busy || sending || !text.trim() || !draft.fingerprint}
+          onClick={() => props.onSend(draft.id, draft.fingerprint ?? '', text === draft.text ? undefined : text)}
         >
           {sending ? 'Sending…' : 'Send'}
         </Button>
@@ -118,14 +118,14 @@ export function TextIntakeReviewList(props: Props): React.JSX.Element {
       <div className="space-y-1.5">
         <Label>Texts ADAM drafted</Label>
         <p className="text-xs text-muted-foreground">
-          Check the person and the words. A text only goes out when you click Send.
+          Check the person and the words. A text only goes out when you click Send and confirm it.
         </p>
         {props.drafts.length === 0 ? (
           <p className="text-xs text-muted-foreground">No drafts waiting.</p>
         ) : (
           <ul className="space-y-2">
             {props.drafts.map((draft) => (
-              <DraftRow key={`${draft.id}:${draft.status}`} draft={draft} {...props} />
+              <DraftRow key={`${draft.id}:${draft.status}:${draft.fingerprint ?? ''}`} draft={draft} {...props} />
             ))}
           </ul>
         )}

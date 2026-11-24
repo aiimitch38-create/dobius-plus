@@ -1401,16 +1401,19 @@ export type PreloadApi = {
     setContacts: (contacts: TrackedContact[]) => Promise<TextIntakeResult>
     accept: (id: string) => Promise<TextIntakeResult>
     dismiss: (id: string) => Promise<TextIntakeResult>
-    /** Carson's Send click; `text` is his edit of the draft, if any. */
-    sendDraft: (id: string, text?: string) => Promise<TextIntakeResult>
+    /** Carson's Send click: `fingerprint` from the view binds it to the draft shown; `text` is his edit, if any. Main shows a native confirm. */
+    sendDraft: (id: string, fingerprint: string, text?: string) => Promise<TextIntakeResult>
+    /** The review list is on screen: Dobius+ computer-use refuses to act on Dobius+ meanwhile. */
+    reviewVisible: (visible: boolean) => Promise<void>
     discardDraft: (id: string) => Promise<TextIntakeResult>
   }
   imessageBridge: {
-    getConfig: () => Promise<ImessageBridgeConfig>
+    /** Null when the caller is not the main window. */
+    getConfig: () => Promise<ImessageBridgeConfig | null>
     updateConfig: (
       updates: Partial<Omit<ImessageBridgeConfig, 'lastSeenRowid'>>
     ) => Promise<ImessageBridgeConfig>
-    status: () => Promise<ImessageBridgeStatus>
+    status: () => Promise<ImessageBridgeStatus | null>
     openFullDiskAccess: () => Promise<void>
     testSend: () => Promise<ImessageBridgeSendResult>
   }

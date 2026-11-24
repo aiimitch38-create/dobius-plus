@@ -12,6 +12,7 @@ import {
 } from '../../shared/text-intake'
 import { isValidImessageHandle } from '../imessage-bridge/imessage-send'
 import { SafeJsonFile } from '../storage/safe-json-file'
+import { canonicalHandle } from './contact-handle'
 
 const MAX_SUGGESTIONS = 500
 const MAX_DRAFTS = 200
@@ -25,9 +26,12 @@ export type IntakeState = {
 
 const empty = (): IntakeState => ({ contacts: [], records: [], suggestions: [], drafts: [] })
 
-/** A contact as typed in Settings, or null when the handle or name is not usable. */
-export function cleanContact(raw: unknown): TrackedContact | null {
-  const record = (raw ?? {}) as { handle?: unknown; name?: unknown }
+/**
+ * A contact, or null when the handle or name is not usable. `keepStart` only
+ * for the saved file: a startRowid sent from Settings is never trusted.
+ */
+export function cleanContact(raw: unknown, keepStart = false): TrackedContact | null {
+  const record = (raw ?? {}) as { handle?: unknown; name?: unknown; startRowid?: unknown }
   if (typeof record.handle !== 'string' || typeof record.name !== 'string') {
     return null
   }
@@ -37,16 +41,19 @@ export function cleanContact(raw: unknown): TrackedContact | null {
   if (!isValidImessageHandle(handle) || !name || name.length > TRACKED_CONTACT_NAME_MAX) {
     return null
   }
-  return { handle, name }
+  const start = record.startRowid
+  return keepStart && typeof start === 'number' && Number.isSafeInteger(start) && start >= 0
+    ? { handle, name, startRowid: start }
+    : { handle, name }
 }
 
-/** Valid contacts only, each handle once (case-insensitive), at most 100. */
-export function cleanContacts(raw: unknown): TrackedContact[] {
+/** Valid contacts only, each canonical handle once, at most 100. */
+export function cleanContacts(raw: unknown, keepStart = false): TrackedContact[] {
   const seen = new Set<string>()
   const contacts: TrackedContact[] = []
   for (const entry of Array.isArray(raw) ? raw : []) {
-    const contact = cleanContact(entry)
-    const key = contact?.handle.toLowerCase()
+    const contact = cleanContact(entry, keepStart)
+    const key = contact ? canonicalHandle(contact.handle) : null
     if (contact && key && !seen.has(key)) {
       seen.add(key)
       contacts.push(contact)
@@ -70,7 +77,7 @@ function parseState(raw: unknown): IntakeState | undefined {
     return undefined
   }
   return {
-    contacts: cleanContacts(raw.contacts),
+    contacts: cleanContacts(raw.contacts, true),
     records: listOf<IntakeRecord>(raw.records, (e) => hasStrings(e, ['id', 'contactHandle', 'text'])),
     suggestions: listOf<IntakeSuggestion>(raw.suggestions, (e) => hasStrings(e, ['id', 'messageId', 'status'])),
     // Why: a draft caught mid-send by a quit is not known to have gone out; it shows as failed.

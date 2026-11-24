@@ -6,7 +6,7 @@
 //   - draftText()/sendDraft(): ADAM drafts a text; it goes out only on Carson's Send.
 // Incoming text is untrusted data: stored, shown, quoted on a card. It never
 // reaches a model and never triggers anything on its own.
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type { AdamThreadRow } from '../../shared/speech-types'
 import {
   TEXT_DRAFT_MAX_CHARS,
@@ -20,8 +20,8 @@ import {
 } from '../../shared/text-intake'
 import type { VertexTaskInput } from '../../shared/vertex-task-types'
 import { stripControlChars } from '../imessage-bridge/imessage-send'
-import { selfHandleSpellings } from '../imessage-bridge/self-handle-spellings'
 import { looksSecret } from '../jarvis/live-voice-terminal-text'
+import { contactHandleSpellings, sameContactHandle } from './contact-handle'
 import { cleanContacts, type IntakeState, type IntakeStore } from './intake-store'
 import { cleanIntakeText, isActionableText, suggestionTitle } from './intake-text'
 
@@ -60,8 +60,13 @@ export function draftText(raw: unknown): string {
   return text
 }
 
-const sameHandle = (a: string, b: string): boolean =>
-  selfHandleSpellings(a).some((spelling) => selfHandleSpellings(b).includes(spelling))
+/** Binds Carson's Send to the exact draft he saw: id, recipient and text. */
+export function draftFingerprint(draft: Pick<TextDraft, 'id' | 'toHandle' | 'text'>): string {
+  return createHash('sha256').update(`${draft.id}\n${draft.toHandle}\n${draft.text}`).digest('hex').slice(0, 32)
+}
+
+/** What Carson is about to send, checked against the stored draft. */
+export type PreparedSend = { ok: true; draft: TextDraft; text: string } | { ok: false; error: string }
 
 export class TextIntake {
   private readonly now: () => number
@@ -83,7 +88,9 @@ export class TextIntake {
     return {
       contacts: state.contacts,
       suggestions: state.suggestions.filter((s) => s.status === 'pending'),
-      drafts: state.drafts.filter((d) => d.status === 'pending' || d.status === 'sending' || d.status === 'failed')
+      drafts: state.drafts
+        .filter((d) => d.status === 'pending' || d.status === 'sending' || d.status === 'failed')
+        .map((d) => ({ ...d, fingerprint: draftFingerprint(d) }))
     }
   }
 
@@ -91,18 +98,37 @@ export class TextIntake {
     return error ? { ok: false, error, view: this.view() } : { ok: true, view: this.view() }
   }
 
-  /** Every chat.db spelling of every tracked handle (the poller's filter). */
-  trackedSpellings(): string[] {
-    return [...new Set(this.state().contacts.flatMap((c) => selfHandleSpellings(c.handle)))]
+  /** Each tracked handle's exact chat.db spellings and the row its tracking began after. */
+  trackedSpellings(): { spelling: string; start: number }[] {
+    return this.state().contacts.flatMap((c) =>
+      c.startRowid === undefined ? [] : contactHandleSpellings(c.handle).map((spelling) => ({ spelling, start: c.startRowid as number }))
+    )
+  }
+
+  /** True when a contact still needs its start row (newly tracked). */
+  needsStart(): boolean {
+    return this.state().contacts.some((c) => c.startRowid === undefined)
+  }
+
+  /** Newly tracked contacts start at chat.db's newest row, so their history is never read. */
+  startTracking(newestRowid: number): void {
+    const state = this.state()
+    this.save({ ...state, contacts: state.contacts.map((c) => (c.startRowid === undefined ? { ...c, startRowid: newestRowid } : c)) })
   }
 
   contactForHandle(handle: string): TrackedContact | null {
-    return this.state().contacts.find((c) => sameHandle(c.handle, handle)) ?? null
+    return this.state().contacts.find((c) => sameContactHandle(c.handle, handle)) ?? null
   }
 
   setContacts(raw: unknown): TextIntakeResult {
     try {
-      this.save({ ...this.state(), contacts: cleanContacts(raw) })
+      // Why kept: a contact already tracked keeps its start; only a new one starts fresh.
+      const existing = this.state().contacts
+      const contacts = cleanContacts(raw).map((contact) => {
+        const start = existing.find((c) => sameContactHandle(c.handle, contact.handle))?.startRowid
+        return start === undefined ? contact : { ...contact, startRowid: start }
+      })
+      this.save({ ...this.state(), contacts })
       return this.result()
     } catch (error) {
       return this.result(`Contacts could not be saved: ${error instanceof Error ? error.message : String(error)}`)
@@ -145,7 +171,7 @@ export class TextIntake {
       source: record.source,
       contactName: record.contactName,
       contactHandle: record.contactHandle,
-      title: suggestionTitle(record.contactName, record.text),
+      title: suggestionTitle(record.contactName),
       text: record.text,
       createdAt: this.now(),
       status: 'pending'
@@ -220,23 +246,37 @@ export class TextIntake {
     this.save({ ...state, drafts: state.drafts.map((d) => (d.id === id ? { ...d, ...patch } : d)) })
   }
 
-  /** Carson's Send click: the only way a draft goes out. `text` is his edit, if any. */
-  async sendDraft(id: string, edited?: unknown): Promise<TextIntakeResult> {
+  /**
+   * Checks a Send against the stored draft: `fingerprint` must match the draft
+   * as Carson saw it (a swapped recipient or text since then fails), and the
+   * recipient must still be tracked. `edited` is his edit, if any.
+   */
+  prepareSend(id: string, fingerprint: unknown, edited?: unknown): PreparedSend {
     const draft = this.state().drafts.find((d) => d.id === id)
     if (!draft || (draft.status !== 'pending' && draft.status !== 'failed')) {
-      return this.result('That draft is no longer waiting.')
+      return { ok: false, error: 'That draft is no longer waiting.' }
+    }
+    if (typeof fingerprint !== 'string' || fingerprint !== draftFingerprint(draft)) {
+      return { ok: false, error: 'This draft changed since it was shown. Check it again before sending.' }
     }
     // Why re-checked: the contact may have been removed since ADAM drafted it.
-    const contact = this.contactForHandle(draft.toHandle)
-    if (!contact) {
-      return this.result(`${draft.toName} is no longer a tracked contact, so it was not sent.`)
+    if (!this.contactForHandle(draft.toHandle)) {
+      return { ok: false, error: `${draft.toName} is no longer a tracked contact, so it was not sent.` }
     }
-    let text: string
     try {
-      text = edited === undefined ? draft.text : draftText(edited)
+      return { ok: true, draft, text: edited === undefined ? draft.text : draftText(edited) }
     } catch (error) {
-      return this.result(error instanceof Error ? error.message : String(error))
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
+  }
+
+  /** Carson's Send, after his confirm: the only way a draft goes out. */
+  async sendDraft(id: string, fingerprint: unknown, edited?: unknown): Promise<TextIntakeResult> {
+    const prepared = this.prepareSend(id, fingerprint, edited)
+    if (!prepared.ok) {
+      return this.result(prepared.error)
+    }
+    const { draft, text } = prepared
     const unavailable = this.deps.sendUnavailable()
     if (unavailable) {
       return this.result(unavailable)

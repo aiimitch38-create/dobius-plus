@@ -9,7 +9,9 @@ import { getImessageBridgeConfig, updateImessageBridgeConfig } from './bridge-co
 import { extractChatDbMessageText } from './chat-db-message-text'
 
 // Incoming (is_from_me = 0) rows from an exact tracked handle spelling, 1:1
-// chats only (group guids carry ';+;'; never a substring match).
+// chats only (group guids carry ';+;'; never a substring match), and only rows
+// after the row that contact's tracking began at: adding a contact while the
+// mark sits behind never imports their older history.
 const TRACKED_SQL = `
   SELECT message.ROWID AS rowid,
          message.guid AS guid,
@@ -18,11 +20,13 @@ const TRACKED_SQL = `
          handle.id AS handle
   FROM message
   JOIN handle ON message.handle_id = handle.ROWID
+  JOIN json_each(?) AS tracked
+    ON lower(handle.id) = json_extract(tracked.value, '$.spelling')
   LEFT JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
   LEFT JOIN chat ON chat_message_join.chat_id = chat.ROWID
   WHERE message.ROWID > ?
     AND message.is_from_me = 0
-    AND lower(handle.id) IN (SELECT value FROM json_each(?))
+    AND message.ROWID > json_extract(tracked.value, '$.start')
     AND (chat.ROWID IS NULL OR instr(chat.guid, ';+;') = 0)
   GROUP BY message.ROWID
   ORDER BY message.ROWID ASC
@@ -38,8 +42,11 @@ type TrackedRow = {
 }
 
 export type TrackedContactSink = {
-  /** Lower-cased chat.db spellings of every tracked handle. */
-  trackedSpellings: () => string[]
+  /** Exact lower-cased chat.db spellings of tracked handles, each with its contact's start row. */
+  trackedSpellings: () => { spelling: string; start: number }[]
+  /** True while a newly tracked contact has no start row yet. */
+  needsStart: () => boolean
+  startTracking: (newestRowid: number) => void
   ingest: (message: { messageId: string; handle: string; text: string }) => unknown
 }
 
@@ -55,6 +62,9 @@ export function pollTrackedContacts(database: SyncDatabase.Database, sink: Track
   if (!sink) {
     return
   }
+  if (sink.needsStart()) {
+    sink.startTracking(newestRowid(database))
+  }
   const spellings = sink.trackedSpellings()
   if (spellings.length === 0) {
     // Why: nobody tracked yet, so keep the mark current; adding a contact later never reads history.
@@ -66,7 +76,7 @@ export function pollTrackedContacts(database: SyncDatabase.Database, sink: Track
     return
   }
   const from = getImessageBridgeConfig().lastSeenContactRowid ?? 0
-  const rows = database.prepare(TRACKED_SQL).all(from, JSON.stringify(spellings)) as TrackedRow[]
+  const rows = database.prepare(TRACKED_SQL).all(JSON.stringify(spellings), from) as TrackedRow[]
   for (const row of rows) {
     updateImessageBridgeConfig({ lastSeenContactRowid: row.rowid })
     const text = extractChatDbMessageText(row)?.trim()

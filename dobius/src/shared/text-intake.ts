@@ -9,12 +9,16 @@ export const TEXT_INTAKE_MAX_RECORDS = 500
 export const TEXT_INTAKE_MAX_CONTACTS = 100
 export const TRACKED_CONTACT_NAME_MAX = 60
 export const TEXT_DRAFT_MAX_CHARS = 1_000
-export const SUGGESTION_TITLE_SNIPPET = 80
 
 export type IntakeSource = 'imessage'
 
 /** Someone Carson wants watched: their handle (phone or email) and the name he knows them by. */
-export type TrackedContact = { handle: string; name: string }
+export type TrackedContact = {
+  handle: string
+  name: string
+  /** chat.db's newest row when tracking began: only texts after it are read. Main sets it. */
+  startRowid?: number
+}
 
 /** One incoming message from a tracked contact, already secret-filtered and capped. */
 export type IntakeRecord = {
@@ -57,6 +61,8 @@ export type TextDraft = {
   status: TextDraftStatus
   sentAt?: number
   error?: string
+  /** In the view only: binds Send to this exact id, recipient and text as shown. */
+  fingerprint?: string
 }
 
 /** What the review list shows: open suggestions and drafts, plus the contact list. */
