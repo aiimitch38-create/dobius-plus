@@ -11,12 +11,23 @@ import {
   saveDestination
 } from '../destinations/destinations-store'
 import { deliverToDestination } from '../destinations/destination-delivery'
+import { approveImessageHandle } from '../imessage-bridge/approved-handles'
 
 export function registerDestinationHandlers(): void {
   ipcMain.handle('destinations:list', (): Destination[] => listDestinations())
   ipcMain.handle(
     'destinations:save',
-    (_event, input: DestinationSaveInput): Destination => saveDestination(input)
+    async (_event, input: DestinationSaveInput): Promise<Destination> => {
+      // Why: a destination's handle is texted by automations with no click, so Carson approves it once here.
+      if (input?.type === 'imessage') {
+        const handle = input.config?.handle
+        const refused = await approveImessageHandle(typeof handle === 'string' ? handle : '')
+        if (refused) {
+          throw new Error(refused)
+        }
+      }
+      return saveDestination(input)
+    }
   )
   ipcMain.handle('destinations:delete', (_event, id: string): boolean => deleteDestination(id))
   ipcMain.handle(

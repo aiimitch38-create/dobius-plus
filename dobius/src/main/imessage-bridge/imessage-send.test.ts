@@ -16,6 +16,7 @@ const execFileMock = vi.hoisted(() =>
 
 vi.mock('node:child_process', () => ({ execFile: execFileMock }))
 
+import { setApprovedHandleStoreForTest } from './approved-handles'
 import { isValidImessageHandle, sendImessage } from './imessage-send'
 import { outboundSince, wasSentByDobius } from './outbound-ring'
 
@@ -25,6 +26,8 @@ function lastArgs(): string[] {
 
 beforeEach(() => {
   execFileMock.mockClear()
+  // Why: these tests cover the AppleScript call; the approval gate has its own tests.
+  setApprovedHandleStoreForTest({ list: () => ['me@x.com', '+15551234567'], save: () => undefined })
 })
 
 describe('#16 AppleScript send cannot be altered by the handle or text', () => {

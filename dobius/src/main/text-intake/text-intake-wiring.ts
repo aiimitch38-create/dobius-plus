@@ -2,11 +2,11 @@
 // (thread row, live call or Mac notification, same rate limits) on their own
 // budget, so a busy texter never uses up ADAM's own taps. A tap is always a
 // fixed template with the contact's name, never the message text.
-import { systemPreferences } from 'electron'
 import { join } from 'node:path'
 import type { AdamThreadRow } from '../../shared/speech-types'
 import { getImessageBridgeConfig } from '../imessage-bridge/bridge-config'
-import { sendImessage } from '../imessage-bridge/imessage-send'
+import { sendImessageAfterDraftTouchId } from '../imessage-bridge/imessage-send'
+import { requireTouchId, TOUCH_ID_REQUIRED, type TouchId } from '../imessage-bridge/touch-id-gate'
 import { AdamNotifier, AdamNotifyRefused } from '../jarvis/adam-notify'
 import { sendLiveReport } from '../jarvis/live-voice-ipc'
 import { getUserDataRoot } from '../storage/user-data-root'
@@ -28,15 +28,8 @@ export function textSendUnavailable(platform: NodeJS.Platform = process.platform
   return getImessageBridgeConfig().enabled ? null : 'Turn on the iMessage bridge in Settings first.'
 }
 
-export const TOUCH_ID_REQUIRED = 'Sending needs Touch ID on this Mac'
+export { TOUCH_ID_REQUIRED }
 
-type TouchId = Pick<typeof systemPreferences, 'canPromptTouchID' | 'promptTouchID'>
-
-/**
- * Touch ID before any text goes out (Codex round 2 on 7.17): computer-use and
- * osascript can click, but nothing but Carson's finger passes this. No click
- * fallback: without Touch ID, nothing is sent.
- */
 const PREVIEW_CHARS = 80
 
 /** What the Touch ID sheet says: who, which number, and the exact words (first 80, then the length). */
@@ -47,21 +40,13 @@ export function touchIdReason(send: { toName: string; toHandle: string; text: st
   return `send a text to ${send.toName} (${send.toHandle}): "${preview}"`
 }
 
-export async function touchIdAuthorizeSend(
+/** Touch ID before a draft goes out, showing its exact recipient and words. */
+export function touchIdAuthorizeSend(
   send: { toName: string; toHandle: string; text: string },
-  touchId: TouchId = systemPreferences,
-  platform: NodeJS.Platform = process.platform
+  touchId?: TouchId,
+  platform?: NodeJS.Platform
 ): Promise<string | null> {
-  if (platform !== 'darwin' || typeof touchId.canPromptTouchID !== 'function' || !touchId.canPromptTouchID()) {
-    return TOUCH_ID_REQUIRED
-  }
-  try {
-    await touchId.promptTouchID(touchIdReason(send))
-    return null
-  } catch {
-    // Why a fixed reason: the prompt rejects for cancel, lockout or failure alike, and all mean "no".
-    return 'Touch ID was not confirmed.'
-  }
+  return requireTouchId(touchIdReason(send), touchId, platform)
 }
 
 export function startTextIntake(wiring: TextIntakeWiring): TextIntake {
@@ -74,7 +59,7 @@ export function startTextIntake(wiring: TextIntakeWiring): TextIntake {
   const intake = new TextIntake({
     store: createIntakeStore(() => join(getUserDataRoot(), 'text-intake.json')),
     createCard: (input) => vertexTaskStore.create(input),
-    sendText: sendImessage,
+    sendText: sendImessageAfterDraftTouchId,
     sendUnavailable: () => textSendUnavailable(),
     authorizeSend: (send) => touchIdAuthorizeSend(send),
     appendThread: wiring.appendThread,

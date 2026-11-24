@@ -129,7 +129,12 @@ export const COMPUTER_METHODS: RpcMethod[] = [
       if (protectedSelfUiActive() && (await targetsSelf(params.app, callComputerSidecarListWindows))) {
         throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
       }
-      const result = await callComputerSidecarSnapshot(params)
+      // Why rechecked: a snapshot queued before the review list opened runs after it is on screen.
+      const result = await callComputerSidecarSnapshot(params, () => {
+        if (protectedSelfUiActive() && namesSelf(params.app)) {
+          throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
+        }
+      })
       rememberComputerSnapshot(params.app, result)
       return result
     }

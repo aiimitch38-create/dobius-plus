@@ -10,6 +10,7 @@ import { hasAsanaToken } from '../asana/asana-token-store'
 import { getImessageBridgeConfig } from '../imessage-bridge/bridge-config'
 import type { Store } from '../persistence'
 import { getUserDataRoot } from '../storage/user-data-root'
+import { setVerifiedSelfHandleSource } from '../imessage-bridge/approved-handles'
 import { conductorImessageHandle } from '../voice-conductor/conductor-settings'
 import { createIMessageBridge } from '../voice-conductor/imessage-bridge'
 import { adamConductor } from './adam-conductor'
@@ -142,6 +143,8 @@ export function startAdamSpeaksUp(
 ): { overnight: OvernightLog } {
   const settings = (): ReturnType<typeof resolveSpeaksUpSettings> =>
     resolveSpeaksUpSettings(store.getSettings().voice)
+  // Why: the 7.16 verified own number may be texted without a separate Touch ID approval.
+  setVerifiedSelfHandleSource(() => (briefHandleVerifier().isVerified() ? conductorImessageHandle() : null))
   setAdamNotifier(
     new AdamNotifier({
       enabled: () => settings().tapOnShoulder,

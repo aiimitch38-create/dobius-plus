@@ -6,7 +6,8 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn((updates: Record<string, unknown>) => updates),
   restart: vi.fn(),
   testSend: vi.fn(async () => ({ ok: true })),
-  openExternal: vi.fn(async () => undefined)
+  openExternal: vi.fn(async () => undefined),
+  approve: vi.fn(async (_handle: string): Promise<string | null> => null)
 }))
 
 vi.mock('electron', () => ({
@@ -24,6 +25,8 @@ vi.mock('../imessage-bridge/bridge-service', () => ({
   testImessageSend: mocks.testSend,
   updateImessageBridgeSettings: mocks.update
 }))
+
+vi.mock('../imessage-bridge/approved-handles', () => ({ approveImessageHandle: mocks.approve }))
 
 import { IMESSAGE_BRIDGE_UNTRUSTED, registerImessageBridgeHandlers } from './imessage-bridge'
 
@@ -62,10 +65,22 @@ describe('iMessage bridge IPC trust', () => {
   it('serves the trusted main window as before', async () => {
     expect(invoke('imessageBridge:getConfig', TRUSTED)).toMatchObject({ selfHandle: '+15550102000' })
     expect(invoke('imessageBridge:status', TRUSTED)).toMatchObject({ enabled: true })
-    invoke('imessageBridge:updateConfig', TRUSTED, { enabled: false, lastSeenRowid: 0 })
+    await invoke('imessageBridge:updateConfig', TRUSTED, { enabled: false, lastSeenRowid: 0 })
+    expect(mocks.approve).not.toHaveBeenCalled()
     expect(mocks.update).toHaveBeenCalledWith({ enabled: false, triggerPrefix: undefined, selfHandle: undefined })
     expect(mocks.restart).toHaveBeenCalledTimes(1)
     expect(await invoke('imessageBridge:testSend', TRUSTED)).toEqual({ ok: true })
+  })
+
+  it('a new selfHandle is saved only after Touch ID approves it', async () => {
+    mocks.approve.mockResolvedValueOnce('+15559990000 was not saved: Touch ID was not confirmed.')
+    await expect(invoke('imessageBridge:updateConfig', TRUSTED, { selfHandle: '+15559990000' })).rejects.toThrow(
+      /not saved/
+    )
+    expect(mocks.update).not.toHaveBeenCalled()
+    await invoke('imessageBridge:updateConfig', TRUSTED, { selfHandle: '+15559990000' })
+    expect(mocks.approve).toHaveBeenLastCalledWith('+15559990000')
+    expect(mocks.update).toHaveBeenCalledWith({ enabled: undefined, triggerPrefix: undefined, selfHandle: '+15559990000' })
   })
 
   it('refuses everyone by default until the main window exists', () => {

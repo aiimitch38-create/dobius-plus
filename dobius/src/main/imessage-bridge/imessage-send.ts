@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { assertApprovedImessageHandle } from './approved-handles'
 import { recordOutbound } from './outbound-ring'
 
 const execFileAsync = promisify(execFile)
@@ -58,8 +59,27 @@ export function stripControlChars(text: string): string {
  * Send an iMessage to `handle` via Messages.app (osascript). Rate-limited to
  * OUTBOUND_RATE_LIMIT_PER_MIN so a dispatch loop can never spam the user.
  * Requires macOS Automation permission for Messages.app (prompted on first send).
+ * Only to a handle approved with Touch ID when saved, or the verified self
+ * handle (approved-handles.ts): every caller goes through this check.
  */
 export async function sendImessage(handle: string, text: string): Promise<void> {
+  if (!handle) {
+    throw new Error('selfHandle not configured')
+  }
+  assertApprovedImessageHandle(handle)
+  await deliverImessage(handle, text)
+}
+
+/**
+ * For TextIntake.sendDraft ONLY: a tracked contact's draft, which Carson just
+ * approved with Touch ID for that exact recipient and text. Everything else
+ * uses sendImessage.
+ */
+export async function sendImessageAfterDraftTouchId(handle: string, text: string): Promise<void> {
+  await deliverImessage(handle, text)
+}
+
+async function deliverImessage(handle: string, text: string): Promise<void> {
   if (!handle) {
     throw new Error('selfHandle not configured')
   }

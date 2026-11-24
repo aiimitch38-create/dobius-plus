@@ -8,6 +8,7 @@ import {
   testImessageSend,
   updateImessageBridgeSettings
 } from '../imessage-bridge/bridge-service'
+import { approveImessageHandle } from '../imessage-bridge/approved-handles'
 import { trustedLiveSender } from '../jarvis/jarvis-host-window'
 
 // Deep link to the Full Disk Access pane; reading chat.db requires the grant.
@@ -36,10 +37,19 @@ export function registerImessageBridgeHandlers(
       // Why: lastSeenRowid is bridge-owned dispatch state; a renderer must not
       // be able to rewind it and replay old messages as commands.
       const { enabled, triggerPrefix, selfHandle } = updates
-      // Throws while imessage-bridge.json is unreadable (BUILD-009C review F1).
-      const next = updateImessageBridgeSettings({ enabled, triggerPrefix, selfHandle })
-      restartImessageBridge()
-      return next
+      return (async () => {
+        // Why: the bridge, conductor and brief text this handle with no click, so it needs Touch ID once.
+        if (typeof selfHandle === 'string') {
+          const refused = await approveImessageHandle(selfHandle)
+          if (refused) {
+            throw new Error(refused)
+          }
+        }
+        // Throws while imessage-bridge.json is unreadable (BUILD-009C review F1).
+        const next = updateImessageBridgeSettings({ enabled, triggerPrefix, selfHandle })
+        restartImessageBridge()
+        return next
+      })()
     }
   )
 

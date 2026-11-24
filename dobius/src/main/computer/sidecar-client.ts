@@ -64,9 +64,11 @@ export async function callComputerSidecarListWindows(
 }
 
 export async function callComputerSidecarSnapshot(
-  params: unknown
+  params: unknown,
+  /** Runs when the queued snapshot is about to execute; throw to refuse it then. */
+  beforeRun?: () => void
 ): Promise<ComputerSnapshotResult> {
-  return (await getComputerSidecar().call('getAppState', params)) as ComputerSnapshotResult
+  return (await getComputerSidecar().call('getAppState', params, beforeRun)) as ComputerSnapshotResult
 }
 
 export async function callComputerSidecarAction(

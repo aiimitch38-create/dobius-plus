@@ -63,4 +63,20 @@ describe('computer-use recheck at execution time', () => {
     await expect(method('computer.getAppState').handler({ app: 'Dobius+' }, {})).rejects.toThrow(PROTECTED_SELF_UI_REASON)
     expect(mocks.snapshot).not.toHaveBeenCalled()
   })
+
+  it('refuses a Dobius+ snapshot queued before the review list opened', async () => {
+    mocks.snapshot.mockImplementation(async (_params: unknown, beforeRun?: () => void) => {
+      holdProtectedSelfUi('opened-later')
+      beforeRun?.()
+      return { app: 'Dobius+', elements: [] }
+    })
+    await expect(method('computer.getAppState').handler({ app: 'Dobius+' }, {})).rejects.toThrow(PROTECTED_SELF_UI_REASON)
+    resetProtectedSelfUiForTest()
+    mocks.snapshot.mockImplementation(async (_params: unknown, beforeRun?: () => void) => {
+      holdProtectedSelfUi('opened-later')
+      beforeRun?.()
+      return { app: 'Finder', elements: [] }
+    })
+    await expect(method('computer.getAppState').handler({ app: 'Finder' }, {})).resolves.toMatchObject({ app: 'Finder' })
+  })
 })
