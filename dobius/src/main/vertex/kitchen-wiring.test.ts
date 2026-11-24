@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp' } }))
 
-import { isCookWorkspace, readCookStatus } from './kitchen-wiring'
+import { isCookWorkspace, isKitchenRepo, readCookStatus } from './kitchen-wiring'
 
 type Terminal = { handle: string; connected: boolean; lastOutputAt: number | null; preview: string }
 
@@ -70,5 +70,14 @@ describe('isCookWorkspace', () => {
     expect(isCookWorkspace(`/r/${name}`, name, `/r/${name}/`)).toBe(false)
     expect(isCookWorkspace('/wt/someone-elses', name, '/r/repo')).toBe(false)
     expect(isCookWorkspace('/wt/plain', 'plain', '/r/repo')).toBe(false)
+  })
+})
+
+describe('isKitchenRepo', () => {
+  it('is a local git repo only: folder and remote projects are refused up front', () => {
+    expect(isKitchenRepo({})).toBe(true)
+    expect(isKitchenRepo({ kind: 'git', connectionId: null })).toBe(true)
+    expect(isKitchenRepo({ kind: 'folder' })).toBe(false)
+    expect(isKitchenRepo({ kind: 'git', connectionId: 'ssh-1' })).toBe(false)
   })
 })

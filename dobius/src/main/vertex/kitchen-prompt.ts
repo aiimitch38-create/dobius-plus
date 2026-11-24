@@ -7,8 +7,14 @@ import type { BugAutoFixRepo } from './bug-autofix'
 
 const CARD_LIMIT = 8_000
 
-/** The patch for Carson's "Send to kitchen" / "Remove", or null when refused. */
-export function kitchenMarkPatch(task: VertexTask, on: boolean, now: number): VertexTaskPatch | null {
+/** The patch for Carson's "Send to kitchen" / "Remove", or null when refused.
+ *  `repoId`: the one repo the card's project resolves to right now. */
+export function kitchenMarkPatch(
+  task: VertexTask,
+  on: boolean,
+  now: number,
+  repoId?: string
+): VertexTaskPatch | null {
   const status = task.kitchen?.status
   if (on) {
     const waiting = task.status === 'backlog' || task.status === 'todo'
@@ -20,7 +26,9 @@ export function kitchenMarkPatch(task: VertexTask, on: boolean, now: number): Ve
             updatedAt: now,
             // Why a copy: what Carson approved is frozen here (see VertexTaskKitchen).
             title: task.title,
-            description: task.description.slice(0, CARD_LIMIT)
+            description: task.description.slice(0, CARD_LIMIT),
+            projectId: task.projectId,
+            repoId
           }
         }
       : null

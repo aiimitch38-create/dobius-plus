@@ -74,6 +74,11 @@ export function isCookWorkspace(worktreePath: string, name: string, repoPath: st
   )
 }
 
+/** The kitchen is local-only for now: a git repo on this Mac. */
+export function isKitchenRepo(repo: { kind?: 'git' | 'folder'; connectionId?: string | null }): boolean {
+  return isGitRepoKind(repo) && !repo.connectionId
+}
+
 const KITCHEN_OFF = 'The kitchen is turned off, so no cook is started.'
 
 export function wireKitchen(store: Store, runtime: DobiusRuntimeService): void {
@@ -84,7 +89,7 @@ export function wireKitchen(store: Store, runtime: DobiusRuntimeService): void {
   setExecutionOriginSwitch('kitchen', isEnabled, KITCHEN_OFF)
   const notCookWorkspace = (worktreePath: string, name: string, repoId: string): string | null => {
     const repo = runtime.listRepos().find((candidate) => candidate.id === repoId)
-    return repo && isGitRepoKind(repo) && isCookWorkspace(worktreePath, name, repo.path)
+    return repo && isKitchenRepo(repo) && isCookWorkspace(worktreePath, name, repo.path)
       ? null
       : `${worktreePath} is not a new workspace of the cook's own, so no cook was started in it.`
   }
@@ -98,8 +103,10 @@ export function wireKitchen(store: Store, runtime: DobiusRuntimeService): void {
     findRepos: (projectId) =>
       runtime
         .listRepos()
-        // Why git only: a folder project has no worktree or branch to isolate a cook in.
-        .filter((repo) => isGitRepoKind(repo) && projectIdOf(repo.path) === projectId)
+        // Why local git only: a folder project has no worktree or branch to
+        // isolate a cook in, and a remote workspace starts its agent before
+        // this side can check the folder it landed in.
+        .filter((repo) => isKitchenRepo(repo) && projectIdOf(repo.path) === projectId)
         .map((repo) => ({ id: repo.id, name: repo.displayName || repo.id, path: repo.path })),
     // Why: the restricted launch quoting is POSIX (see bug-autofix-wiring.ts).
     unsupportedReason: () =>
@@ -149,13 +156,11 @@ export function wireKitchen(store: Store, runtime: DobiusRuntimeService): void {
           }
         }
       })
-      // Why again: remote workspaces skip prepareWorkspace.
-      const refusal = notCookWorkspace(result.worktree.path, name, repoId)
-      if (refusal) {
-        await runtime.stopTerminalsForWorktree(`id:${result.worktree.id}`)
-        throw new Error(refusal)
-      }
-      return { ...toFound(result.worktree), warning: result.warning }
+      // A backstop only (remote repos are refused up front and local ones are
+      // checked in prepareWorkspace). The kitchen stops the workspace, and
+      // keeps its slot and retries if the stop fails.
+      const refusal = notCookWorkspace(result.worktree.path, name, repoId) ?? undefined
+      return { ...toFound(result.worktree), warning: result.warning, refusal }
     },
     tellAdam: reportKitchenNotice
   })

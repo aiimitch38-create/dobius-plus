@@ -250,8 +250,12 @@ export type VertexTaskKitchen = {
    *  changes what the cook is told. */
   title?: string
   description?: string
-  /** Launch identity, written before the workspace is created. */
+  /** The card's project and the one repo it resolved to when Carson marked
+   *  it. A cook only ever starts or restarts in this repo; the card's live
+   *  projectId is never read again. */
+  projectId?: string
   repoId?: string
+  /** Written before the workspace is created. */
   worktreeName?: string
   /** When the current attempt started. */
   startedAt?: number
@@ -268,7 +272,7 @@ export type VertexTaskKitchen = {
 }
 
 /** The answer to Carson's "Send to kitchen" / "Remove". `error` is a short
- *  fixed line the card shows; it never holds card or terminal text. */
+ *  line the card shows to Carson (it may name the card's project). */
 export type VertexTaskKitchenMarkResult =
   | { ok: true; task: VertexTask }
   | { ok: false; error: string }

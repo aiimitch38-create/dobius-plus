@@ -51,7 +51,8 @@ export type KitchenDeps = {
     name: string
     prompt: string
     comment: string
-  }) => Promise<BugAutoFixWorktree>
+    /** `refusal`: the workspace is not the cook's own; whatever runs in it must be stopped. */
+  }) => Promise<BugAutoFixWorktree & { refusal?: string }>
   /** Throwing means unknown: nothing is decided on that pump. */
   cookStatus: (worktreeId: string) => Promise<KitchenCookStatus>
   /** Stops whatever runs in the workspace, then starts the restricted agent again. */

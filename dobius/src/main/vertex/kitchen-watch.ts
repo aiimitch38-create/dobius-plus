@@ -101,7 +101,10 @@ export function createKitchenWatch(deps: KitchenDeps, tools: KitchenTools) {
 
   const fail = async (task: VertexTask, why: string): Promise<void> => {
     const kitchen = task.kitchen
-    const repo = deps.findRepos(task.projectId ?? '').find((candidate) => candidate.id === kitchen?.repoId)
+    // Why the frozen project: the card's live projectId is never trusted (VertexTaskKitchen).
+    const repo = deps
+      .findRepos(kitchen?.projectId ?? '')
+      .find((candidate) => candidate.id === kitchen?.repoId)
     const attempt = kitchen?.attempt ?? 1
     // Why not while off or paused: a restart is a launch.
     if (!kitchen?.worktreeId || attempt >= 2 || !repo || !mayStart()) {

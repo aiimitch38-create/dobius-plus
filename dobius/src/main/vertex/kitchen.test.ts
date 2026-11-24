@@ -49,7 +49,7 @@ function card(id: string, overrides: Partial<VertexTask> = {}): VertexTask {
 const marked = (id: string, overrides: Partial<VertexTask> = {}): VertexTask => {
   const base = card(id, overrides)
   // Why backlog: the card was marked while waiting, whatever happened to it since.
-  return { ...base, ...kitchenMarkPatch({ ...base, status: 'backlog' }, true, 1) }
+  return { ...base, ...kitchenMarkPatch({ ...base, status: 'backlog' }, true, 1, 'repo') }
 }
 
 function harness() {
@@ -86,7 +86,11 @@ function harness() {
         ? { allowed: false, reason: 'paused', message: 'Crew is paused.' }
         : { allowed: true },
     findRepos: (projectId) =>
-      projectId === 'dobius-plus' ? [{ id: 'repo', name: 'dobius-plus', path: '/r/dobius-plus' }] : [],
+      projectId === 'dobius-plus'
+        ? [{ id: 'repo', name: 'dobius-plus', path: '/r/dobius-plus' }]
+        : projectId === 'evil'
+          ? [{ id: 'evil-repo', name: 'evil', path: '/r/evil' }]
+          : [],
     createWorktree,
     cookStatus: async (worktreeId) => {
       const cook = cooks.get(worktreeId)
@@ -144,13 +148,15 @@ describe('kitchen tickets', () => {
   })
 
   it('only marks a waiting card, and only unmarks one that never started', () => {
-    expect(kitchenMarkPatch(card('a'), true, 5)).toEqual({
+    expect(kitchenMarkPatch(card('a'), true, 5, 'repo')).toEqual({
       kitchen: {
         status: 'marked',
         markedAt: 5,
         updatedAt: 5,
         title: 'Card a',
-        description: 'Add a tooltip to the save button'
+        description: 'Add a tooltip to the save button',
+        projectId: 'dobius-plus',
+        repoId: 'repo'
       }
     })
     expect(kitchenMarkPatch(card('a', { status: 'done' }), true, 5)).toBeNull()
@@ -471,6 +477,61 @@ describe('kitchen hardening', () => {
     expect(h.kitchen.status().cooking).toBe(1)
     await h.tick(3 * 60 * MINUTE)
     expect(h.createWorktree).not.toHaveBeenCalled()
+    expect(h.restartCook).not.toHaveBeenCalled()
+  })
+})
+
+describe('kitchen repo freeze', () => {
+  it('a project changed after marking never moves the cook: start and restart stay in the frozen repo', async () => {
+    const h = harness()
+    h.tasks.push(marked('a'))
+    h.task('a').projectId = 'evil'
+    await h.kitchen.pump()
+    expect(h.createWorktree.mock.calls[0][0]).toMatchObject({ repoId: 'repo' })
+    expect(h.createWorktree.mock.calls[0][0].prompt).toContain('dobius-plus')
+    await h.tick(MINUTE)
+    await h.tick(45 * MINUTE)
+    expect(h.restartCook).toHaveBeenCalledTimes(1)
+    expect(h.restartCook.mock.calls[0][0].prompt).toContain('/r/dobius-plus')
+    expect(JSON.stringify(h.restartCook.mock.calls)).not.toContain('evil')
+  })
+
+  it('refuses when the frozen project no longer resolves to the frozen repo, or nothing was frozen', async () => {
+    const h = harness()
+    const moved = marked('moved')
+    h.tasks.push(
+      { ...moved, kitchen: { ...moved.kitchen!, projectId: 'evil' } },
+      { ...marked('bare'), kitchen: { ...marked('bare').kitchen!, repoId: undefined } }
+    )
+    await h.kitchen.pump()
+    expect(h.createWorktree).not.toHaveBeenCalled()
+    expect(h.task('moved').kitchen).toMatchObject({ status: 'failed' })
+    expect(h.task('bare').kitchen).toMatchObject({ status: 'failed' })
+  })
+
+  it('a workspace that is not the cook\'s own is stopped, and holds its slot until the stop works', async () => {
+    const h = harness()
+    h.createWorktree.mockResolvedValueOnce({
+      worktreeId: 'repo::/r/dobius-plus',
+      branch: 'main',
+      refusal: 'not a new workspace'
+    } as never)
+    h.stopCook.mockRejectedValueOnce(new Error('pty busy'))
+    h.tasks.push(marked('a'), marked('b'), marked('c'), marked('d'))
+    await h.kitchen.pump()
+    expect(h.stopCook).toHaveBeenCalledWith('repo::/r/dobius-plus')
+    expect(h.task('a').kitchen).toMatchObject({
+      status: 'starting',
+      worktreeId: 'repo::/r/dobius-plus',
+      stopPending: 'not a new workspace'
+    })
+    expect(h.createWorktree).toHaveBeenCalledTimes(3)
+    expect(h.told).toEqual([])
+    await h.tick(MINUTE)
+    expect(h.stopCook).toHaveBeenCalledTimes(2)
+    expect(h.task('a')).toMatchObject({ status: 'blocked', kitchen: { status: 'blocked', reason: 'not a new workspace' } })
+    expect(h.told.map((notice) => notice.event)).toEqual(['blocked'])
+    expect(h.createWorktree).toHaveBeenCalledTimes(4)
     expect(h.restartCook).not.toHaveBeenCalled()
   })
 })

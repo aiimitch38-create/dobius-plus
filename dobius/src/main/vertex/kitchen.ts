@@ -130,6 +130,17 @@ export function createKitchen(deps: KitchenDeps) {
         comment: `Kitchen cook for Kanban card: ${claimed.kitchen?.title ?? ''}`.slice(0, 200)
       })
       noteCook(task.id, created.worktreeId)
+      if (created.refusal) {
+        // Why block: it stops the workspace, and keeps the slot until that works.
+        await block(
+          {
+            ...claimed,
+            kitchen: claimed.kitchen && { ...claimed.kitchen, worktreeId: created.worktreeId }
+          },
+          created.refusal
+        )
+        return
+      }
       mark(claimed, {
         ...claimed.kitchen,
         status: 'cooking',
@@ -148,27 +159,46 @@ export function createKitchen(deps: KitchenDeps) {
     }
   }
 
-  /** Why a marked card cannot be cooked at all, or the one repo to cook it in. */
-  const repoFor = (task: VertexTask): BugAutoFixRepo | string => {
+  /** The one local git repo of a project, or why there is none. */
+  const repoOf = (projectId: string | undefined): BugAutoFixRepo | string => {
     const unsupported = deps.unsupportedReason?.() ?? null
     if (unsupported) {
       return unsupported
     }
-    if (task.autoFix) {
-      return 'Bug auto-fix already has this card.'
-    }
-    if (typeof task.kitchen?.title !== 'string' || typeof task.kitchen.description !== 'string') {
-      return 'The card has no copy of what you sent to the kitchen. Send it again.'
-    }
-    if (!task.projectId) {
+    if (!projectId) {
       return 'The card has no project, so there is no repo to cook it in.'
     }
-    const repos = deps.findRepos(task.projectId)
+    const repos = deps.findRepos(projectId)
     return repos.length === 1
       ? repos[0]
       : repos.length === 0
-        ? `No git repo in Dobius+ belongs to project "${task.projectId}". A folder project cannot go to the kitchen.`
-        : `More than one repo belongs to project "${task.projectId}".`
+        ? `No local git repo in Dobius+ belongs to project "${projectId}". Folder and remote projects cannot go to the kitchen.`
+        : `More than one repo belongs to project "${projectId}".`
+  }
+
+  /** At mark time: the repo Carson's card would be cooked in, or why it cannot be. */
+  const repoToMark = (task: VertexTask): BugAutoFixRepo | string =>
+    task.autoFix ? 'Bug auto-fix already has this card.' : repoOf(task.projectId)
+
+  /** At dispatch: only what was frozen when Carson marked the card
+   *  (VertexTaskKitchen); the card's live projectId is never read. */
+  const repoFor = (task: VertexTask): BugAutoFixRepo | string => {
+    const order = task.kitchen
+    if (
+      typeof order?.title !== 'string' ||
+      typeof order.description !== 'string' ||
+      !order.projectId ||
+      !order.repoId
+    ) {
+      return 'The card has no copy of what you sent to the kitchen. Send it again.'
+    }
+    if (task.autoFix) {
+      return 'Bug auto-fix already has this card.'
+    }
+    const repo = repoOf(order.projectId)
+    return typeof repo === 'string' || repo.id === order.repoId
+      ? repo
+      : 'The repo of this project changed since you sent the card. Send it again.'
   }
 
   const dispatch = (): Promise<void>[] => {
@@ -239,9 +269,11 @@ export function createKitchen(deps: KitchenDeps) {
         : {}
       await block(
         { ...task, kitchen: { ...kitchen, ...where } },
-        found
-          ? 'Dobius+ closed while this cook was starting. Anything running in its workspace was stopped.'
-          : 'Dobius+ closed before this cook started. No workspace was created.'
+        // Why stopPending first: a start refused earlier is still being stopped.
+        kitchen.stopPending ??
+          (found
+            ? 'Dobius+ closed while this cook was starting. Anything running in its workspace was stopped.'
+            : 'Dobius+ closed before this cook started. No workspace was created.')
       )
     }
   }
@@ -281,7 +313,7 @@ export function createKitchen(deps: KitchenDeps) {
     disposed = true
   }
 
-  return { pump, status, dispose }
+  return { pump, status, dispose, repoToMark }
 }
 
 export type Kitchen = ReturnType<typeof createKitchen>
@@ -312,6 +344,12 @@ export function disposeKitchen(): void {
 /** Carson marked a card: look now instead of at the next pump. */
 export function pumpKitchenSoon(): void {
   void active?.pump()
+}
+
+/** The repo a card would be cooked in if Carson marked it now, or why it
+ *  cannot be (a plain sentence). Null until configureKitchen ran. */
+export function kitchenRepoToMark(task: VertexTask): BugAutoFixRepo | string | null {
+  return active?.repoToMark(task) ?? null
 }
 
 /** Null until configureKitchen ran. */

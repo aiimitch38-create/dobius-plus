@@ -16,11 +16,16 @@ import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import type { VertexTask, VertexTaskKitchenMarkResult } from '../../shared/vertex-task-types'
 import { withProtectedSelfUi } from '../computer/protected-self-ui'
 import { requireTouchId, TOUCH_ID_REQUIRED } from '../imessage-bridge/touch-id-gate'
-import { kitchenMarkPatch, pumpKitchenSoon } from '../vertex/kitchen'
+import { kitchenMarkPatch, kitchenRepoToMark, pumpKitchenSoon } from '../vertex/kitchen'
 import { vertexTaskStore } from '../vertex/vertex-task-store'
 
 const TITLE_MAX = 60
 const NOT_SENT = 'Not sent.'
+/** False when the card no longer resolves to the repo Carson was asked about. */
+function sameRepo(now: ReturnType<typeof kitchenRepoToMark>, then: ReturnType<typeof kitchenRepoToMark>): boolean {
+  return now !== null && typeof now !== 'string' && then !== null && typeof then !== 'string' && now.id === then.id
+}
+
 const refusedWith = (error: string): VertexTaskKitchenMarkResult => ({ ok: false, error })
 let confirmCounter = 0
 
@@ -53,7 +58,14 @@ export function registerVertexTaskKitchenHandler(
         return refusedWith(NOT_SENT)
       }
       const task = storedCard(args.taskId)
-      const patch = task ? kitchenMarkPatch(task, args.on, Date.now()) : null
+      // Why resolved here: the repo is frozen into the mark with the card's
+      // text and project, so a later change to the card cannot move the cook.
+      const repo = task && args.on ? kitchenRepoToMark(task) : null
+      if (typeof repo === 'string') {
+        return refusedWith(`Not sent: ${repo}`)
+      }
+      const patch =
+        task && (repo || !args.on) ? kitchenMarkPatch(task, args.on, Date.now(), repo?.id) : null
       if (!task || !patch) {
         return refusedWith(args.on ? 'Not sent: this card cannot go to the kitchen now.' : 'Not removed.')
       }
@@ -76,7 +88,9 @@ export function registerVertexTaskKitchenHandler(
           !now ||
           now.title !== task.title ||
           now.description !== task.description ||
-          !kitchenMarkPatch(now, true, 0)
+          now.projectId !== task.projectId ||
+          !kitchenMarkPatch(now, true, 0) ||
+          sameRepo(kitchenRepoToMark(now), repo) === false
         ) {
           return refusedWith('Not sent: the card changed while Touch ID was open.')
         }

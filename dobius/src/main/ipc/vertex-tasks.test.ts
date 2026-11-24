@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { handlers, fromId, update, list, create, onVertexTaskCreated, isRegisteredRendererWebContents, requireTouchId } =
+const { handlers, fromId, update, list, create, onVertexTaskCreated, isRegisteredRendererWebContents, requireTouchId, kitchenRepoToMark } =
   vi.hoisted(() => ({
   requireTouchId: vi.fn(async (_reason: string): Promise<string | null> => null),
+  kitchenRepoToMark: vi.fn((task: { projectId?: string }): { id: string } | string | null =>
+    task.projectId === 'p1' ? { id: 'repo-1' } : task.projectId ? { id: 'other-repo' } : 'The card has no project.'
+  ),
   handlers: new Map<string, (event: unknown, args: unknown) => unknown>(),
   fromId: vi.fn(),
   update: vi.fn((_taskId: string, _patch: unknown) => null),
@@ -25,6 +28,10 @@ vi.mock('../vertex/vertex-task-store', () => ({
   vertexTaskStore: { update, list, create }
 }))
 vi.mock('../vertex/bug-autofix', () => ({ onVertexTaskCreated }))
+vi.mock('../vertex/kitchen', async (importOriginal) => ({
+  ...(await importOriginal<typeof kitchenModule>()),
+  kitchenRepoToMark
+}))
 vi.mock('../imessage-bridge/touch-id-gate', () => ({
   requireTouchId,
   TOUCH_ID_REQUIRED: 'Sending needs Touch ID on this Mac'
@@ -39,6 +46,7 @@ import { registerVertexTaskHandlers } from './vertex-tasks'
 import { protectedSelfUiActive } from '../computer/protected-self-ui'
 import { stampClaimOwner, withLostClaimCheck } from '../vertex/vertex-dispatch-recovery'
 import type * as recovery from '../vertex/vertex-dispatch-recovery'
+import type * as kitchenModule from '../vertex/kitchen'
 
 const event = { sender: { id: 7 } }
 
@@ -142,14 +150,16 @@ describe('vertex task IPC bug auto-fix hook', () => {
     expect(update).toHaveBeenCalledWith('t1', { title: 'x' })
   })
 
-  const STORED = { id: 't1', status: 'backlog', title: 'Stored title', description: 'Stored text' }
+  const STORED = { id: 't1', status: 'backlog', title: 'Stored title', description: 'Stored text', projectId: 'p1' }
   const MARK = {
     kitchen: {
       status: 'marked',
       markedAt: expect.any(Number),
       updatedAt: expect.any(Number),
       title: 'Stored title',
-      description: 'Stored text'
+      description: 'Stored text',
+      projectId: 'p1',
+      repoId: 'repo-1'
     }
   }
   const setKitchen = (from: unknown, args: unknown): unknown =>
@@ -222,6 +232,25 @@ describe('vertex task IPC bug auto-fix hook', () => {
       ok: false,
       error: 'Not sent: the card changed while Touch ID was open.'
     })
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('marks nothing when the project changed while the prompt was open, or has no repo', async () => {
+    list.mockReturnValue([STORED] as never)
+    requireTouchId.mockImplementationOnce(async () => {
+      list.mockReturnValue([{ ...STORED, projectId: 'p2' }] as never)
+      return null
+    })
+    expect(await setKitchen(appWindow, { taskId: 't1', on: true })).toMatchObject({ ok: false })
+    expect(update).not.toHaveBeenCalled()
+
+    requireTouchId.mockClear()
+    list.mockReturnValue([{ ...STORED, projectId: undefined }] as never)
+    expect(await setKitchen(appWindow, { taskId: 't1', on: true })).toEqual({
+      ok: false,
+      error: 'Not sent: The card has no project.'
+    })
+    expect(requireTouchId).not.toHaveBeenCalled()
     expect(update).not.toHaveBeenCalled()
   })
 
