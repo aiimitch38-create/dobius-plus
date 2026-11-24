@@ -63,6 +63,29 @@ describe('library look-up', () => {
     store.close()
   })
 
+  it('everyWord needs the words in the passage, not only in the title', async () => {
+    const titled: LibraryIngester = {
+      source: 'project',
+      list: async () => [
+        {
+          key: 'project:t',
+          source: 'project',
+          path: '/fixture/t.md',
+          mtimeMs: 1,
+          size: 1,
+          load: async () => ({ project: null, title: 'the weather in Dallas', sections: [{ text: 'unrelated grocery list', at: 1 }] })
+        }
+      ]
+    }
+    const store = new LibraryStore(dbPath)
+    await refreshLibrary(store, [titled], { capBytes: 1e9, yieldNow: () => Promise.resolve(), freeBytes: async () => 1e12 })
+    expect(store.fts).toBe(true)
+    expect(searchLibrary(store, { query: 'the weather in dallas' })).toHaveLength(1)
+    expect(searchLibrary(store, { query: 'the weather in dallas', everyWord: true })).toEqual([])
+    expect(searchLibrary(store, { query: 'grocery list', everyWord: true })).toHaveLength(1)
+    store.close()
+  })
+
   it('is null, not "nothing matches", when the last pass stopped early on low disk', async () => {
     await refresh(MIN_FREE_DISK_BYTES - 1)
     const library = service()

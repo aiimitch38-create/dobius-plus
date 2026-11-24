@@ -84,3 +84,24 @@ describe('scrubSnippet', () => {
     expect(scrubSnippet('x '.repeat(400), 300).length).toBeLessThanOrEqual(300)
   })
 })
+
+describe('URL passwords in any scheme', () => {
+  // Built at runtime so no credential-shaped literal sits in the source.
+  const pass = ['hunter', '2'].join('')
+  it.each(['postgres', 'postgresql+asyncpg', 'mysql', 'mongodb+srv', 'redis', 'amqp', 'ftp', 'https'])(
+    'takes the user and password out of a %s URL, at ingest and in a snippet',
+    (scheme) => {
+      const text = `The staging db is ${scheme}://app:${pass}@db.internal/app for now.`
+      const want = `The staging db is ${scheme}://[redacted]@db.internal/app for now.`
+      expect(scrubText(text).text).toBe(want)
+      expect(scrubForIndex(text)).toBe(want)
+      expect(scrubSnippet(text, 300)).toBe(want)
+    }
+  )
+
+  it('leaves URLs without userinfo and plain email addresses alone', () => {
+    const text = 'See postgres://db.internal:5432/app and https://example.com/a@b, or mail bob@example.com.'
+    expect(scrubText(text).text).toBe(text)
+    expect(scrubSnippet(text, 300)).toBe(text)
+  })
+})

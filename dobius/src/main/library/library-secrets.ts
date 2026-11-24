@@ -60,6 +60,14 @@ export function isSecretOrSkippedPath(path: string): boolean {
   return SECRET_FILE_NAMES.some((pattern) => pattern.test(name))
 }
 
+// Why on top of the redactor: its userinfo rule knows only http(s), and a
+// database or broker URL (postgres://user:pass@host) carries a password the same way.
+const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^/@\s]+@/gi
+
+function redact(text: string): string {
+  return redactString(text).replace(URL_USERINFO, '$1[redacted]@')
+}
+
 const LONG_RUN = /[A-Za-z0-9+/=_.-]{24,}/g
 
 /** A long run that looks generated (a key, a hash) rather than a path or a word. */
@@ -119,7 +127,7 @@ export function scrubText(text: string): ScrubbedText {
   const words = wordCount(text)
   const kept: string[] = []
   let dropNext = false
-  for (const raw of redactString(text).split('\n')) {
+  for (const raw of redact(text).split('\n')) {
     if (raw.trim() === '') {
       kept.push('')
       continue
@@ -166,7 +174,7 @@ export const HIDDEN_SNIPPET = '(passage hidden: it looked like a credential)'
  * because a snippet can be spoken aloud or sent to a voice service.
  */
 export function scrubSnippet(snippet: string, maxChars: number): string {
-  const lines = redactString(snippet)
+  const lines = redact(snippet)
     .replace(/[A-Za-z0-9+/=_-]{32,}/g, '…')
     .split(/\s*\n\s*/)
     .filter((line) => line.length > 0 && !looksSecret(line))
