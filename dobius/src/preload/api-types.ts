@@ -2283,6 +2283,8 @@ export type PreloadApi = {
     releaseInterruptedClaims: (args: { activeTaskIds: string[] }) => Promise<void>
     move: (taskId: string, to: VertexTaskStatus, toIndex: number) => Promise<VertexTask | null>
     remove: (taskId: string) => Promise<boolean>
+    /** Carson sends a card to the kitchen (or takes it back); null when refused. */
+    setKitchen: (taskId: string, on: boolean) => Promise<VertexTask | null>
     /** Work-board operations; null means the arguments were malformed. */
     claim: (args: {
       taskId: string

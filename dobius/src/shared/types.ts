@@ -2700,6 +2700,12 @@ export type GlobalSettings = {
   /** Start one fixing agent, in its own workspace, for each bug reported on
    *  the Kanban. Absent means on (Carson's default); false turns it off. */
   bugAutoFixEnabled?: boolean
+  /** The kitchen manager: start a restricted cook, in its own workspace, for
+   *  each Kanban card Carson marks for the kitchen. Off unless true. */
+  kitchenEnabled?: boolean
+  /** Minutes one cook may work on a card before it is restarted once, then
+   *  stopped. Absent means 45. */
+  kitchenMaxMinutes?: number
   /** Why: Dobius Mobile remains reachable from Settings; this only controls
    *  whether the top-level sidebar shortcut is shown. */
   showMobileButton?: boolean

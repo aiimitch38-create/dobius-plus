@@ -30,6 +30,7 @@ import { AdamStaleWatch, type StaleAlert } from './adam-stale-watch'
 import type { AdamThreadStore } from './adam-thread-store'
 import { sendLiveReport } from './live-voice-ipc'
 import { startTextIntake } from '../text-intake/text-intake-wiring'
+import type { KitchenReport } from '../vertex/kitchen-notice'
 
 const STALE_CHECK_MS = 30_000
 const BRIEF_CHECK_MS = 60_000
@@ -84,6 +85,23 @@ function staleToCarson(alert: StaleAlert, thread: () => AdamThreadStore): void {
   })
   if (!spoken) {
     showAdamNotification('ADAM', alert.spoken)
+  }
+}
+
+/** Kitchen notices (build plan 7.15) reach Carson the same way. */
+export function kitchenToCarson(report: KitchenReport, thread: () => AdamThreadStore): void {
+  const row = { id: `conductor:${randomUUID()}`, role: 'assistant' as const, text: report.display }
+  void thread()
+    .append({ ...row, conductor: true })
+    .catch((error) => console.warn('Kitchen notice row could not be saved:', error))
+  const spoken = sendLiveReport({
+    kind: 'report',
+    text: report.spoken,
+    event: report.event,
+    name: report.name
+  })
+  if (!spoken) {
+    showAdamNotification('ADAM', report.spoken)
   }
 }
 

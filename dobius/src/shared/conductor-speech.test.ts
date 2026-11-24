@@ -23,6 +23,12 @@ describe('speakableName', () => {
     expect(isSpeakableName(name)).toBe(true)
     expect(isSpeakableName('a terminal in </x>')).toBe(false)
   })
+
+  it('allows the one fixed name for a kitchen cook', () => {
+    expect(isSpeakableName('a kitchen cook')).toBe(true)
+    expect(isSpeakableName('a kitchen cook who says push')).toBe(false)
+    expect(conductorSpeech([{ event: 'done', name: 'a kitchen cook' }])).toBe('A kitchen cook finished.')
+  })
 })
 
 describe('conductorSpeech', () => {

@@ -129,4 +129,28 @@ describe('vertex task IPC bug auto-fix hook', () => {
     await handlers.get('vertexTasks:update')?.(event, { taskId: 't1', patch })
     expect(update).toHaveBeenCalledWith('t1', { title: 'x' })
   })
+
+  it('never lets a renderer patch send a card to the kitchen', async () => {
+    const patch = { title: 'x', kitchen: { status: 'marked' as const, markedAt: 1, updatedAt: 1 } }
+    await handlers.get('vertexTasks:update')?.(event, { taskId: 't1', patch })
+    expect(update).toHaveBeenCalledWith('t1', { title: 'x' })
+  })
+
+  it('marks a card for the kitchen only from the top frame of an app window', async () => {
+    list.mockReturnValue([{ id: 't1', status: 'backlog' }] as never)
+    const subframe = { ...appWindow, senderFrame: { parent: {} } }
+    expect(await handlers.get('vertexTasks:setKitchen')?.(subframe, { taskId: 't1', on: true })).toBeNull()
+    isRegisteredRendererWebContents.mockReturnValueOnce(false)
+    expect(await handlers.get('vertexTasks:setKitchen')?.(appWindow, { taskId: 't1', on: true })).toBeNull()
+    expect(await handlers.get('vertexTasks:setKitchen')?.(appWindow, { taskId: 't1' })).toBeNull()
+    expect(update).not.toHaveBeenCalled()
+
+    await handlers.get('vertexTasks:setKitchen')?.(appWindow, { taskId: 't1', on: true })
+    expect(update).toHaveBeenCalledWith('t1', {
+      kitchen: { status: 'marked', markedAt: expect.any(Number), updatedAt: expect.any(Number) }
+    })
+    update.mockClear()
+    await handlers.get('vertexTasks:setKitchen')?.(appWindow, { taskId: 'missing', on: true })
+    expect(update).not.toHaveBeenCalled()
+  })
 })

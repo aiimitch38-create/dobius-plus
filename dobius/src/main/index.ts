@@ -147,6 +147,7 @@ import { startImessageBridge, stopImessageBridge } from './imessage-bridge/bridg
 import { startDobiusCli, stopDobiusCli } from './dobius-cli/dispatch-server'
 import { startLibraryRefresh, stopLibraryRefresh } from './library/library-app'
 import { shutdownBugAutoFix } from './vertex/bug-autofix-wiring'
+import { shutdownKitchen } from './vertex/kitchen-wiring'
 import { bootLeadsFromAutostart } from './runtime/rpc/methods/leads'
 import { syncVoiceConductorFromSettings } from './voice-conductor/service'
 import { registerPromptsHandlers } from './ipc/prompts'
@@ -2409,6 +2410,7 @@ app.on('will-quit', (e) => {
   // Why awaited below: a refresh pass in its worker gets to finish its write.
   const libraryShutdown = stopLibraryRefresh()
   shutdownBugAutoFix()
+  shutdownKitchen()
   automations?.stop()
   setUnreadDockBadgeCount(0)
   agentHookServer.stop()

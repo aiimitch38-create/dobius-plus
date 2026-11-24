@@ -227,6 +227,36 @@ export type VertexTaskAutoFix = {
   reason?: string
 }
 
+/** What main's kitchen manager did with a card Carson marked for it. Only
+ * main writes it, and only the operator IPC (vertexTasks:setKitchen) creates
+ * it, so an agent or the CLI can never send a card to the kitchen.
+ *
+ * 'marked'   Carson opted the card in; waiting for the kitchen to be on, the
+ *            crew to be running and a free cook
+ * 'starting' the card was claimed and its workspace is being created
+ * 'cooking'  a cook (a restricted Claude agent) is working in `worktreeId`
+ * 'review'   the cook finished; the card was moved to Review for Carson
+ * 'blocked'  the cook was stopped after its one restart (see `reason`)
+ * 'stopped'  the card was moved or deleted while cooking; the cook was stopped
+ * 'failed'   never started (see `reason`); Carson may mark it again */
+export type VertexTaskKitchen = {
+  status: 'marked' | 'starting' | 'cooking' | 'review' | 'blocked' | 'stopped' | 'failed'
+  markedAt: number
+  updatedAt: number
+  /** Launch identity, written before the workspace is created. */
+  repoId?: string
+  worktreeName?: string
+  /** When the current attempt started. */
+  startedAt?: number
+  /** 1 for the first run, 2 after the one restart. Written before a restart. */
+  attempt?: number
+  worktreeId?: string
+  worktreePath?: string
+  branch?: string
+  /** Plain-English reason for 'blocked' / 'stopped' / 'failed' or a restart. */
+  reason?: string
+}
+
 export type VertexTaskLink = {
   id: string
   label: string
@@ -321,6 +351,9 @@ export type VertexTask = {
   provenance?: { channel: 'operator-ui'; at: number }
   /** Set by main's bug auto-fix; absent means never considered. */
   autoFix?: VertexTaskAutoFix
+  /** Set by the operator's "Send to kitchen" and then by main's kitchen
+   *  manager; absent means Carson never marked the card. */
+  kitchen?: VertexTaskKitchen
   /** Forward seam for Missions (an objective that spawns many tasks). Missions
    * have no store yet; carrying the id now avoids a migration later. */
   missionId?: string

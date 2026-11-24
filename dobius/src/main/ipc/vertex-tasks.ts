@@ -17,6 +17,7 @@ import {
 } from '../vertex/vertex-task-attachments'
 import { withClaimingWindow, withLostClaimCheck } from '../vertex/vertex-dispatch-recovery'
 import { onVertexTaskCreated } from '../vertex/bug-autofix'
+import { kitchenMarkPatch, pumpKitchenSoon } from '../vertex/kitchen'
 import { isRegisteredRendererWebContents } from '../window/renderer-window-registry'
 import {
   isVertexTaskStatus,
@@ -98,9 +99,35 @@ export function registerVertexTaskHandlers(): void {
       // Why: autoFix is main's "already started" mark; a renderer must not clear it.
       delete args.patch.autoFix
       delete args.patch.provenance
+      // Why: only vertexTasks:setKitchen may send a card to the kitchen.
+      delete args.patch.kitchen
       return withClaimingWindow(event.sender.id, () =>
         vertexTaskStore.update(args.taskId, args.patch),
       )
+    },
+  )
+
+  // Carson's "Send to kitchen" / "Remove" on a card. Why its own channel: the
+  // mark starts an agent, so only the top frame of a first-party window may
+  // set it; agents, the CLI and webview guests have no way to.
+  ipcMain.removeHandler('vertexTasks:setKitchen')
+  ipcMain.handle(
+    'vertexTasks:setKitchen',
+    async (event, args: { taskId: string; on: boolean }): Promise<VertexTask | null> => {
+      if (!args || !isNonEmptyString(args.taskId) || typeof args.on !== 'boolean') {
+        return null
+      }
+      if (!isOperatorSender(event)) {
+        console.warn('[vertex-tasks] setKitchen refused: not a first-party app window')
+        return null
+      }
+      const task = vertexTaskStore.list().find((candidate) => candidate.id === args.taskId)
+      const patch = task ? kitchenMarkPatch(task, args.on, Date.now()) : null
+      const updated = patch ? vertexTaskStore.update(args.taskId, patch) : null
+      if (updated && args.on) {
+        pumpKitchenSoon()
+      }
+      return updated
     },
   )
 

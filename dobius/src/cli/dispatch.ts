@@ -35,6 +35,7 @@ import { LEAD_HANDLERS } from './handlers/lead'
 import { TABS_HANDLERS } from './handlers/tabs'
 import { SYSTEM_HANDLERS } from './handlers/system'
 import { CREW_HANDLERS } from './handlers/crew'
+import { KITCHEN_HANDLERS } from './handlers/kitchen'
 import { GIT_HANDLERS } from './handlers/git'
 import { PR_HANDLERS } from './handlers/pr'
 import { ACCOUNT_HANDLERS } from './handlers/accounts'
@@ -91,6 +92,7 @@ function buildHandlers(): Map<string, CommandHandler> {
     TABS_HANDLERS,
     SYSTEM_HANDLERS,
     CREW_HANDLERS,
+    KITCHEN_HANDLERS,
     GIT_HANDLERS,
     PR_HANDLERS,
     ADAM_HANDLERS,

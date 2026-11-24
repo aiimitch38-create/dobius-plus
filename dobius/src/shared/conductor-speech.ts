@@ -21,6 +21,8 @@ const AGENT_NAME_SET = new Set(AGENT_NAMES)
 const NUMBERED = /^(.+) ([2-9]|[1-9][0-9]{1,2})$/
 const PROJECT_MAX_CHARS = 30
 const GENERIC = 'a terminal'
+/** The only name a kitchen cook is ever spoken by (main/vertex/kitchen-notice.ts). */
+export const KITCHEN_COOK_NAME = 'a kitchen cook'
 const IN_PROJECT = /^a terminal in [A-Za-z0-9 ._-]{1,30}$/
 
 /** True for an exact library name, optionally numbered ("Juniper", "Juniper 2"). */
@@ -61,7 +63,12 @@ export function speakableName(
 
 /** True for a name speakableName could have produced. Checked again where it is spoken. */
 export function isSpeakableName(name: string): boolean {
-  return name === GENERIC || IN_PROJECT.test(name) || isLibraryAgentName(name)
+  return (
+    name === GENERIC ||
+    name === KITCHEN_COOK_NAME ||
+    IN_PROJECT.test(name) ||
+    isLibraryAgentName(name)
+  )
 }
 
 const MAX_NAMED = 6
