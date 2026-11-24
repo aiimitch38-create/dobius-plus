@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { canonicalHandle } from '../text-intake/contact-handle'
+import { assertApprovedImessageHandle } from './approved-handles'
 import { recordOutbound } from './outbound-ring'
 
 const execFileAsync = promisify(execFile)
@@ -58,8 +60,32 @@ export function stripControlChars(text: string): string {
  * Send an iMessage to `handle` via Messages.app (osascript). Rate-limited to
  * OUTBOUND_RATE_LIMIT_PER_MIN so a dispatch loop can never spam the user.
  * Requires macOS Automation permission for Messages.app (prompted on first send).
+ * Only to a handle approved with Touch ID when saved, or the verified self
+ * handle (approved-handles.ts): every caller goes through this check.
  */
 export async function sendImessage(handle: string, text: string): Promise<void> {
+  if (!handle) {
+    throw new Error('selfHandle not configured')
+  }
+  // Why first: canonicalHandle trims, so a hostile spelling must be refused as typed.
+  if (!isValidImessageHandle(handle)) {
+    throw new Error('iMessage handle must be a phone number or email address')
+  }
+  assertApprovedImessageHandle(handle)
+  // Why canonical: Messages gets the exact handle that was approved ("2125550123" -> "+12125550123").
+  await deliverImessage(canonicalHandle(handle), text)
+}
+
+/**
+ * For TextIntake.sendDraft ONLY: a tracked contact's draft, which Carson just
+ * approved with Touch ID for that exact recipient and text. Everything else
+ * uses sendImessage.
+ */
+export async function sendImessageAfterDraftTouchId(handle: string, text: string): Promise<void> {
+  await deliverImessage(handle, text)
+}
+
+async function deliverImessage(handle: string, text: string): Promise<void> {
   if (!handle) {
     throw new Error('selfHandle not configured')
   }

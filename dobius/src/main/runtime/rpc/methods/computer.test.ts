@@ -171,7 +171,7 @@ describe('computer RPC methods', () => {
     computerMocks.callComputerSidecarSnapshot.mockResolvedValue(snapshot)
 
     await expect(call('computer.getAppState', params)).resolves.toBe(snapshot)
-    expect(computerMocks.callComputerSidecarSnapshot).toHaveBeenCalledWith(params)
+    expect(computerMocks.callComputerSidecarSnapshot).toHaveBeenCalledWith(params, expect.any(Function))
   })
 
   it('rejects missing app in getAppState schema', () => {

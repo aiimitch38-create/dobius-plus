@@ -28,6 +28,7 @@ import { trackedQuickHands, type ConductorRuntime } from './adam-conductor-runti
 import { startAdamConductor } from './adam-conductor-wiring'
 import { startAdamSpeaksUp } from './adam-speaks-up-wiring'
 import { registerBriefHandleIpc } from './adam-brief-handle-ipc'
+import { setJarvisHostWindow, trustedLiveSender } from './jarvis-host-window'
 
 export { forceEndLiveCallForTest, getActiveLiveSessionForTest } from './live-voice-ipc'
 import { migrateElevenLabsKeyOutOfSettings } from './elevenlabs-key-store'
@@ -207,6 +208,7 @@ export function registerJarvisIpcHandlers(
   runtime?: QuickHandsRuntime & ConductorRuntime
 ): void {
   jarvisHostWindow = mainWindow
+  setJarvisHostWindow(mainWindow)
   // Why (#24): move a plaintext settings key into the protected store before
   // any handler reads it. Failure leaves it in settings, so it still works.
   migrateElevenLabsKeyOutOfSettings(store)
@@ -239,19 +241,6 @@ export function registerJarvisIpcHandlers(
   restorePersistedMode(store, service)
 }
 
-// Why checked in main: any frame that can reach ipcRenderer could otherwise
-// start a billed call. Only the main window's top frame may.
-function trustedLiveSender(event: Electron.IpcMainInvokeEvent): Electron.WebContents | null {
-  const host = jarvisHostWindow
-  if (!host || host.isDestroyed()) {
-    return null
-  }
-  const sender = event?.sender
-  if (!sender || sender !== host.webContents || sender.isDestroyed()) {
-    return null
-  }
-  return event.senderFrame && event.senderFrame === sender.mainFrame ? sender : null
-}
 
 
 /** `not-saved`: the change is shown and kept in memory, but could not be written to disk. */

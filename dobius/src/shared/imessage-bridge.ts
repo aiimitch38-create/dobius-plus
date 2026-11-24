@@ -12,6 +12,8 @@ export type ImessageBridgeConfig = {
   /** High-water mark of processed chat.db message ROWIDs, persisted so a
    *  restart never re-dispatches history. */
   lastSeenRowid: number
+  /** Text intake's own high-water mark for tracked-contact texts (7.17). Bridge-owned. */
+  lastSeenContactRowid?: number
 }
 
 export type ImessageBridgeChatDbProbe =

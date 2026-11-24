@@ -14,6 +14,13 @@ import {
   rememberComputerSnapshot
 } from '../../../computer/action-decision'
 import { journalComputerDecision } from '../../../computer/action-decision-journal'
+import {
+  namesSelf,
+  resultIsSelf,
+  PROTECTED_SELF_UI_REASON,
+  protectedSelfUiActive,
+  targetsSelf
+} from '../../../computer/protected-self-ui'
 import { RuntimeClientError } from '../../../computer/runtime-client-error'
 import type { ComputerActionResult } from '../../../../shared/computer-use-runtime-types'
 import {
@@ -60,7 +67,15 @@ async function runDecidedAction(
   }
   const { confirmRisky: _confirmRisky, ...forwarded } = params
   try {
-    const result = await callComputerSidecarAction(method, forwarded)
+    const result = await callComputerSidecarAction(method, forwarded, () => {
+      if (protectedSelfUiActive() && namesSelf(params.app)) {
+        throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
+      }
+    })
+    // Why: the result's tree would show the review list; it is dropped, not handed to the agent.
+    if (protectedSelfUiActive() && resultIsSelf(result)) {
+      throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
+    }
     rememberComputerSnapshot(params.app, result)
     await journalComputerDecision({ ...entry, outcome: 'ok' })
     return result
@@ -115,7 +130,20 @@ export const COMPUTER_METHODS: RpcMethod[] = [
     name: 'computer.getAppState',
     params: ComputerObserveTarget,
     handler: async (params) => {
-      const result = await callComputerSidecarSnapshot(params)
+      // Why: the review list shows other people's texts; a snapshot would hand them to an agent.
+      if (protectedSelfUiActive() && (await targetsSelf(params.app, callComputerSidecarListWindows))) {
+        throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
+      }
+      // Why rechecked: a snapshot queued before the review list opened runs after it is on screen.
+      const result = await callComputerSidecarSnapshot(params, () => {
+        if (protectedSelfUiActive() && namesSelf(params.app)) {
+          throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
+        }
+      })
+      // Why after too: a bundle id or pid target is only known to be Dobius+ once the snapshot names it.
+      if (protectedSelfUiActive() && resultIsSelf(result)) {
+        throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
+      }
       rememberComputerSnapshot(params.app, result)
       return result
     }

@@ -1,4 +1,5 @@
 import type { BriefHandleResult, BriefHandleStatus } from '../shared/adam-speaks-up'
+import type { TextIntakeResult, TextIntakeView, TrackedContact } from '../shared/text-intake'
 import type { WhatsNewPayload, WhatsNewSection } from '../shared/whats-new'
 import type {
   SnoozedTabEntry,
@@ -1394,12 +1395,27 @@ export type PreloadApi = {
       githubEmail: string | null
     }) => Promise<{ ok: true } | { ok: false; status: number | null; error: string }>
   }
+  /** "From texts" (7.17): tracked contacts, suggested cards and ADAM's drafts. */
+  textIntake: {
+    view: () => Promise<TextIntakeView | null>
+    setContacts: (contacts: TrackedContact[]) => Promise<TextIntakeResult>
+    accept: (id: string) => Promise<TextIntakeResult>
+    dismiss: (id: string) => Promise<TextIntakeResult>
+    /** Saves Carson's edit; the draft gets a new fingerprint. Required before sending edited words. */
+    editDraft: (id: string, fingerprint: string, text: string) => Promise<TextIntakeResult>
+    /** Carson's Send: `fingerprint` and `text` must be the stored draft's exactly. Main shows a confirm, then Touch ID. */
+    sendDraft: (id: string, fingerprint: string, text: string) => Promise<TextIntakeResult>
+    /** The review list is on screen: Dobius+ computer-use refuses to act on Dobius+ meanwhile. */
+    reviewVisible: (visible: boolean) => Promise<void>
+    discardDraft: (id: string) => Promise<TextIntakeResult>
+  }
   imessageBridge: {
-    getConfig: () => Promise<ImessageBridgeConfig>
+    /** Null when the caller is not the main window. */
+    getConfig: () => Promise<ImessageBridgeConfig | null>
     updateConfig: (
       updates: Partial<Omit<ImessageBridgeConfig, 'lastSeenRowid'>>
     ) => Promise<ImessageBridgeConfig>
-    status: () => Promise<ImessageBridgeStatus>
+    status: () => Promise<ImessageBridgeStatus | null>
     openFullDiskAccess: () => Promise<void>
     testSend: () => Promise<ImessageBridgeSendResult>
   }

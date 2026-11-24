@@ -2,6 +2,7 @@ import type {
   ComputerListWindowsResult,
   ComputerSnapshotResult
 } from '../../shared/computer-use-runtime-types'
+import { PROTECTED_SELF_UI_REASON, protectedSelfUiActive, targetsSelf } from './protected-self-ui'
 
 /**
  * One decision point every agent computer-use action passes through. Today it runs fixed rules;
@@ -9,10 +10,17 @@ import type {
  */
 export type ComputerActionDecision =
   | { verdict: 'allow'; rule: null; reason: null; source: 'rules' }
-  | { verdict: 'block'; rule: 'pick-window' | 'confirm-risky'; reason: string; source: 'rules' }
+  | {
+      verdict: 'block'
+      rule: 'pick-window' | 'confirm-risky' | 'protected-self-ui'
+      reason: string
+      source: 'rules'
+    }
 
 type DecisionDeps = {
   listWindows: (params: { app: unknown }) => Promise<ComputerListWindowsResult>
+  /** Dobius+'s own pid (tests only). */
+  selfPid?: number
 }
 
 // Kept narrow on purpose: a warning on every click would teach agents to ignore it.
@@ -65,6 +73,11 @@ export async function decideComputerAction(
   params: Record<string, unknown>,
   deps: DecisionDeps
 ): Promise<ComputerActionDecision> {
+  // Why first and with no override (not even --confirm-risky): an approval
+  // screen is Carson's own click, never an agent's.
+  if (protectedSelfUiActive() && (await targetsSelf(params.app, deps.listWindows, deps.selfPid))) {
+    return { verdict: 'block', rule: 'protected-self-ui', reason: PROTECTED_SELF_UI_REASON, source: 'rules' }
+  }
   const pinned = params.windowId !== undefined || params.windowIndex !== undefined
   if (actionTargetKind(method, params) === 'coordinates' && !pinned) {
     // An unavailable window list is "unknown", not "several": fall back to pre-guard behavior.

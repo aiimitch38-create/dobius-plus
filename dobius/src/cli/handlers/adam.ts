@@ -81,19 +81,43 @@ export function formatNotifyResult(result: NotifyResult): string {
     result.delivered === 'spoken'
       ? 'Carson will hear it on the live call once it is quiet.'
       : 'Shown to Carson as a Mac notification.'
-  return result.savedInThread ? `${how} Saved in your thread.` : `${how} It could not be saved in your thread.`
+  return result.savedInThread
+    ? `${how} Saved in your thread.`
+    : `${how} It could not be saved in your thread.`
+}
+
+type DraftTextResult = { draftId: string; toName: string; toHandle: string; sent: false }
+
+export function formatDraftTextResult(result: DraftTextResult): string {
+  return `Draft saved for ${result.toName} (${result.toHandle}). Not sent: Carson reviews it and clicks Send in Settings.`
+}
+
+/** ADAM's caller id, or a refusal naming the command. */
+function adamCallerIdFor(command: string): string {
+  // Why: only ADAM's own Hermes process carries the caller id (adam-caller-id.ts in main).
+  const callerId = process.env.DOBIUS_ADAM_CALLER_ID?.trim() ?? ''
+  if (process.env.DOBIUS_CALLER !== 'adam' || !callerId || !isInsideAdamHermes()) {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      `Only ADAM can use dobius adam ${command} (from his own Hermes session).`
+    )
+  }
+  return callerId
 }
 
 export const ADAM_HANDLERS: Record<string, CommandHandler> = {
+  'adam draft-text': async ({ flags, client, json }) => {
+    const callerId = adamCallerIdFor('draft-text')
+    const result = await client.call<DraftTextResult>('adam.draftText', {
+      to: getRequiredStringFlag(flags, 'to'),
+      text: getRequiredStringFlag(flags, 'text'),
+      caller: 'adam',
+      callerId
+    })
+    printResult(result, json, formatDraftTextResult)
+  },
   'adam notify': async ({ flags, client, json }) => {
-    // Why: only ADAM's own Hermes process carries the caller id (adam-caller-id.ts in main).
-    const callerId = process.env.DOBIUS_ADAM_CALLER_ID?.trim() ?? ''
-    if (process.env.DOBIUS_CALLER !== 'adam' || !callerId || !isInsideAdamHermes()) {
-      throw new RuntimeClientError(
-        'invalid_argument',
-        'Only ADAM can use dobius adam notify (from his own Hermes session).'
-      )
-    }
+    const callerId = adamCallerIdFor('notify')
     const text = getRequiredStringFlag(flags, 'text')
     const urgent = getBooleanFlag(flags, 'urgent')
     const result = await client.call<NotifyResult>('adam.notify', {
