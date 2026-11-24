@@ -2,6 +2,7 @@ import { SearchableSetting } from './SearchableSetting'
 import { SettingsSwitchRow } from './SettingsFormControls'
 import { MobilePane } from './MobilePane'
 import { ImessageBridgeSetting } from './ImessageBridgeSetting'
+import { TextIntakeSection } from './TextIntakeSection'
 import { MobileScreenSharingSection } from './MobileScreenSharingSection'
 import { isMacUserAgent } from '@/components/terminal-pane/pane-helpers'
 import {
@@ -109,6 +110,7 @@ export function MobileSettingsPane(): React.JSX.Element {
       {/* Why: the bridge reads chat.db and drives Messages.app, so it only
           exists on macOS; hide the section entirely elsewhere. */}
       {isMacUserAgent() ? <ImessageBridgeSetting /> : null}
+      {isMacUserAgent() ? <TextIntakeSection /> : null}
       {isMacUserAgent() ? <MobileScreenSharingSection /> : null}
 
       <div className="rounded-xl border border-border/60 bg-card/50 p-4">

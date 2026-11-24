@@ -1,4 +1,5 @@
 import type { BriefHandleResult, BriefHandleStatus } from '../shared/adam-speaks-up'
+import type { TextIntakeResult, TextIntakeView, TrackedContact } from '../shared/text-intake'
 import type { WhatsNewPayload, WhatsNewSection } from '../shared/whats-new'
 import type {
   SnoozedTabEntry,
@@ -1393,6 +1394,16 @@ export type PreloadApi = {
       githubLogin: string | null
       githubEmail: string | null
     }) => Promise<{ ok: true } | { ok: false; status: number | null; error: string }>
+  }
+  /** "From texts" (7.17): tracked contacts, suggested cards and ADAM's drafts. */
+  textIntake: {
+    view: () => Promise<TextIntakeView | null>
+    setContacts: (contacts: TrackedContact[]) => Promise<TextIntakeResult>
+    accept: (id: string) => Promise<TextIntakeResult>
+    dismiss: (id: string) => Promise<TextIntakeResult>
+    /** Carson's Send click; `text` is his edit of the draft, if any. */
+    sendDraft: (id: string, text?: string) => Promise<TextIntakeResult>
+    discardDraft: (id: string) => Promise<TextIntakeResult>
   }
   imessageBridge: {
     getConfig: () => Promise<ImessageBridgeConfig>

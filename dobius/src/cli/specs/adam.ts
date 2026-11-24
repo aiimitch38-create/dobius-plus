@@ -51,6 +51,21 @@ export const ADAM_COMMAND_SPECS: CommandSpec[] = [
     ]
   },
   {
+    path: ['adam', 'draft-text'],
+    summary: 'ADAM only: draft a text to one of Carson’s tracked contacts (never sends)',
+    usage: 'dobius adam draft-text --to <tracked contact name> --text <message> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'to', 'text'],
+    notes: [
+      'For ADAM, from his own Hermes session. Refused anywhere else.',
+      'Only makes a DRAFT. Carson sees the exact recipient (name and number) and the exact text in Settings, From texts, and nothing goes out until he clicks Send. He can edit or discard it.',
+      '--to must be the name of a contact Carson tracks in Settings (case does not matter). Anyone else is refused.',
+      'At most 1000 characters, no secrets, no hidden characters.'
+    ],
+    examples: [
+      'dobius adam draft-text --to "Brett" --text "Carson saw your note, he will call you at 3."'
+    ]
+  },
+  {
     path: ['adam', 'status'],
     summary: 'Show whether ADAM is busy and whether voice mode is on',
     usage: 'dobius adam status [--json]',

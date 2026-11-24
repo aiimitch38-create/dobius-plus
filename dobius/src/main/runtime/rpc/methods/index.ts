@@ -56,6 +56,7 @@ import { CREW_METHODS } from './crew'
 import { LEAD_METHODS } from './leads'
 import { ADAM_METHODS } from './adam'
 import { ADAM_NOTIFY_METHODS } from './adam-notify'
+import { ADAM_DRAFT_TEXT_METHODS } from './adam-draft-text'
 import { APP_SERVICE_METHODS } from './app-services'
 import { APP_UI_METHODS } from './app-ui'
 import { TELEGRAM_REPLY_METHODS } from './telegram-replies'
@@ -139,6 +140,7 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...LEAD_METHODS,
   ...ADAM_METHODS,
   ...ADAM_NOTIFY_METHODS,
+  ...ADAM_DRAFT_TEXT_METHODS,
   ...APP_SERVICE_METHODS,
   ...APP_UI_METHODS,
   ...TELEGRAM_REPLY_METHODS,

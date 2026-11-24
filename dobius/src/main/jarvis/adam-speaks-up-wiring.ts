@@ -28,6 +28,7 @@ import { AdamNotifier, setAdamNotifier } from './adam-notify'
 import { AdamStaleWatch, type StaleAlert } from './adam-stale-watch'
 import type { AdamThreadStore } from './adam-thread-store'
 import { sendLiveReport } from './live-voice-ipc'
+import { startTextIntake } from '../text-intake/text-intake-wiring'
 
 const STALE_CHECK_MS = 30_000
 const BRIEF_CHECK_MS = 60_000
@@ -111,7 +112,10 @@ function briefImessage(): MorningBriefImessage {
       if (!getImessageBridgeConfig().enabled) {
         return 'the iMessage bridge is turned off in Settings'
       }
-      return bridge.unavailableReason() ?? (briefHandleVerifier().isVerified() ? null : BRIEF_HANDLE_UNVERIFIED)
+      return (
+        bridge.unavailableReason() ??
+        (briefHandleVerifier().isVerified() ? null : BRIEF_HANDLE_UNVERIFIED)
+      )
     },
     send: (text) => bridge.send(text)
   }
@@ -147,6 +151,11 @@ export function startAdamSpeaksUp(
       showNotification: showAdamNotification
     })
   )
+  startTextIntake({
+    appendThread: (row) => thread().append(row),
+    tapsOn: () => settings().tapOnShoulder,
+    showNotification: showAdamNotification
+  })
   const conductorOn = (): boolean => store.getSettings().voice?.adamReportsFinishedWork !== false
   const runtimeDeps = runtime ? createRuntimeConductorDeps(() => runtime) : null
   const stale = runtimeDeps
@@ -170,7 +179,10 @@ export function startAdamSpeaksUp(
     ask: adam.ask,
     facts: async (now) => ({
       now,
-      jobs: (await adamConductor()?.jobs().catch(() => [])) ?? [],
+      jobs:
+        (await adamConductor()
+          ?.jobs()
+          .catch(() => [])) ?? [],
       stale: (await stale?.current().catch(() => [])) ?? [],
       overnight: overnight.since(now.getTime() - OVERNIGHT_MS),
       asana: await asanaFacts(localDateKey(now)).catch(() => ({

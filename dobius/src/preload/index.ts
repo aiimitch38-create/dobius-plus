@@ -1,6 +1,7 @@
 import type { BoardCardActionReply, BoardCardActionRequest } from '../shared/board-card-actions'
 import type { TabSnoozeCliReply, TabSnoozeCliRequest } from '../shared/tab-snooze-cli'
 import type { BriefHandleResult, BriefHandleStatus } from '../shared/adam-speaks-up'
+import type { TextIntakeResult, TextIntakeView, TrackedContact } from '../shared/text-intake'
 import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
 import type {
   RuntimeBoardOpenWebTileEvent,
@@ -1113,6 +1114,19 @@ const api = {
     }): Promise<{ ok: true } | { ok: false; status: number | null; error: string }> =>
       ipcRenderer.invoke('feedback:submit', args)
   },
+
+  textIntake: {
+    view: (): Promise<TextIntakeView | null> => ipcRenderer.invoke('textIntake:view'),
+    setContacts: (contacts: TrackedContact[]): Promise<TextIntakeResult> =>
+      ipcRenderer.invoke('textIntake:setContacts', contacts),
+    accept: (id: string): Promise<TextIntakeResult> => ipcRenderer.invoke('textIntake:accept', id),
+    dismiss: (id: string): Promise<TextIntakeResult> =>
+      ipcRenderer.invoke('textIntake:dismiss', id),
+    sendDraft: (id: string, text?: string): Promise<TextIntakeResult> =>
+      ipcRenderer.invoke('textIntake:sendDraft', id, text),
+    discardDraft: (id: string): Promise<TextIntakeResult> =>
+      ipcRenderer.invoke('textIntake:discardDraft', id)
+  } satisfies PreloadApi['textIntake'],
 
   imessageBridge: {
     getConfig: (): Promise<ImessageBridgeConfig> => ipcRenderer.invoke('imessageBridge:getConfig'),
@@ -4711,8 +4725,7 @@ const api = {
       text: string
       itemId: string
       callToken: string
-    }): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke('jarvis:liveTranscript', line),
+    }): Promise<{ ok: boolean }> => ipcRenderer.invoke('jarvis:liveTranscript', line),
     onLiveNotice: (callback: (notice: LiveVoiceNotice) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, notice: LiveVoiceNotice): void =>
         callback(notice)
@@ -4725,7 +4738,8 @@ const api = {
     adamThreadGet: (): Promise<AdamThreadRow[]> => ipcRenderer.invoke('jarvis:adamThreadGet'),
     adamThreadAppend: (row: AdamThreadRow): Promise<{ ok: boolean; error?: 'not-saved' }> =>
       ipcRenderer.invoke('jarvis:adamThreadAppend', row),
-    adamThreadClear: (): Promise<{ ok: boolean; error?: 'not-saved' }> => ipcRenderer.invoke('jarvis:adamThreadClear'),
+    adamThreadClear: (): Promise<{ ok: boolean; error?: 'not-saved' }> =>
+      ipcRenderer.invoke('jarvis:adamThreadClear'),
     onAdamThread: (callback: (rows: AdamThreadRow[]) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, rows: AdamThreadRow[]): void =>
         callback(rows)

@@ -59,10 +59,18 @@ describe('adam CLI', () => {
       waited: true,
       reply: { kind: 'answer', text: 'Hello Carson.' }
     })
-    expect(call).toHaveBeenCalledWith('adam.ask', { text: 'hi', wait: true }, { timeoutMs: 240_000 })
+    expect(call).toHaveBeenCalledWith(
+      'adam.ask',
+      { text: 'hi', wait: true },
+      { timeoutMs: 240_000 }
+    )
     expect(logged.at(-1)).toBe('Hello Carson.')
     call = await run(['adam', 'ask', '--text', 'hi', '--wait=true'], { sent: true, waited: true })
-    expect(call).toHaveBeenCalledWith('adam.ask', { text: 'hi', wait: true }, { timeoutMs: 240_000 })
+    expect(call).toHaveBeenCalledWith(
+      'adam.ask',
+      { text: 'hi', wait: true },
+      { timeoutMs: 240_000 }
+    )
     call = await run(['adam', 'ask', '--text', 'hi', '--wait=false'], { sent: true, waited: false })
     expect(call).toHaveBeenCalledWith('adam.ask', { text: 'hi' }, undefined)
     await expect(run(['adam', 'ask', '--text', 'hi', '--wait=maybe'])).rejects.toThrow(
@@ -129,5 +137,40 @@ describe('adam notify CLI', () => {
       callerId: 'id-1'
     })
     expect(logged.join('\n')).toContain('Carson will hear it on the live call')
+  })
+})
+
+describe('adam draft-text CLI', () => {
+  it('is refused outside ADAM’s own Hermes session', async () => {
+    vi.stubEnv('HERMES_HOME', '/Users/c/.hermes/profiles/adam')
+    vi.stubEnv('DOBIUS_CALLER', 'adam')
+    vi.stubEnv('DOBIUS_ADAM_CALLER_ID', '')
+    await expect(run(['adam', 'draft-text', '--to', 'Brett', '--text', 'hi'])).rejects.toThrow(
+      /Only ADAM can use dobius adam draft-text/
+    )
+    vi.stubEnv('DOBIUS_ADAM_CALLER_ID', 'id-1')
+    vi.stubEnv('DOBIUS_CALLER', '')
+    await expect(run(['adam', 'draft-text', '--to', 'Brett', '--text', 'hi'])).rejects.toThrow(
+      /Only ADAM/
+    )
+  })
+
+  it('sends recipient, text and caller id, and says nothing was sent', async () => {
+    vi.stubEnv('HERMES_HOME', '/Users/c/.hermes/profiles/adam')
+    vi.stubEnv('DOBIUS_CALLER', 'adam')
+    vi.stubEnv('DOBIUS_ADAM_CALLER_ID', 'id-1')
+    const call = await run(['adam', 'draft-text', '--to', 'Brett', '--text', 'At 3?'], {
+      draftId: 'draft-1',
+      toName: 'Brett',
+      toHandle: '+15550102000',
+      sent: false
+    })
+    expect(call).toHaveBeenCalledWith('adam.draftText', {
+      to: 'Brett',
+      text: 'At 3?',
+      caller: 'adam',
+      callerId: 'id-1'
+    })
+    expect(logged.join('\n')).toContain('Not sent: Carson reviews it and clicks Send')
   })
 })

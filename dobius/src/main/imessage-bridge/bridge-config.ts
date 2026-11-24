@@ -17,7 +17,8 @@ const DEFAULT_CONFIG: ImessageBridgeConfig = {
   enabled: false,
   triggerPrefix: IMESSAGE_BRIDGE_DEFAULT_TRIGGER_PREFIX,
   selfHandle: null,
-  lastSeenRowid: 0
+  lastSeenRowid: 0,
+  lastSeenContactRowid: 0
 }
 
 const LABEL = `[imessage-bridge] ${CONFIG_FILE_NAME}`
@@ -46,6 +47,10 @@ function sanitizeSelfHandle(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function sanitizeRowid(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
+}
+
 function sanitizeConfig(raw: unknown): ImessageBridgeConfig {
   if (typeof raw !== 'object' || raw === null) {
     return { ...DEFAULT_CONFIG }
@@ -55,10 +60,8 @@ function sanitizeConfig(raw: unknown): ImessageBridgeConfig {
     enabled: record.enabled === true,
     triggerPrefix: sanitizeTriggerPrefix(record.triggerPrefix),
     selfHandle: sanitizeSelfHandle(record.selfHandle),
-    lastSeenRowid:
-      typeof record.lastSeenRowid === 'number' && Number.isFinite(record.lastSeenRowid)
-        ? Math.max(0, Math.floor(record.lastSeenRowid))
-        : 0
+    lastSeenRowid: sanitizeRowid(record.lastSeenRowid),
+    lastSeenContactRowid: sanitizeRowid(record.lastSeenContactRowid)
   }
 }
 
@@ -142,7 +145,7 @@ export function getImessageBridgeConfigUnreadableDetail(): string | null {
  * Bridge-internal lastSeenRowid updates keep using updateImessageBridgeConfig.
  */
 export function updateImessageBridgeSettings(
-  updates: Partial<Omit<ImessageBridgeConfig, 'lastSeenRowid'>>
+  updates: Partial<Omit<ImessageBridgeConfig, 'lastSeenRowid' | 'lastSeenContactRowid'>>
 ): ImessageBridgeConfig {
   if (getImessageBridgeConfigUnreadableDetail() !== null) {
     throw new Error(IMESSAGE_BRIDGE_CONFIG_UNREADABLE_MESSAGE)

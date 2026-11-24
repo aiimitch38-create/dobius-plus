@@ -24,6 +24,8 @@ import {
   type ImessageBridgeTerminalDispatcher
 } from './terminal-send-guard'
 import { selfHandleSpellings } from './self-handle-spellings'
+import { pollTrackedContacts } from './tracked-contact-poll'
+import { textIntake } from '../text-intake/text-intake'
 
 export {
   getImessageBridgeConfig,
@@ -120,7 +122,7 @@ export function startImessageBridge(
     const row = db.prepare('SELECT COALESCE(MAX(ROWID), 0) AS maxRowid FROM message').get() as {
       maxRowid: number
     }
-    updateImessageBridgeConfig({ lastSeenRowid: row.maxRowid })
+    updateImessageBridgeConfig({ lastSeenRowid: row.maxRowid, lastSeenContactRowid: row.maxRowid })
   } catch (error) {
     console.warn(
       '[imessage-bridge] could not initialize lastSeenRowid; not starting:',
@@ -238,6 +240,8 @@ async function pollNewMessages(database: SyncDatabase.Database | null = db): Pro
         )
       }
     }
+    // Why after the self-chat: same handle and poll, its own at-most-once mark (7.17).
+    pollTrackedContacts(database, textIntake())
   } catch (error) {
     console.warn(
       '[imessage-bridge] poll error:',
