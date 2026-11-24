@@ -4,8 +4,11 @@
 // doubt (odd phrasing, no terminal or several terminals by that name) returns
 // null and the request goes to him unchanged. Nothing here closes, switches
 // or changes settings, and nothing is ever submitted: the only write is typing
-// text the request spelled out, and Enter is never pressed.
+// text the request spelled out, and Enter is never pressed. Looking something
+// up reads the local library only.
 
+import type { LibraryHit } from '../library/library-types'
+import { libraryAnswer, matchLibraryLookup, type LibraryLookup } from './live-voice-library-hand'
 import { matchTerminals, whichOneQuestion, type QuickTerminal } from './live-voice-terminal-target'
 import { lastOutputLine, looksSecret, shortForSpeech } from './live-voice-terminal-text'
 
@@ -30,6 +33,11 @@ export type QuickHandsDeps = {
   readTail: (handle: string) => Promise<string[]>
   /** Claude's estimated spend over the last 7 days from the local usage scan; null when unknown. */
   weekUsage?: () => Promise<{ costUsd: number; sessions: number } | null>
+  /**
+   * The local library's best hits (the search `dobius library search` runs);
+   * null when the library is off, not indexed yet, or cannot be read.
+   */
+  searchLibrary?: (query: string, everyWord: boolean) => Promise<LibraryHit[] | null>
 }
 
 export type QuickIntent =
@@ -37,6 +45,7 @@ export type QuickIntent =
   | { hand: 'type'; text: string; target: string }
   | { hand: 'read-terminal'; target: string; exact: boolean }
   | { hand: 'usage'; today: boolean }
+  | LibraryLookup
 
 export type TerminalIntent = Extract<QuickIntent, { hand: 'type' | 'read-terminal' }>
 
@@ -223,7 +232,7 @@ export function matchQuickHand(request: string): QuickIntent | null {
   if (/^type\s/.test(text)) {
     return matchType(request)
   }
-  return matchRead(text)
+  return matchLibraryLookup(text) ?? matchRead(text)
 }
 
 function money(usd: number): string {
@@ -322,6 +331,13 @@ async function runIntent(
       const sessions = usage.sessions === 1 ? '1 session' : `${usage.sessions} sessions`
       const today = intent.today ? ' There is no separate total for today.' : ''
       return `About ${money(usage.costUsd)} on Claude over the last 7 days, across ${sessions}.${today}`
+    }
+    case 'look-up': {
+      if (!deps.searchLibrary) {
+        return null
+      }
+      const hits = await deps.searchLibrary(intent.query, !intent.explicit)
+      return isCurrent() ? libraryAnswer(intent, hits) : CANCELLED
     }
   }
 }

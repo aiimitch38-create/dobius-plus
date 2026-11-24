@@ -101,7 +101,7 @@ export function searchLibrary(store: LibraryStore, params: LibrarySearchQuery): 
   if (store.fts) {
     rows = ftsRows(store, ftsMatch(terms, 'AND'), params, take)
     // Why: a spoken question rarely has every word in one passage.
-    if (rows.length === 0 && terms.length > 1) {
+    if (rows.length === 0 && terms.length > 1 && !params.everyWord) {
       rows = ftsRows(store, ftsMatch(terms, 'OR'), params, take)
     }
   } else {
