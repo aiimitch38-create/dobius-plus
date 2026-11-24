@@ -48,14 +48,17 @@ export function createKitchenWatch(deps: KitchenDeps, tools: KitchenTools) {
   /** Cooks seen this session, so a deleted card's cook is still stopped. */
   const cooks = new Map<string, string>()
 
-  const stop = async (worktreeId: string | undefined): Promise<void> => {
+  /** False when the cook could not be stopped: it may still be running. */
+  const stop = async (worktreeId: string | undefined): Promise<boolean> => {
     if (!worktreeId) {
-      return
+      return true
     }
     try {
       await deps.stopCook(worktreeId)
+      return true
     } catch (error) {
-      log(`[kitchen] could not stop the cook in ${worktreeId}`, error)
+      log(`[kitchen] could not stop the cook in ${worktreeId}; it keeps its slot and is retried`, error)
+      return false
     }
   }
 
@@ -77,9 +80,21 @@ export function createKitchenWatch(deps: KitchenDeps, tools: KitchenTools) {
   /** Stops the cook, parks the card in Blocked and tells ADAM. */
   const block = async (task: VertexTask, why: string): Promise<void> => {
     const reason = why.slice(0, KITCHEN_REASON_LIMIT)
+    // Why the card is left as it is: a cook that may still run keeps its
+    // slot, and every pump comes back here until the stop works.
+    if (!(await stop(task.kitchen?.worktreeId))) {
+      if (task.kitchen && task.kitchen.stopPending !== reason) {
+        mark(task, { ...task.kitchen, stopPending: reason })
+      }
+      return
+    }
     forget(task.id)
-    await stop(task.kitchen?.worktreeId)
-    if (mark(task, { ...task.kitchen, status: 'blocked', reason }, { status: 'blocked', blockedReason: reason })) {
+    if (mark(
+        task,
+        { ...task.kitchen, status: 'blocked', reason, stopPending: undefined },
+        { status: 'blocked', blockedReason: reason }
+      )
+    ) {
       tell('blocked', task)
     }
   }
@@ -123,13 +138,20 @@ export function createKitchenWatch(deps: KitchenDeps, tools: KitchenTools) {
     cooks.set(task.id, worktreeId)
     // Why: moving the card out of In Progress is Carson's stop for one cook.
     if (task.status !== 'in-progress') {
-      forget(task.id)
-      await stop(worktreeId)
-      mark(task, {
-        ...task.kitchen,
-        status: 'stopped',
-        reason: 'The card was moved out of In Progress, so its cook was stopped.'
-      })
+      // Why only once stopped: a cook that may still run keeps its slot.
+      if (await stop(worktreeId)) {
+        forget(task.id)
+        mark(task, {
+          ...task.kitchen,
+          status: 'stopped',
+          stopPending: undefined,
+          reason: 'The card was moved out of In Progress, so its cook was stopped.'
+        })
+      }
+      return
+    }
+    if (task.kitchen?.stopPending) {
+      await block(task, task.kitchen.stopPending)
       return
     }
     let cook: KitchenCookStatus
@@ -205,9 +227,9 @@ export function createKitchenWatch(deps: KitchenDeps, tools: KitchenTools) {
     }
     const ids = new Set(tasks.map((task) => task.id))
     for (const [taskId, worktreeId] of cooks) {
-      if (!ids.has(taskId)) {
+      // Why kept until stopped: a deleted card's cook still holds its slot.
+      if (!ids.has(taskId) && (await stop(worktreeId))) {
         forget(taskId)
-        await stop(worktreeId)
       }
     }
     for (const task of tasks) {
@@ -221,5 +243,8 @@ export function createKitchenWatch(deps: KitchenDeps, tools: KitchenTools) {
     cooks.set(taskId, worktreeId)
   }
 
-  return { watchCooks, block, noteCook }
+  /** Cards whose cook may be running (deleted cards included): each holds a slot. */
+  const cookIds = (): string[] => [...cooks.keys()]
+
+  return { watchCooks, block, noteCook, cookIds }
 }

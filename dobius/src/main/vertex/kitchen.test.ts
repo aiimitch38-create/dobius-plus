@@ -58,6 +58,7 @@ function harness() {
   const clock = { at: 1_000_000 }
   const cooks = new Map<string, KitchenCookStatus>()
   const told: KitchenNotice[] = []
+  const found = new Map<string, { worktreeId: string } | 'unknown'>()
   let created = 0
   const createWorktree = vi.fn(async (_req: { name: string; prompt: string }) => {
     created += 1
@@ -68,7 +69,8 @@ function harness() {
   const restartCook = vi.fn(async (_req: { worktreeId: string; prompt: string }) => undefined)
   const stopCook = vi.fn(async (_worktreeId: string) => undefined)
   const deps: KitchenDeps = {
-    listTasks: () => tasks.map((task) => ({ ...task })),
+    // Copies that keep each card's prototype, as the real store hands them out.
+    listTasks: () => tasks.map((task) => Object.assign(Object.create(Object.getPrototypeOf(task)), task)),
     updateTask: (taskId: string, patch: VertexTaskPatch) => {
       const task = tasks.find((candidate) => candidate.id === taskId)
       if (!task) {
@@ -95,7 +97,7 @@ function harness() {
     },
     restartCook,
     stopCook,
-    findWorktree: async () => null,
+    findWorktree: async (_repoId, name) => found.get(name) ?? null,
     tellAdam: (notice) => told.push(notice),
     graceMs: 0,
     now: () => clock.at,
@@ -115,7 +117,7 @@ function harness() {
   const task = (id: string): VertexTask => tasks.find((candidate) => candidate.id === id) as VertexTask
   const cook = (id: string): KitchenCookStatus =>
     cooks.get(task(id).kitchen?.worktreeId ?? '') as KitchenCookStatus
-  return { tasks, flags, clock, cooks, told, kitchen, tick, task, cook, createWorktree, restartCook, stopCook }
+  return { tasks, flags, clock, cooks, told, found, kitchen, tick, task, cook, createWorktree, restartCook, stopCook }
 }
 
 describe('kitchen tickets', () => {
@@ -397,6 +399,79 @@ describe('kitchen watch', () => {
     expect(h.told.map((notice) => notice.event)).toEqual(['blocked'])
     await h.kitchen.pump()
     expect(h.createWorktree).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('kitchen hardening', () => {
+  it('ignores a mark a card only inherits (a forged prototype)', async () => {
+    const h = harness()
+    const forged = Object.assign(Object.create({ kitchen: marked('x').kitchen }), card('a'))
+    h.tasks.push(forged)
+    expect(h.tasks[0].kitchen?.status).toBe('marked')
+    await h.kitchen.pump()
+    expect(h.createWorktree).not.toHaveBeenCalled()
+    expect(h.kitchen.status()).toMatchObject({ cooking: 0, waiting: 0 })
+  })
+
+  it('a cook that cannot be stopped keeps its slot and the stop is retried', async () => {
+    const h = harness()
+    h.tasks.push(marked('a'), marked('b'), marked('c'), marked('d'))
+    await h.kitchen.pump()
+    await h.tick(MINUTE)
+    h.flags.paused = true
+    h.stopCook.mockRejectedValueOnce(new Error('pty busy'))
+    h.cook('a').state = 'gone'
+    await h.tick(MINUTE)
+    expect(h.stopCook).toHaveBeenCalledTimes(1)
+    expect(h.task('a')).toMatchObject({ status: 'in-progress', kitchen: { status: 'cooking' } })
+    expect(h.task('a').kitchen?.stopPending).toMatch(/stopped running/)
+    expect(h.told).toEqual([])
+    h.flags.paused = false
+    await h.kitchen.pump()
+    // The retry worked: only now is the card blocked, ADAM told and the slot free.
+    expect(h.stopCook).toHaveBeenCalledTimes(2)
+    expect(h.task('a')).toMatchObject({ status: 'blocked', kitchen: { status: 'blocked' } })
+    expect(h.task('a').kitchen?.stopPending).toBeUndefined()
+    expect(h.told.map((notice) => notice.event)).toEqual(['blocked'])
+    expect(h.createWorktree).toHaveBeenCalledTimes(4)
+  })
+
+  it('a deleted card whose cook cannot be stopped still holds a slot', async () => {
+    const h = harness()
+    h.tasks.push(marked('a'), marked('b'), marked('c'))
+    await h.kitchen.pump()
+    await h.tick(MINUTE)
+    h.stopCook.mockRejectedValueOnce(new Error('pty busy'))
+    h.tasks.splice(0, 1)
+    h.tasks.push(marked('d'))
+    await h.tick(MINUTE)
+    expect(h.createWorktree).toHaveBeenCalledTimes(3)
+    await h.tick(MINUTE)
+    expect(h.stopCook).toHaveBeenCalledTimes(2)
+    expect(h.createWorktree).toHaveBeenCalledTimes(4)
+  })
+
+  it('never adopts or restarts a start cut short by a quit', async () => {
+    const h = harness()
+    const starting = (id: string): VertexTask => {
+      const base = marked(id, { status: 'in-progress' })
+      return {
+        ...base,
+        kitchen: { ...base.kitchen!, status: 'starting', repoId: 'repo', worktreeName: `kitchen-cook-${id}` }
+      }
+    }
+    h.tasks.push(starting('found'), starting('absent'), starting('unknown'))
+    h.found.set('kitchen-cook-found', { worktreeId: 'repo::/wt/found' })
+    h.found.set('kitchen-cook-unknown', 'unknown')
+    await h.kitchen.pump()
+    expect(h.stopCook).toHaveBeenCalledWith('repo::/wt/found')
+    expect(h.task('found')).toMatchObject({ status: 'blocked', kitchen: { status: 'blocked' } })
+    expect(h.task('absent')).toMatchObject({ status: 'blocked', kitchen: { status: 'blocked' } })
+    expect(h.task('unknown')).toMatchObject({ status: 'in-progress', kitchen: { status: 'starting' } })
+    expect(h.kitchen.status().cooking).toBe(1)
+    await h.tick(3 * 60 * MINUTE)
+    expect(h.createWorktree).not.toHaveBeenCalled()
+    expect(h.restartCook).not.toHaveBeenCalled()
   })
 })
 

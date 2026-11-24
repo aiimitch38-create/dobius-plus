@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp' } }))
 
-import { readCookStatus } from './kitchen-wiring'
+import { isCookWorkspace, readCookStatus } from './kitchen-wiring'
 
 type Terminal = { handle: string; connected: boolean; lastOutputAt: number | null; preview: string }
 
@@ -58,5 +58,17 @@ describe('readCookStatus', () => {
 
   it('refuses to guess when the terminal list was cut short', async () => {
     await expect(readCookStatus(runtime([], {}, true), 'wt')).rejects.toThrow(/Too many terminals/)
+  })
+})
+
+describe('isCookWorkspace', () => {
+  it('accepts only a new folder that carries the card\'s kitchen name', () => {
+    const name = 'kitchen-cook-add-tooltip-abc12345'
+    expect(isCookWorkspace(`/wt/${name}`, name, '/r/repo')).toBe(true)
+    // A folder project hands back the project folder itself.
+    expect(isCookWorkspace('/r/repo', name, '/r/repo')).toBe(false)
+    expect(isCookWorkspace(`/r/${name}`, name, `/r/${name}/`)).toBe(false)
+    expect(isCookWorkspace('/wt/someone-elses', name, '/r/repo')).toBe(false)
+    expect(isCookWorkspace('/wt/plain', 'plain', '/r/repo')).toBe(false)
   })
 })

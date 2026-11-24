@@ -65,7 +65,9 @@ export function createKitchen(deps: KitchenDeps) {
 
   const listTasks = (): VertexTask[] | null => {
     try {
-      return deps.listTasks()
+      // Why a copy: spread keeps own fields only, so a mark a card merely
+      // inherits (a forged prototype) is never read as Carson's.
+      return deps.listTasks().map((task) => ({ ...task }))
     } catch (error) {
       log('[kitchen] could not read the Kanban', error)
       return null
@@ -96,7 +98,7 @@ export function createKitchen(deps: KitchenDeps) {
     }
   }
 
-  const { watchCooks, block, noteCook } = createKitchenWatch(deps, {
+  const { watchCooks, block, noteCook, cookIds } = createKitchenWatch(deps, {
     now,
     graceMs,
     log,
@@ -165,7 +167,7 @@ export function createKitchen(deps: KitchenDeps) {
     return repos.length === 1
       ? repos[0]
       : repos.length === 0
-        ? `No repo in Dobius+ belongs to project "${task.projectId}".`
+        ? `No git repo in Dobius+ belongs to project "${task.projectId}". A folder project cannot go to the kitchen.`
         : `More than one repo belongs to project "${task.projectId}".`
   }
 
@@ -174,7 +176,8 @@ export function createKitchen(deps: KitchenDeps) {
     if (!tasks) {
       return []
     }
-    const busy = new Set<string>(pending)
+    // Why cookIds too: a cook whose stop failed, or whose card was deleted, still runs.
+    const busy = new Set<string>([...pending, ...cookIds()])
     for (const task of tasks) {
       if (task.kitchen?.status === 'starting' || task.kitchen?.status === 'cooking') {
         busy.add(task.id)
@@ -208,9 +211,9 @@ export function createKitchen(deps: KitchenDeps) {
   }
 
   /** A 'starting' with no live start behind it (the last session died
-   *  mid-start): a found workspace becomes 'cooking' (the watch restarts it
-   *  once if no agent runs there), an absent one is blocked, and an
-   *  unavailable lookup is left for the next pump. */
+   *  mid-start) is never adopted or restarted: a workspace found under the
+   *  card's own folder name is stopped, the card is blocked either way, and
+   *  an unavailable lookup is left (holding its slot) for the next pump. */
   const reconcileInterrupted = async (): Promise<void> => {
     for (const task of listTasks() ?? []) {
       const kitchen = task.kitchen
@@ -230,18 +233,16 @@ export function createKitchen(deps: KitchenDeps) {
       if (found === 'unknown' || pending.has(task.id)) {
         continue
       }
-      if (found) {
-        mark(task, {
-          ...kitchen,
-          status: 'cooking',
-          worktreeId: found.worktreeId,
-          worktreePath: found.worktreePath,
-          branch: found.branch,
-          startedAt: now()
-        })
-      } else {
-        await block(task, 'Dobius+ closed before this cook started. No workspace was created.')
-      }
+      // Only the stop needs the workspace; the card is blocked either way.
+      const where = found
+        ? { worktreeId: found.worktreeId, worktreePath: found.worktreePath, branch: found.branch }
+        : {}
+      await block(
+        { ...task, kitchen: { ...kitchen, ...where } },
+        found
+          ? 'Dobius+ closed while this cook was starting. Anything running in its workspace was stopped.'
+          : 'Dobius+ closed before this cook started. No workspace was created.'
+      )
     }
   }
 

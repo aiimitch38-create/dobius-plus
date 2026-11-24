@@ -97,4 +97,27 @@ describe('blockExecutionOrigin (app quit)', () => {
       gate.unblockExecutionOriginForTest('bug-report')
     }
   })
+
+  it("an origin's own off switch blocks only that origin, and fails closed", async () => {
+    mocks.getAgentsControlState.mockReturnValue(state({}))
+    const gate = await import('./execution-gate')
+    let on = false
+    gate.setExecutionOriginSwitch('kitchen', () => on, 'The kitchen is turned off.')
+    try {
+      expect(gate.checkExecutionAdmission('kitchen')).toEqual({
+        allowed: false,
+        reason: 'paused',
+        message: 'The kitchen is turned off.'
+      })
+      expect(gate.checkExecutionAdmission('bug-report')).toEqual({ allowed: true })
+      on = true
+      expect(gate.checkExecutionAdmission('kitchen')).toEqual({ allowed: true })
+      gate.setExecutionOriginSwitch('kitchen', () => {
+        throw new Error('settings unreadable')
+      })
+      expect(gate.checkExecutionAdmission('kitchen').allowed).toBe(false)
+    } finally {
+      gate.setExecutionOriginSwitch('kitchen', null)
+    }
+  })
 })

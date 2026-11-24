@@ -37,7 +37,9 @@ export function toFound(worktree: WorktreeLike): BugAutoFixWorktree {
 export async function findManagedWorktreeByName(
   runtime: DobiusRuntimeService,
   repoId: string,
-  name: string
+  name: string,
+  /** The kitchen matches the folder name only; a display name anyone can set never counts. */
+  options: { exactFolderOnly?: boolean } = {}
 ): Promise<BugAutoFixWorktree | null | 'unknown'> {
   let listed: Awaited<ReturnType<DobiusRuntimeService['listDetectedManagedWorktrees']>>
   try {
@@ -49,7 +51,9 @@ export async function findManagedWorktreeByName(
     return 'unknown'
   }
   const match = (listed.worktrees as WorktreeLike[]).find(
-    (worktree) => basename(worktree.path) === name || worktree.displayName === name
+    (worktree) =>
+      basename(worktree.path) === name ||
+      (!options.exactFolderOnly && worktree.displayName === name)
   )
   if (match) {
     return toFound(match)

@@ -2,7 +2,16 @@
  * runtime, reusing the bug auto-fix launch (restricted Claude profile, own
  * worktree, no setup script). Split out so the loop stays testable. */
 
-import { blockExecutionOrigin, checkExecutionAdmission } from '../agents/execution-gate'
+import { basename, resolve } from 'node:path'
+
+import {
+  blockExecutionOrigin,
+  checkExecutionAdmission,
+  ExecutionBlockedError,
+  setExecutionOriginSwitch
+} from '../agents/execution-gate'
+import { isGitRepoKind } from '../../shared/repo-kind'
+import { KITCHEN_WORKTREE_PREFIX } from '../../shared/bug-fix-agent-profile'
 import type { Store } from '../persistence'
 import type { DobiusRuntimeService } from '../runtime/dobius-runtime'
 import { buildBugFixStartup, BUG_FIX_AGENT } from './bug-autofix-claude-profile'
@@ -55,18 +64,42 @@ export async function readCookStatus(
   return { state, lastOutputAt }
 }
 
+/** True for a real, new workspace of the cook's own: its folder carries the
+ *  card's kitchen name and is not the project folder itself. */
+export function isCookWorkspace(worktreePath: string, name: string, repoPath: string): boolean {
+  return (
+    name.startsWith(KITCHEN_WORKTREE_PREFIX) &&
+    basename(worktreePath) === name &&
+    resolve(worktreePath) !== resolve(repoPath)
+  )
+}
+
+const KITCHEN_OFF = 'The kitchen is turned off, so no cook is started.'
+
 export function wireKitchen(store: Store, runtime: DobiusRuntimeService): void {
+  const isEnabled = (): boolean => store.getSettings().kitchenEnabled === true
+  // Why in the gate: the runtime re-checks it right before every spawn, so
+  // turning the kitchen off (or pausing the crew) while a workspace is being
+  // made, or mid-restart, still wins.
+  setExecutionOriginSwitch('kitchen', isEnabled, KITCHEN_OFF)
+  const notCookWorkspace = (worktreePath: string, name: string, repoId: string): string | null => {
+    const repo = runtime.listRepos().find((candidate) => candidate.id === repoId)
+    return repo && isGitRepoKind(repo) && isCookWorkspace(worktreePath, name, repo.path)
+      ? null
+      : `${worktreePath} is not a new workspace of the cook's own, so no cook was started in it.`
+  }
   configureKitchen({
     listTasks: () => vertexTaskStore.list(),
     updateTask: (taskId, patch) => vertexTaskStore.update(taskId, patch),
-    // Why === true: off unless Carson turned it on.
-    isEnabled: () => store.getSettings().kitchenEnabled === true,
+    // Why === true (above): off unless Carson turned it on.
+    isEnabled,
     maxMinutes: () => store.getSettings().kitchenMaxMinutes ?? KITCHEN_DEFAULT_MAX_MINUTES,
     admission: () => checkExecutionAdmission('kitchen'),
     findRepos: (projectId) =>
       runtime
         .listRepos()
-        .filter((repo) => projectIdOf(repo.path) === projectId)
+        // Why git only: a folder project has no worktree or branch to isolate a cook in.
+        .filter((repo) => isGitRepoKind(repo) && projectIdOf(repo.path) === projectId)
         .map((repo) => ({ id: repo.id, name: repo.displayName || repo.id, path: repo.path })),
     // Why: the restricted launch quoting is POSIX (see bug-autofix-wiring.ts).
     unsupportedReason: () =>
@@ -88,7 +121,11 @@ export function wireKitchen(store: Store, runtime: DobiusRuntimeService): void {
         startupCommandDelivery: startup.startupCommandDelivery
       })
     },
-    findWorktree: (repoId, name) => findManagedWorktreeByName(runtime, repoId, name),
+    // Why exact: only a folder with the card's own kitchen name; never a display name.
+    findWorktree: async (repoId, name) =>
+      name.startsWith(KITCHEN_WORKTREE_PREFIX)
+        ? findManagedWorktreeByName(runtime, repoId, name, { exactFolderOnly: true })
+        : null,
     createWorktree: async ({ repoId, name, prompt, comment }) => {
       const result = await runtime.createManagedWorktree({
         repoSelector: repoId,
@@ -101,13 +138,31 @@ export function wireKitchen(store: Store, runtime: DobiusRuntimeService): void {
         activate: false,
         // Why skip: a cook must never install; the prompt links node_modules.
         setupDecision: 'skip',
-        executionOrigin: 'kitchen'
+        // The gate (Pause crew and the kitchen switch) is re-checked right
+        // after this, before the agent spawns.
+        executionOrigin: 'kitchen',
+        prepareWorkspace: (worktreePath) => {
+          const refusal = notCookWorkspace(worktreePath, name, repoId)
+          if (refusal) {
+            // Why this error: any other throw here only becomes a warning.
+            throw new ExecutionBlockedError('kitchen', 'paused', refusal)
+          }
+        }
       })
+      // Why again: remote workspaces skip prepareWorkspace.
+      const refusal = notCookWorkspace(result.worktree.path, name, repoId)
+      if (refusal) {
+        await runtime.stopTerminalsForWorktree(`id:${result.worktree.id}`)
+        throw new Error(refusal)
+      }
       return { ...toFound(result.worktree), warning: result.warning }
     },
     tellAdam: reportKitchenNotice
   })
 }
+
+// Note on restartCook: createTerminal carries executionOrigin 'kitchen', so
+// the same gate re-check runs right before the restarted agent spawns.
 
 /** App quit: stop pumping, and refuse any cook whose workspace is still being made. */
 export function shutdownKitchen(): void {

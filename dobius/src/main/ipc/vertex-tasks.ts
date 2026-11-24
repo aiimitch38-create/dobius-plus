@@ -17,7 +17,7 @@ import {
 } from '../vertex/vertex-task-attachments'
 import { withClaimingWindow, withLostClaimCheck } from '../vertex/vertex-dispatch-recovery'
 import { onVertexTaskCreated } from '../vertex/bug-autofix'
-import { kitchenMarkPatch, pumpKitchenSoon } from '../vertex/kitchen'
+import { registerVertexTaskKitchenHandler } from './vertex-task-kitchen'
 import { isRegisteredRendererWebContents } from '../window/renderer-window-registry'
 import {
   isVertexTaskStatus,
@@ -107,29 +107,7 @@ export function registerVertexTaskHandlers(): void {
     },
   )
 
-  // Carson's "Send to kitchen" / "Remove" on a card. Why its own channel: the
-  // mark starts an agent, so only the top frame of a first-party window may
-  // set it; agents, the CLI and webview guests have no way to.
-  ipcMain.removeHandler('vertexTasks:setKitchen')
-  ipcMain.handle(
-    'vertexTasks:setKitchen',
-    async (event, args: { taskId: string; on: boolean }): Promise<VertexTask | null> => {
-      if (!args || !isNonEmptyString(args.taskId) || typeof args.on !== 'boolean') {
-        return null
-      }
-      if (!isOperatorSender(event)) {
-        console.warn('[vertex-tasks] setKitchen refused: not a first-party app window')
-        return null
-      }
-      const task = vertexTaskStore.list().find((candidate) => candidate.id === args.taskId)
-      const patch = task ? kitchenMarkPatch(task, args.on, Date.now()) : null
-      const updated = patch ? vertexTaskStore.update(args.taskId, patch) : null
-      if (updated && args.on) {
-        pumpKitchenSoon()
-      }
-      return updated
-    },
-  )
+  registerVertexTaskKitchenHandler(isOperatorSender)
 
   // Why: a window's board dispatcher calls this on every poll. Claims it made
   // before a reload, or whose settle write failed, have no promise left to

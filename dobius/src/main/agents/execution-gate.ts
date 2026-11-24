@@ -26,6 +26,36 @@ export function unblockExecutionOriginForTest(origin: ExecutionOrigin): void {
   blockedOrigins.delete(origin)
 }
 
+// Why: an origin with its own off switch (the kitchen setting) is refused here
+// too, so the runtime's re-check right before every gated spawn sees a switch
+// that was turned off while a workspace was being made.
+const originSwitches = new Map<ExecutionOrigin, { isOn: () => boolean; offMessage: string }>()
+
+export function setExecutionOriginSwitch(
+  origin: ExecutionOrigin,
+  isOn: (() => boolean) | null,
+  offMessage = 'This is turned off in Settings.'
+): void {
+  if (isOn) {
+    originSwitches.set(origin, { isOn, offMessage })
+  } else {
+    originSwitches.delete(origin)
+  }
+}
+
+function originSwitchedOff(origin: ExecutionOrigin): string | null {
+  const own = originSwitches.get(origin)
+  if (!own) {
+    return null
+  }
+  try {
+    return own.isOn() ? null : own.offMessage
+  } catch {
+    // Fail closed: a switch that cannot be read counts as off.
+    return own.offMessage
+  }
+}
+
 export type ExecutionAdmission =
   | { allowed: true }
   | { allowed: false; reason: ExecutionBlockReason; message: string }
@@ -59,6 +89,10 @@ export function checkExecutionAdmission(origin: ExecutionOrigin): ExecutionAdmis
       reason: 'paused',
       message: 'Dobius+ is quitting, so no new agent is started.'
     }
+  }
+  const switchedOff = originSwitchedOff(origin)
+  if (switchedOff) {
+    return { allowed: false, reason: 'paused', message: switchedOff }
   }
   let state: ReturnType<typeof getAgentsControlState>
   try {

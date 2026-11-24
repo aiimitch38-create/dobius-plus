@@ -28,6 +28,7 @@ import {
 import { SafeJsonFile } from '../storage/safe-json-file'
 import { readReleasingOrphanedClaims, stampClaimOwner } from './vertex-dispatch-recovery'
 import { normalizeAgentPerson } from './vertex-task-normalize'
+import { cleanVertexTaskPatch } from './vertex-task-patch'
 import { removeVertexTaskAttachmentDir } from './vertex-attachment-paths'
 import { createWorkBoard } from './vertex-work-board'
 import { getUserDataRoot } from '../storage/user-data-root'
@@ -220,7 +221,8 @@ export const vertexTaskStore: VertexWorkBoard = {
     return task
   },
 
-  update(taskId: string, patch: VertexTaskPatch): VertexTask | null {
+  update(taskId: string, rawPatch: VertexTaskPatch): VertexTask | null {
+    const patch = cleanVertexTaskPatch(rawPatch)
     const tasks = [...readAll()]
     const task = tasks.find((t) => t.id === taskId)
     if (!task) {

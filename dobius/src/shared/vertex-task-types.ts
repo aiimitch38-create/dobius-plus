@@ -233,7 +233,8 @@ export type VertexTaskAutoFix = {
  *
  * 'marked'   Carson opted the card in; waiting for the kitchen to be on, the
  *            crew to be running and a free cook
- * 'starting' the card was claimed and its workspace is being created
+ * 'starting' the card was claimed and its workspace is being created (a start
+ *            cut short by a quit is never adopted: it is stopped and blocked)
  * 'cooking'  a cook (a restricted Claude agent) is working in `worktreeId`
  * 'review'   the cook finished; the card was moved to Review for Carson
  * 'blocked'  the cook was stopped after its one restart (see `reason`)
@@ -261,6 +262,9 @@ export type VertexTaskKitchen = {
   branch?: string
   /** Plain-English reason for 'blocked' / 'stopped' / 'failed' or a restart. */
   reason?: string
+  /** Why the cook is being stopped, while its terminals could not be stopped
+   *  yet. The card keeps its slot and the stop is tried again on every pump. */
+  stopPending?: string
 }
 
 export type VertexTaskLink = {
