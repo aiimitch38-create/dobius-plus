@@ -13,7 +13,16 @@ export function kitchenMarkPatch(task: VertexTask, on: boolean, now: number): Ve
   if (on) {
     const waiting = task.status === 'backlog' || task.status === 'todo'
     return waiting && (!status || status === 'failed')
-      ? { kitchen: { status: 'marked', markedAt: now, updatedAt: now } }
+      ? {
+          kitchen: {
+            status: 'marked',
+            markedAt: now,
+            updatedAt: now,
+            // Why a copy: what Carson approved is frozen here (see VertexTaskKitchen).
+            title: task.title,
+            description: task.description.slice(0, CARD_LIMIT)
+          }
+        }
       : null
   }
   // Why only these: once a cook was started the record is the "never twice" mark.
@@ -21,8 +30,8 @@ export function kitchenMarkPatch(task: VertexTask, on: boolean, now: number): Ve
 }
 
 /** Unique per card (same shape as bugFixWorktreeName in bug-autofix.ts). */
-export function cookWorktreeName(task: Pick<VertexTask, 'id' | 'title'>): string {
-  const slug = task.title
+export function cookWorktreeName(task: Pick<VertexTask, 'id' | 'kitchen'>): string {
+  const slug = (task.kitchen?.title ?? '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
@@ -38,8 +47,14 @@ function encodeCardData(value: unknown): string {
   return JSON.stringify(value, null, 2).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
 }
 
+/** Built from the text copied when Carson marked the card, never from the
+ *  live card. Throws when there is no copy: no cook starts on unapproved text. */
 export function buildCookPrompt(task: VertexTask, repo: BugAutoFixRepo, restarted = false): string {
-  const data = { title: task.title, task: task.description.slice(0, CARD_LIMIT) }
+  const order = task.kitchen
+  if (typeof order?.title !== 'string' || typeof order.description !== 'string') {
+    throw new Error('The card has no copy of what Carson sent to the kitchen.')
+  }
+  const data = { title: order.title, task: order.description.slice(0, CARD_LIMIT) }
   return [
     `You are a line cook in the Dobius+ kitchen. Carson sent you one Kanban card to work on (card id: ${task.id}).`,
     `You are in your own workspace (a git worktree) of ${repo.name}, on your own branch.`,

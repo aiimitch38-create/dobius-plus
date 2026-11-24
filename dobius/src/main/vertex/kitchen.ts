@@ -90,7 +90,7 @@ export function createKitchen(deps: KitchenDeps) {
 
   const tell = (event: KitchenEvent, task: VertexTask): void => {
     try {
-      deps.tellAdam({ event, taskId: task.id, title: task.title, at: now() })
+      deps.tellAdam({ event, taskId: task.id, title: task.kitchen?.title ?? '', at: now() })
     } catch (error) {
       log(`[kitchen] could not tell ADAM about card ${task.id}`, error)
     }
@@ -113,7 +113,7 @@ export function createKitchen(deps: KitchenDeps) {
     // and 'starting' on disk means a crash can never start it twice.
     const claimed = mark(
       task,
-      { status: 'starting', repoId: repo.id, worktreeName, attempt: 1 },
+      { ...task.kitchen, status: 'starting', repoId: repo.id, worktreeName, attempt: 1 },
       { status: 'in-progress' }
     )
     if (!claimed) {
@@ -125,7 +125,7 @@ export function createKitchen(deps: KitchenDeps) {
         repoId: repo.id,
         name: worktreeName,
         prompt: buildCookPrompt(claimed, repo),
-        comment: `Kitchen cook for Kanban card: ${task.title}`.slice(0, 200)
+        comment: `Kitchen cook for Kanban card: ${claimed.kitchen?.title ?? ''}`.slice(0, 200)
       })
       noteCook(task.id, created.worktreeId)
       mark(claimed, {
@@ -154,6 +154,9 @@ export function createKitchen(deps: KitchenDeps) {
     }
     if (task.autoFix) {
       return 'Bug auto-fix already has this card.'
+    }
+    if (typeof task.kitchen?.title !== 'string' || typeof task.kitchen.description !== 'string') {
+      return 'The card has no copy of what you sent to the kitchen. Send it again.'
     }
     if (!task.projectId) {
       return 'The card has no project, so there is no repo to cook it in.'

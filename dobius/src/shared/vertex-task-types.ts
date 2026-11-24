@@ -243,6 +243,12 @@ export type VertexTaskKitchen = {
   status: 'marked' | 'starting' | 'cooking' | 'review' | 'blocked' | 'stopped' | 'failed'
   markedAt: number
   updatedAt: number
+  /** The card's text when Carson marked it, copied by main from the stored
+   *  card. Every cook prompt (first start and restart) is built from this
+   *  copy alone, so a later edit to the card, by an agent or anyone, never
+   *  changes what the cook is told. */
+  title?: string
+  description?: string
   /** Launch identity, written before the workspace is created. */
   repoId?: string
   worktreeName?: string

@@ -137,7 +137,7 @@ describe('vertex task IPC bug auto-fix hook', () => {
   })
 
   it('marks a card for the kitchen only from the top frame of an app window', async () => {
-    list.mockReturnValue([{ id: 't1', status: 'backlog' }] as never)
+    list.mockReturnValue([{ id: 't1', status: 'backlog', title: 'Stored title', description: 'Stored text' }] as never)
     const subframe = { ...appWindow, senderFrame: { parent: {} } }
     expect(await handlers.get('vertexTasks:setKitchen')?.(subframe, { taskId: 't1', on: true })).toBeNull()
     isRegisteredRendererWebContents.mockReturnValueOnce(false)
@@ -145,9 +145,22 @@ describe('vertex task IPC bug auto-fix hook', () => {
     expect(await handlers.get('vertexTasks:setKitchen')?.(appWindow, { taskId: 't1' })).toBeNull()
     expect(update).not.toHaveBeenCalled()
 
-    await handlers.get('vertexTasks:setKitchen')?.(appWindow, { taskId: 't1', on: true })
+    // The copy comes from the stored card; text a renderer sends along is ignored.
+    await handlers.get('vertexTasks:setKitchen')?.(appWindow, {
+      taskId: 't1',
+      on: true,
+      title: 'Forged',
+      description: 'Forged',
+      kitchen: { title: 'Forged' }
+    })
     expect(update).toHaveBeenCalledWith('t1', {
-      kitchen: { status: 'marked', markedAt: expect.any(Number), updatedAt: expect.any(Number) }
+      kitchen: {
+        status: 'marked',
+        markedAt: expect.any(Number),
+        updatedAt: expect.any(Number),
+        title: 'Stored title',
+        description: 'Stored text'
+      }
     })
     update.mockClear()
     await handlers.get('vertexTasks:setKitchen')?.(appWindow, { taskId: 'missing', on: true })
