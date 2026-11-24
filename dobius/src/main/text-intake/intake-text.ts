@@ -8,9 +8,14 @@ import { redactString } from '../observability/redactor'
 // business sitting in a stored text (same shape looksSecret refuses).
 const OPAQUE_RUN = /[A-Za-z0-9+/=_-]{32,}/g
 // A whole auth header: everything after "Authorization:" to the end of its
-// LINE (Digest keeps nonce, response and more after the scheme). Run on the
-// raw text, before newlines are flattened, so the line end is still known.
-const AUTH_HEADER = /\b((?:proxy-)?authorization)["']?\s*[:=][^\r\n]*/gi
+// LINE (Digest keeps nonce, response and more after the scheme), or the next
+// line when the first is empty ("Authorization:\n Basic ..."). Run on the raw
+// text, before newlines are flattened, so the line end is still known.
+const AUTH_HEADER = /\b((?:proxy-)?authorization)["']?[ \t]*[:=][ \t]*(?:(?:\r\n?|\n)[ \t]*)?[^\r\n]*/gi
+// Second pass on the flattened text, in case a line break hid the value from
+// the first: the header's scheme and its token.
+const AUTH_HEADER_TOKEN =
+  /\b((?:proxy-)?authorization)["']?\s*[:=]\s*["']?(?:(?:basic|bearer|token|digest|negotiate)\s+)?[^\s"',;]+["']?/gi
 // A bare scheme and token anywhere: "Bearer eyJhbGci...".
 const AUTH_SCHEME = /\b(basic|bearer|digest)\s+[A-Za-z0-9._~+/=-]{8,}/gi
 // A credential field, bare or quoted, with its WHOLE value: a quoted value is
@@ -28,7 +33,10 @@ export function cleanIntakeText(raw: string): string {
   const flat = headersGone.replace(/[\u0000-\u001F\u007F\u2028\u2029]/g, ' ').replace(/\s+/g, ' ').trim()
   // Why ours first, then the shared redactor: its labeled-kv rule would eat only
   // "Authorization: Basic" and leave the token, hiding it from the rules above.
-  const ours = flat.replace(AUTH_SCHEME, '$1 [redacted]').replace(CREDENTIAL_FIELD, '$2: [redacted]')
+  const ours = flat
+    .replace(AUTH_HEADER_TOKEN, '$1: [redacted]')
+    .replace(AUTH_SCHEME, '$1 [redacted]')
+    .replace(CREDENTIAL_FIELD, '$2: [redacted]')
   const redacted = redactString(ours).replace(OPAQUE_RUN, (run) =>
     /\d/.test(run) && /[A-Za-z]/.test(run) ? '[redacted]' : run
   )

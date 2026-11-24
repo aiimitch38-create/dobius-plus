@@ -6,9 +6,9 @@ vi.mock('electron', () => ({ systemPreferences: {} }))
 import { memoryIntakeStore } from './intake-store'
 import { cleanIntakeText } from './intake-text'
 import { TextIntake } from './text-intake'
-import { TOUCH_ID_REQUIRED, touchIdAuthorizeSend } from './text-intake-wiring'
+import { TOUCH_ID_REQUIRED, touchIdAuthorizeSend, touchIdReason } from './text-intake-wiring'
 
-function setup(authorizeSend: (draft: { toName: string; toHandle: string }) => Promise<string | null>) {
+function setup(authorizeSend: (send: { toName: string; toHandle: string; text: string }) => Promise<string | null>) {
   const sendText = vi.fn(async (_handle: string, _text: string) => undefined)
   const intake = new TextIntake({
     store: memoryIntakeStore({ contacts: [{ name: 'Brett', handle: '+14798765432' }] }),
@@ -25,11 +25,12 @@ function setup(authorizeSend: (draft: { toName: string; toHandle: string }) => P
 }
 
 describe('Touch ID gate', () => {
-  it('sends only after Touch ID succeeds, naming the recipient', async () => {
+  it('sends only after Touch ID succeeds, naming the recipient and the exact text', async () => {
     const authorize = vi.fn(async () => null)
     const { intake, sendText, id, fingerprint } = setup(authorize)
-    expect((await intake.sendDraft(id, fingerprint)).ok).toBe(true)
-    expect(authorize).toHaveBeenCalledWith({ toName: 'Brett', toHandle: '+14798765432' })
+    expect((await intake.sendDraft(id, fingerprint, 'at 3')).ok).toBe(true)
+    expect(authorize).toHaveBeenCalledWith({ toName: 'Brett', toHandle: '+14798765432', text: 'at 3' })
+    expect(sendText).toHaveBeenCalledWith('+14798765432', 'at 3')
     expect(sendText).toHaveBeenCalledTimes(1)
   })
 
@@ -41,7 +42,7 @@ describe('Touch ID gate', () => {
       }
     ]) {
       const { intake, sendText, id, fingerprint } = setup(authorize)
-      expect(await intake.sendDraft(id, fingerprint)).toMatchObject({ ok: false, error: /Not sent/ })
+      expect(await intake.sendDraft(id, fingerprint, 'at 3')).toMatchObject({ ok: false, error: /Not sent/ })
       expect(sendText).not.toHaveBeenCalled()
       expect(intake.view().drafts[0]).toMatchObject({ status: 'pending', text: 'at 3' })
     }
@@ -52,31 +53,40 @@ describe('Touch ID gate', () => {
     const { intake, sendText, id, fingerprint } = setup(
       () => new Promise<string | null>((resolve) => (finish = resolve))
     )
-    const first = intake.sendDraft(id, fingerprint)
-    expect(await intake.sendDraft(id, fingerprint)).toMatchObject({ ok: false })
+    const first = intake.sendDraft(id, fingerprint, 'at 3')
+    expect(await intake.sendDraft(id, fingerprint, 'at 3')).toMatchObject({ ok: false })
     finish(null)
     expect((await first).ok).toBe(true)
     expect(sendText).toHaveBeenCalledTimes(1)
   })
 })
 
+const BRETT_SEND = { toName: 'Brett', toHandle: '+14798765432', text: 'at 3' }
+
 describe('touchIdAuthorizeSend', () => {
+  it('previews the first 80 characters, then the full length', () => {
+    const long = 'x'.repeat(90)
+    expect(touchIdReason({ ...BRETT_SEND, text: long })).toBe(
+      `send a text to Brett (+14798765432): "${'x'.repeat(80)}… (90 characters)"`
+    )
+  })
+
   it('refuses without Touch ID, with no click fallback', async () => {
     const none = { canPromptTouchID: () => false, promptTouchID: vi.fn(async () => undefined) }
-    expect(await touchIdAuthorizeSend({ toName: 'Brett' }, none, 'darwin')).toBe('Sending needs Touch ID on this Mac')
+    expect(await touchIdAuthorizeSend(BRETT_SEND, none, 'darwin')).toBe('Sending needs Touch ID on this Mac')
     expect(none.promptTouchID).not.toHaveBeenCalled()
     const yes = { canPromptTouchID: () => true, promptTouchID: vi.fn(async () => undefined) }
-    expect(await touchIdAuthorizeSend({ toName: 'Brett' }, yes, 'linux')).toBe(TOUCH_ID_REQUIRED)
+    expect(await touchIdAuthorizeSend(BRETT_SEND, yes, 'linux')).toBe(TOUCH_ID_REQUIRED)
   })
 
   it('prompts with the recipient and maps cancel to a refusal', async () => {
     const ok = { canPromptTouchID: () => true, promptTouchID: vi.fn(async () => undefined) }
-    expect(await touchIdAuthorizeSend({ toName: 'Brett' }, ok, 'darwin')).toBeNull()
-    expect(ok.promptTouchID).toHaveBeenCalledWith('send a text to Brett')
+    expect(await touchIdAuthorizeSend(BRETT_SEND, ok, 'darwin')).toBeNull()
+    expect(ok.promptTouchID).toHaveBeenCalledWith('send a text to Brett (+14798765432): "at 3"')
     const cancel = { canPromptTouchID: () => true, promptTouchID: vi.fn(async () => {
         throw new Error('cancel')
       }) }
-    expect(await touchIdAuthorizeSend({ toName: 'Brett' }, cancel, 'darwin')).toBe('Touch ID was not confirmed.')
+    expect(await touchIdAuthorizeSend(BRETT_SEND, cancel, 'darwin')).toBe('Touch ID was not confirmed.')
   })
 })
 

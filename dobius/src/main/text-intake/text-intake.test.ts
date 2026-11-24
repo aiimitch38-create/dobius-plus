@@ -176,20 +176,22 @@ describe('text intake: drafts', () => {
     expect(deps.sendText).not.toHaveBeenCalled()
     expect(intake.view().drafts).toHaveLength(1)
 
-    expect((await intake.sendDraft(draft.id, shown(intake, draft.id))).ok).toBe(true)
+    expect((await intake.sendDraft(draft.id, shown(intake, draft.id), draft.text)).ok).toBe(true)
     expect(deps.sendText).toHaveBeenCalledTimes(1)
     expect(deps.sendText).toHaveBeenCalledWith(BRETT.handle, 'Carson will call you at 3.')
     expect(deps.appendThread).toHaveBeenCalledWith(
       expect.objectContaining({ text: 'Sent to Brett: Carson will call you at 3.' })
     )
-    expect((await intake.sendDraft(draft.id, shown(intake, draft.id))).ok).toBe(false)
+    expect((await intake.sendDraft(draft.id, shown(intake, draft.id), draft.text)).ok).toBe(false)
     expect(deps.sendText).toHaveBeenCalledTimes(1)
   })
 
-  it('sends Carson’s edit, and a double click sends once', async () => {
+  it('sends Carson’s saved edit, and a double click sends once', async () => {
     const { intake, deps } = setup()
     const draft = intake.createDraft('Sam', 'first')
-    const [one, two] = await Promise.all([intake.sendDraft(draft.id, shown(intake, draft.id), 'edited'), intake.sendDraft(draft.id, shown(intake, draft.id), 'edited')])
+    expect(intake.editDraft(draft.id, shown(intake, draft.id), 'edited').ok).toBe(true)
+    const fp = shown(intake, draft.id)
+    const [one, two] = await Promise.all([intake.sendDraft(draft.id, fp, 'edited'), intake.sendDraft(draft.id, fp, 'edited')])
     expect([one.ok, two.ok].sort()).toEqual([false, true])
     expect(deps.sendText).toHaveBeenCalledTimes(1)
     expect(deps.sendText).toHaveBeenCalledWith(SAM.handle, 'edited')
@@ -198,9 +200,9 @@ describe('text intake: drafts', () => {
   it('refuses to send to a contact removed since the draft, or while the bridge is off', async () => {
     const off = setup({ sendUnavailable: 'Turn on the iMessage bridge in Settings first.' })
     const draft = off.intake.createDraft('Sam', 'hi')
-    expect(await off.intake.sendDraft(draft.id, shown(off.intake, draft.id))).toMatchObject({ ok: false, error: /iMessage bridge/ })
+    expect(await off.intake.sendDraft(draft.id, shown(off.intake, draft.id), draft.text)).toMatchObject({ ok: false, error: /iMessage bridge/ })
     off.intake.setContacts([BRETT])
-    expect(await off.intake.sendDraft(draft.id, shown(off.intake, draft.id))).toMatchObject({ ok: false, error: /no longer a tracked/ })
+    expect(await off.intake.sendDraft(draft.id, shown(off.intake, draft.id), draft.text)).toMatchObject({ ok: false, error: /no longer a tracked/ })
     expect(off.deps.sendText).not.toHaveBeenCalled()
   })
 
@@ -208,7 +210,7 @@ describe('text intake: drafts', () => {
     const { intake, deps } = setup()
     deps.sendText.mockRejectedValueOnce(new Error('outbound rate limit (10/min) exceeded'))
     const draft = intake.createDraft('Sam', 'hi')
-    expect(await intake.sendDraft(draft.id, shown(intake, draft.id))).toMatchObject({ ok: false })
+    expect(await intake.sendDraft(draft.id, shown(intake, draft.id), draft.text)).toMatchObject({ ok: false })
     expect(intake.view().drafts[0]).toMatchObject({ status: 'failed', error: /rate limit/ })
     expect(intake.discardDraft(draft.id).ok).toBe(true)
     expect(intake.view().drafts).toEqual([])

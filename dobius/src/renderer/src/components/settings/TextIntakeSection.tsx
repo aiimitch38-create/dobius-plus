@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { TextIntakeResult, TextIntakeView, TrackedContact } from '../../../../shared/text-intake'
+import type { TextDraft, TextIntakeResult, TextIntakeView, TrackedContact } from '../../../../shared/text-intake'
 import { SearchableSetting } from './SearchableSetting'
 import { TextIntakeReviewList } from './TextIntakeReviewList'
 import { TrackedContactsEditor } from './TrackedContactsEditor'
@@ -57,6 +57,19 @@ export function TextIntakeSection(): React.JSX.Element {
   }
 
   const api = window.api.textIntake
+  // Why save first: main only sends the stored text whose fingerprint it checked.
+  const sendEdited = async (draft: TextDraft, text: string): Promise<TextIntakeResult> => {
+    let current = draft
+    if (text !== draft.text) {
+      const saved = await api.editDraft(draft.id, draft.fingerprint ?? '', text)
+      const next = saved.view.drafts.find((d) => d.id === draft.id)
+      if (!saved.ok || !next) {
+        return saved
+      }
+      current = next
+    }
+    return api.sendDraft(current.id, current.fingerprint ?? '', current.text)
+  }
   return (
     <SearchableSetting
       title="From texts"
@@ -77,7 +90,7 @@ export function TextIntakeSection(): React.JSX.Element {
         busy={busy}
         onAccept={(id) => void run(() => api.accept(id), 'Added to the Backlog.')}
         onDismiss={(id) => void run(() => api.dismiss(id), 'Dismissed.')}
-        onSend={(id, fingerprint, text) => void run(() => api.sendDraft(id, fingerprint, text), 'Sent.')}
+        onSend={(draft, text) => void run(() => sendEdited(draft, text), 'Sent.')}
         onDiscard={(id) => void run(() => api.discardDraft(id), 'Draft discarded.')}
       />
       {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}

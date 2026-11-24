@@ -37,8 +37,18 @@ type TouchId = Pick<typeof systemPreferences, 'canPromptTouchID' | 'promptTouchI
  * osascript can click, but nothing but Carson's finger passes this. No click
  * fallback: without Touch ID, nothing is sent.
  */
+const PREVIEW_CHARS = 80
+
+/** What the Touch ID sheet says: who, which number, and the exact words (first 80, then the length). */
+export function touchIdReason(send: { toName: string; toHandle: string; text: string }): string {
+  const flat = send.text.replace(/\s+/g, ' ').trim()
+  const preview =
+    flat.length > PREVIEW_CHARS ? `${flat.slice(0, PREVIEW_CHARS).trimEnd()}… (${send.text.length} characters)` : flat
+  return `send a text to ${send.toName} (${send.toHandle}): "${preview}"`
+}
+
 export async function touchIdAuthorizeSend(
-  draft: { toName: string },
+  send: { toName: string; toHandle: string; text: string },
   touchId: TouchId = systemPreferences,
   platform: NodeJS.Platform = process.platform
 ): Promise<string | null> {
@@ -46,7 +56,7 @@ export async function touchIdAuthorizeSend(
     return TOUCH_ID_REQUIRED
   }
   try {
-    await touchId.promptTouchID(`send a text to ${draft.toName}`)
+    await touchId.promptTouchID(touchIdReason(send))
     return null
   } catch {
     // Why a fixed reason: the prompt rejects for cancel, lockout or failure alike, and all mean "no".
@@ -66,7 +76,7 @@ export function startTextIntake(wiring: TextIntakeWiring): TextIntake {
     createCard: (input) => vertexTaskStore.create(input),
     sendText: sendImessage,
     sendUnavailable: () => textSendUnavailable(),
-    authorizeSend: (draft) => touchIdAuthorizeSend(draft),
+    authorizeSend: (send) => touchIdAuthorizeSend(send),
     appendThread: wiring.appendThread,
     tap: (text) =>
       void notifier.notify(text, false).catch((error: unknown) => {

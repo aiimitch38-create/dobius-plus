@@ -1122,7 +1122,9 @@ const api = {
     accept: (id: string): Promise<TextIntakeResult> => ipcRenderer.invoke('textIntake:accept', id),
     dismiss: (id: string): Promise<TextIntakeResult> =>
       ipcRenderer.invoke('textIntake:dismiss', id),
-    sendDraft: (id: string, fingerprint: string, text?: string): Promise<TextIntakeResult> =>
+    editDraft: (id: string, fingerprint: string, text: string): Promise<TextIntakeResult> =>
+      ipcRenderer.invoke('textIntake:editDraft', id, fingerprint, text),
+    sendDraft: (id: string, fingerprint: string, text: string): Promise<TextIntakeResult> =>
       ipcRenderer.invoke('textIntake:sendDraft', id, fingerprint, text),
     reviewVisible: (visible: boolean): Promise<void> =>
       ipcRenderer.invoke('textIntake:reviewVisible', visible),

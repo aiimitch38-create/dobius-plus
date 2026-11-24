@@ -63,6 +63,7 @@ describe('text intake IPC', () => {
       ['textIntake:accept', suggestionId],
       ['textIntake:dismiss', suggestionId],
       ['textIntake:sendDraft', draftId, 'edited'],
+      ['textIntake:editDraft', draftId, 'fp', 'edited'],
       ['textIntake:discardDraft', draftId]
     ]
     for (const [channel, ...args] of calls) {
@@ -97,8 +98,12 @@ describe('text intake IPC: Send needs Carson', () => {
       guardedDuringConfirm = protectedSelfUiActive()
       return true
     })
-    const { sendText, draftId, fingerprint } = setup(confirm)
-    expect(await invoke('textIntake:sendDraft', TRUSTED, draftId, fingerprint, 'Calling at 4.')).toMatchObject({ ok: true })
+    const { intake, sendText, draftId, fingerprint } = setup(confirm)
+    expect(await invoke('textIntake:editDraft', TRUSTED, draftId, fingerprint, 'Calling at 4.')).toMatchObject({ ok: true })
+    const saved = intake.view().drafts[0].fingerprint
+    expect(await invoke('textIntake:sendDraft', TRUSTED, draftId, fingerprint, 'Calling at 4.')).toMatchObject({ ok: false })
+    expect(confirm).not.toHaveBeenCalled()
+    expect(await invoke('textIntake:sendDraft', TRUSTED, draftId, saved, 'Calling at 4.')).toMatchObject({ ok: true })
     expect(confirm).toHaveBeenCalledWith(TRUSTED, { toName: 'Brett', toHandle: '+15550102000', text: 'Calling at 4.' })
     expect(guardedDuringConfirm).toBe(true)
     expect(protectedSelfUiActive()).toBe(false)
@@ -107,7 +112,7 @@ describe('text intake IPC: Send needs Carson', () => {
 
   it('Cancel sends nothing', async () => {
     const { sendText, draftId, fingerprint } = setup(vi.fn(async () => false))
-    expect(await invoke('textIntake:sendDraft', TRUSTED, draftId, fingerprint)).toMatchObject({ ok: false, error: 'Not sent.' })
+    expect(await invoke('textIntake:sendDraft', TRUSTED, draftId, fingerprint, 'Carson will call at 3.')).toMatchObject({ ok: false, error: 'Not sent.' })
     expect(sendText).not.toHaveBeenCalled()
   })
 
@@ -141,8 +146,8 @@ describe('text intake IPC: overlapping confirms', () => {
     const { intake, draftId, fingerprint } = setup(confirm)
     const second = intake.createDraft('Brett', 'second')
     const secondFp = intake.view().drafts.find((d) => d.id === second.id)?.fingerprint
-    const a = invoke('textIntake:sendDraft', TRUSTED, draftId, fingerprint) as Promise<unknown>
-    const b = invoke('textIntake:sendDraft', TRUSTED, second.id, secondFp) as Promise<unknown>
+    const a = invoke('textIntake:sendDraft', TRUSTED, draftId, fingerprint, 'Carson will call at 3.') as Promise<unknown>
+    const b = invoke('textIntake:sendDraft', TRUSTED, second.id, secondFp, 'second') as Promise<unknown>
     await vi.waitFor(() => expect(opened).toHaveLength(2))
     opened[0]()
     await a

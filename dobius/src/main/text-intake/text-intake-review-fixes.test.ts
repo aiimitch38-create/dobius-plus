@@ -8,14 +8,17 @@ import { draftFingerprint, TextIntake } from './text-intake'
 const NORWAY = '+4798765432'
 const US = '+14798765432'
 
-function intakeWith(contacts: { name: string; handle: string; startRowid?: number }[]) {
+function intakeWith(
+  contacts: { name: string; handle: string; startRowid?: number }[],
+  authorizeSend: () => Promise<string | null> = async () => null
+) {
   const sendText = vi.fn(async (_handle: string, _text: string) => undefined)
   const intake = new TextIntake({
     store: memoryIntakeStore({ contacts }),
     createCard: () => ({ id: 't' }),
     sendText,
     sendUnavailable: () => null,
-    authorizeSend: async () => null,
+    authorizeSend,
     appendThread: async () => undefined,
     tap: () => undefined
   })
@@ -47,7 +50,7 @@ describe('P1: one canonical handle comparison', () => {
     expect(intake.ingest({ messageId: 'g3', handle: NORWAY, text: 'can you call?' })).toBe('suggested')
     const draft = intake.createDraft('Ola', 'hei')
     const fingerprint = intake.view().drafts[0].fingerprint
-    expect((await intake.sendDraft(draft.id, fingerprint)).ok).toBe(true)
+    expect((await intake.sendDraft(draft.id, fingerprint, 'hei')).ok).toBe(true)
     expect(sendText).toHaveBeenCalledWith(NORWAY, 'hei')
   })
 
@@ -66,13 +69,40 @@ describe('P1: Send is bound to the exact draft shown', () => {
   it('refuses a missing or stale fingerprint and sends nothing', async () => {
     const { intake, sendText } = intakeWith([{ name: 'Brett', handle: US }])
     const draft = intake.createDraft('Brett', 'at 3')
-    expect(await intake.sendDraft(draft.id, undefined)).toMatchObject({ ok: false, error: /changed since/ })
-    expect(await intake.sendDraft(draft.id, 'forged')).toMatchObject({ ok: false, error: /changed since/ })
+    expect(await intake.sendDraft(draft.id, undefined, 'at 3')).toMatchObject({ ok: false, error: /changed since/ })
+    expect(await intake.sendDraft(draft.id, 'forged', 'at 3')).toMatchObject({ ok: false, error: /changed since/ })
     const swapped = draftFingerprint({ ...draft, text: 'something else' })
-    expect(await intake.sendDraft(draft.id, swapped)).toMatchObject({ ok: false })
+    expect(await intake.sendDraft(draft.id, swapped, 'at 3')).toMatchObject({ ok: false })
     const otherRecipient = draftFingerprint({ ...draft, toHandle: NORWAY })
-    expect(await intake.sendDraft(draft.id, otherRecipient)).toMatchObject({ ok: false })
+    expect(await intake.sendDraft(draft.id, otherRecipient, 'at 3')).toMatchObject({ ok: false })
     expect(sendText).not.toHaveBeenCalled()
+  })
+})
+
+describe('Send carries exactly the fingerprinted text', () => {
+  it('refuses text that differs from the checked draft, before Touch ID', async () => {
+    const authorizeSend = vi.fn(async () => null)
+    const { intake, sendText } = intakeWith([{ name: 'Brett', handle: US }], authorizeSend)
+    const draft = intake.createDraft('Brett', 'at 3')
+    const fingerprint = intake.view().drafts[0].fingerprint
+    for (const text of ['at 4', undefined, 'at 3 ']) {
+      expect(await intake.sendDraft(draft.id, fingerprint, text)).toMatchObject({ ok: false, error: /not the text that was checked/ })
+    }
+    expect(authorizeSend).not.toHaveBeenCalled()
+    expect(sendText).not.toHaveBeenCalled()
+    expect(intake.view().drafts[0]).toMatchObject({ status: 'pending', text: 'at 3' })
+  })
+
+  it('an edit is saved first and re-fingerprinted; the old fingerprint then fails', async () => {
+    const { intake, sendText } = intakeWith([{ name: 'Brett', handle: US }])
+    const draft = intake.createDraft('Brett', 'at 3')
+    const before = intake.view().drafts[0].fingerprint
+    expect(intake.editDraft(draft.id, before, 'at 4').ok).toBe(true)
+    expect(await intake.sendDraft(draft.id, before, 'at 4')).toMatchObject({ ok: false, error: /changed since/ })
+    const after = intake.view().drafts[0].fingerprint
+    expect((await intake.sendDraft(draft.id, after, 'at 4')).ok).toBe(true)
+    expect(sendText).toHaveBeenCalledWith(US, 'at 4')
+    expect(intake.editDraft(draft.id, 'forged', 'x').ok).toBe(false)
   })
 })
 
@@ -85,7 +115,11 @@ describe('P2: redaction takes whole values', () => {
     ['"password": "correct horse battery staple"', 'horse'],
     ["password='correct horse battery staple' ok", 'battery'],
     ['api_key: "k e y s p a c e d"', 'k e y'],
-    ['token=abc123def', 'abc123def']
+    ['token=abc123def', 'abc123def'],
+    ['Authorization:\n  Basic dXNlcjpwYXNz', 'dXNlcjpwYXNz'],
+    ['Authorization:\r\nBearer abc.def.ghijkl end', 'abc.def'],
+    ['"Authorization":\n"Basic dXNlcjpwYXNz"', 'dXNlcjpwYXNz'],
+    ['Proxy-Authorization:   \n\tNegotiate YIIBhgYGKwYBBQUC', 'YIIBhg']
   ])('redacts %s', (raw, leaked) => {
     const clean = cleanIntakeText(raw)
     expect(clean).not.toContain(leaked)

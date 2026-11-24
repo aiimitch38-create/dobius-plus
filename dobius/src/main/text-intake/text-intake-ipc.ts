@@ -65,8 +65,7 @@ async function confirmedSend(
   confirm: ConfirmSend,
   args: { id: string; fingerprint: unknown; text: unknown }
 ): Promise<TextIntakeResult> {
-  const edited = typeof args.text === 'string' ? args.text : undefined
-  const prepared = intake.prepareSend(args.id, args.fingerprint, edited)
+  const prepared = intake.prepareSend(args.id, args.fingerprint, args.text)
   if (!prepared.ok) {
     return { ok: false, error: prepared.error, view: intake.view() }
   }
@@ -79,7 +78,7 @@ async function confirmedSend(
     return { ok: false, error: 'Not sent.', view: intake.view() }
   }
   // Re-checked inside sendDraft: the same fingerprint and text, or nothing goes out.
-  return intake.sendDraft(args.id, args.fingerprint, edited)
+  return intake.sendDraft(args.id, args.fingerprint, prepared.text)
 }
 
 export function registerTextIntakeIpc(trusted: Trusted, confirm: ConfirmSend = nativeConfirmSend): void {
@@ -114,6 +113,9 @@ export function registerTextIntakeIpc(trusted: Trusted, confirm: ConfirmSend = n
   guarded('textIntake:dismiss', trusted, (intake, _event, id: unknown) => intake.dismiss(asId(id)))
   guarded('textIntake:sendDraft', trusted, (intake, event, id: unknown, fingerprint: unknown, text: unknown) =>
     confirmedSend(intake, event, confirm, { id: asId(id), fingerprint, text })
+  )
+  guarded('textIntake:editDraft', trusted, (intake, _event, id: unknown, fingerprint: unknown, text: unknown) =>
+    intake.editDraft(asId(id), fingerprint, text)
   )
   guarded('textIntake:discardDraft', trusted, (intake, _event, id: unknown) => intake.discardDraft(asId(id)))
 }

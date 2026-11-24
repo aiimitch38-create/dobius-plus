@@ -37,7 +37,7 @@ export type TextIntakeDeps = {
    * Carson proves he is there (Touch ID in main): null when he did, else why
    * not. This is the gate an agent cannot pass: no click or script presses a finger.
    */
-  authorizeSend: (draft: { toName: string; toHandle: string }) => Promise<string | null>
+  authorizeSend: (send: { toName: string; toHandle: string; text: string }) => Promise<string | null>
   appendThread: (row: AdamThreadRow) => Promise<void>
   /** Taps Carson with a fixed template (never the message text). */
   tap: (text: string) => void
@@ -251,12 +251,8 @@ export class TextIntake {
     this.save({ ...state, drafts: state.drafts.map((d) => (d.id === id ? { ...d, ...patch } : d)) })
   }
 
-  /**
-   * Checks a Send against the stored draft: `fingerprint` must match the draft
-   * as Carson saw it (a swapped recipient or text since then fails), and the
-   * recipient must still be tracked. `edited` is his edit, if any.
-   */
-  prepareSend(id: string, fingerprint: unknown, edited?: unknown): PreparedSend {
+  /** The waiting draft whose fingerprint matches what Carson saw, or why not. */
+  private matchingDraft(id: string, fingerprint: unknown): PreparedSend {
     const draft = this.state().drafts.find((d) => d.id === id)
     if (!draft || (draft.status !== 'pending' && draft.status !== 'failed')) {
       return { ok: false, error: 'That draft is no longer waiting.' }
@@ -264,20 +260,49 @@ export class TextIntake {
     if (typeof fingerprint !== 'string' || fingerprint !== draftFingerprint(draft)) {
       return { ok: false, error: 'This draft changed since it was shown. Check it again before sending.' }
     }
-    // Why re-checked: the contact may have been removed since ADAM drafted it.
-    if (!this.contactForHandle(draft.toHandle)) {
-      return { ok: false, error: `${draft.toName} is no longer a tracked contact, so it was not sent.` }
+    return { ok: true, draft, text: draft.text }
+  }
+
+  /**
+   * Carson's edit, saved BEFORE any Send: the draft gets a new fingerprint,
+   * so the next Send (and its confirm and Touch ID) is for exactly these words.
+   */
+  editDraft(id: string, fingerprint: unknown, raw: unknown): TextIntakeResult {
+    const matched = this.matchingDraft(id, fingerprint)
+    if (!matched.ok) {
+      return this.result(matched.error)
     }
     try {
-      return { ok: true, draft, text: edited === undefined ? draft.text : draftText(edited) }
+      this.setDraft(id, { text: draftText(raw) })
+      return this.result()
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+      return this.result(error instanceof Error ? error.message : String(error))
     }
   }
 
-  /** Carson's Send, then his Touch ID: the only way a draft goes out. */
-  async sendDraft(id: string, fingerprint: unknown, edited?: unknown): Promise<TextIntakeResult> {
-    const prepared = this.prepareSend(id, fingerprint, edited)
+  /**
+   * Checks a Send against the stored draft: `fingerprint` must match it as
+   * Carson saw it, and `text` must be exactly its stored (fingerprinted) text.
+   * An unsaved edit is refused: save it with editDraft first.
+   */
+  prepareSend(id: string, fingerprint: unknown, text: unknown): PreparedSend {
+    const matched = this.matchingDraft(id, fingerprint)
+    if (!matched.ok) {
+      return matched
+    }
+    if (text !== matched.draft.text) {
+      return { ok: false, error: 'The text to send is not the text that was checked. Save the edit, then send.' }
+    }
+    // Why re-checked: the contact may have been removed since ADAM drafted it.
+    if (!this.contactForHandle(matched.draft.toHandle)) {
+      return { ok: false, error: `${matched.draft.toName} is no longer a tracked contact, so it was not sent.` }
+    }
+    return matched
+  }
+
+  /** Carson's Send, then his Touch ID: the only way a draft goes out, with exactly its checked text. */
+  async sendDraft(id: string, fingerprint: unknown, sendingText: unknown): Promise<TextIntakeResult> {
+    const prepared = this.prepareSend(id, fingerprint, sendingText)
     if (!prepared.ok) {
       return this.result(prepared.error)
     }
@@ -287,15 +312,16 @@ export class TextIntake {
       return this.result(unavailable)
     }
     // Why 'sending' before Touch ID: a second Send for this draft is refused while the first waits.
-    this.setDraft(id, { status: 'sending', text })
+    this.setDraft(id, { status: 'sending' })
     let refused: string | null
     try {
-      refused = await this.deps.authorizeSend({ toName: draft.toName, toHandle: draft.toHandle })
+      // Why the text too: Touch ID shows Carson the exact words this send carries.
+      refused = await this.deps.authorizeSend({ toName: draft.toName, toHandle: draft.toHandle, text })
     } catch (error) {
       refused = `Touch ID failed: ${error instanceof Error ? error.message : String(error)}`
     }
     if (refused) {
-      this.setDraft(id, { status: draft.status, text: draft.text })
+      this.setDraft(id, { status: draft.status })
       return this.result(`Not sent: ${refused}`)
     }
     try {

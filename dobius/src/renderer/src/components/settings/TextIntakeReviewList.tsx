@@ -9,7 +9,8 @@ type Props = {
   busy: boolean
   onAccept: (id: string) => void
   onDismiss: (id: string) => void
-  onSend: (id: string, fingerprint: string, text?: string) => void
+  /** `text` is what the box holds; an edit is saved before it is sent. */
+  onSend: (draft: TextDraft, text: string) => void
   onDiscard: (id: string) => void
 }
 
@@ -50,7 +51,8 @@ function SuggestionRow(props: {
 function DraftRow(props: {
   draft: TextDraft
   busy: boolean
-  onSend: (id: string, fingerprint: string, text?: string) => void
+  /** `text` is what the box holds; an edit is saved before it is sent. */
+  onSend: (draft: TextDraft, text: string) => void
   onDiscard: (id: string) => void
 }): React.JSX.Element {
   const { draft } = props
@@ -78,7 +80,7 @@ function DraftRow(props: {
           type="button"
           size="sm"
           disabled={props.busy || sending || !text.trim() || !draft.fingerprint}
-          onClick={() => props.onSend(draft.id, draft.fingerprint ?? '', text === draft.text ? undefined : text)}
+          onClick={() => props.onSend(draft, text)}
         >
           {sending ? 'Sending…' : 'Send'}
         </Button>
