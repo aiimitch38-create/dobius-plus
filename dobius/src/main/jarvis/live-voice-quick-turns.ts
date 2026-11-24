@@ -142,7 +142,7 @@ export class LiveQuickTurns {
       this.pending = { ...quick.ask, callToken, expiresAt: now + QUICK_ASK_TTL_MS }
     }
     const speak = speakableReply(quick.speak)
-    this.remember(callToken, request, speak, window)
+    this.remember(callToken, request, quick.record ?? speak, window)
     return { outcome: `quick:${quick.name}`, result: { ok: true, kind: 'answer', speak } }
   }
 
@@ -152,21 +152,21 @@ export class LiveQuickTurns {
    * without this a quick exchange would be missing from ADAM's thread. Each
    * row is written on its own: a failed one does not stop the other.
    */
-  private remember(callToken: string, request: string, speak: string, window: string[]): void {
+  private remember(callToken: string, request: string, kept: string, window: string[]): void {
     const id = `live:${callToken}:quick-${++this.count}`
     this.exchanges = [
       ...this.exchanges,
       {
         lines: [
           `Carson: ${request}`.slice(0, LINE_MAX_CHARS),
-          `ADAM's quick answer: ${speak}`.slice(0, LINE_MAX_CHARS)
+          `ADAM's quick answer: ${kept}`.slice(0, LINE_MAX_CHARS)
         ],
         window: [...window]
       }
     ].slice(-EXCHANGES_MAX)
     const rows: AdamThreadRow[] = [
       { id: `${id}:user`, role: 'user', text: request.slice(0, ROW_MAX_CHARS), voice: true },
-      { id: `${id}:assistant`, role: 'assistant', text: speak, voice: true }
+      { id: `${id}:assistant`, role: 'assistant', text: kept, voice: true }
     ]
     void (async () => {
       for (const row of rows) {

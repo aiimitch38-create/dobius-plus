@@ -8,7 +8,12 @@
 // up reads the local library only.
 
 import type { LibraryHit } from '../library/library-types'
-import { libraryAnswer, matchLibraryLookup, type LibraryLookup } from './live-voice-library-hand'
+import {
+  LIBRARY_READ_RECORD,
+  libraryAnswer,
+  matchLibraryLookup,
+  type LibraryLookup
+} from './live-voice-library-hand'
 import { matchTerminals, whichOneQuestion, type QuickTerminal } from './live-voice-terminal-target'
 import { lastOutputLine, looksSecret, shortForSpeech } from './live-voice-terminal-text'
 
@@ -53,7 +58,18 @@ export type TerminalIntent = Extract<QuickIntent, { hand: 'type' | 'read-termina
 export type QuickAsk = { intent: TerminalIntent; candidates: QuickTerminal[] }
 
 export type QuickHandResult =
-  | { name: string; speak: string; cancelled?: false; ask?: QuickAsk }
+  | {
+      name: string
+      speak: string
+      cancelled?: false
+      ask?: QuickAsk
+      /**
+       * What ADAM's thread keeps instead of `speak`. Why: a thread row reaches
+       * ADAM later as his own words, so text read from a terminal or the
+       * library (written by anyone) is spoken once and never stored.
+       */
+      record?: string
+    }
   | { name: string; speak: ''; cancelled: true }
 
 const MAX_NAMED = 5
@@ -240,7 +256,7 @@ function money(usd: number): string {
 }
 
 const CANCELLED = Symbol('cancelled')
-type Said = string | typeof CANCELLED
+type Said = string | typeof CANCELLED | { speak: string; record: string }
 
 /** Does what a terminal intent asks, on the one terminal it means. */
 async function actOn(
@@ -275,14 +291,17 @@ async function actOn(
   // Why the whole line: a key past the cut would still be read in part.
   return looksSecret(line)
     ? `${terminal.name}'s last line looks like it has a secret, so I won't read it out.`
-    : `${terminal.name} last showed: ${shortForSpeech(line)}`
+    : {
+        speak: `${terminal.name} last showed: ${shortForSpeech(line)}`,
+        record: `Read out the last line of ${terminal.name}.`
+      }
 }
 
 async function runIntent(
   intent: QuickIntent,
   deps: QuickHandsDeps,
   isCurrent: () => boolean
-): Promise<Said | { speak: string; ask: QuickAsk } | null> {
+): Promise<Said | { speak: string; ask: QuickAsk; record?: undefined } | null> {
   switch (intent.hand) {
     case 'list-terminals': {
       const { terminals, truncated } = await deps.listTerminals()
@@ -337,7 +356,11 @@ async function runIntent(
         return null
       }
       const hits = await deps.searchLibrary(intent.query, !intent.explicit)
-      return isCurrent() ? libraryAnswer(intent, hits) : CANCELLED
+      if (!isCurrent()) {
+        return CANCELLED
+      }
+      const speak = libraryAnswer(intent, hits)
+      return speak && hits && hits.length > 0 ? { speak, record: LIBRARY_READ_RECORD } : speak
     }
   }
 }
@@ -347,7 +370,9 @@ function resultOf(name: string, said: Awaited<ReturnType<typeof runIntent>>): Qu
     return { name, speak: '', cancelled: true }
   }
   if (said && typeof said === 'object') {
-    return { name, speak: said.speak, ask: said.ask }
+    return 'ask' in said
+      ? { name, speak: said.speak, ask: said.ask }
+      : { name, speak: said.speak, record: said.record }
   }
   return said ? { name, speak: said } : null
 }
