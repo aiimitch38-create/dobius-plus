@@ -9,4 +9,7 @@ export function removeInheritedNoColor(env: Record<string, string>): void {
   if (env.CLICOLOR === '0') {
     delete env.CLICOLOR
   }
+  // Why: a Dobius terminal used to export FORCE_HYPERLINK=1, so a Dobius
+  // launched from one would hand it on; forced OSC 8 leaks xterm link markers.
+  delete env.FORCE_HYPERLINK
 }

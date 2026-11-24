@@ -15,6 +15,14 @@ describe('terminal color env', () => {
     expect(env).toEqual({ TERM: 'xterm-256color' })
   })
 
+  it('drops an inherited FORCE_HYPERLINK so agents do not emit OSC 8 on every repaint', () => {
+    const env = { FORCE_HYPERLINK: '1', TERM: 'xterm-256color' }
+
+    removeInheritedNoColor(env)
+
+    expect(env).toEqual({ TERM: 'xterm-256color' })
+  })
+
   it('preserves explicit color-enable variables', () => {
     const env = {
       FORCE_COLOR: '1',
