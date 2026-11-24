@@ -43,10 +43,11 @@ export function setBoardDispatchEnabled(next: boolean): void {
   enabled = next
 }
 
-/** Card text with `<` and `>` escaped, so no field (a title made from a text
+/** Card text with `&`, `<` and `>` escaped (`&` first, so `<div>` and a
+ *  literal `&lt;div&gt;` stay distinct), so no field (a title made from a text
  *  message, say) can close the <task-content> fence or open a tag of its own. */
 export function fenceSafe(value: string): string {
-  return value.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 /** Wrap operator-authored text so a task title cannot read as instructions to

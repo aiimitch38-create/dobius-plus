@@ -15,6 +15,7 @@ function setup(options: { sendUnavailable?: string | null } = {}) {
     createCard: vi.fn((_input: unknown) => ({ id: 'task-1' })),
     sendText: vi.fn(async (_handle: string, _text: string) => undefined),
     sendUnavailable: vi.fn(() => options.sendUnavailable ?? null),
+    authorizeSend: async () => null,
     appendThread: vi.fn(async (_row: unknown) => undefined),
     tap: vi.fn((_text: string) => undefined),
     now: () => 1_000

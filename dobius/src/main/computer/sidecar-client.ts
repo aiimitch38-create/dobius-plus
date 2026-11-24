@@ -74,14 +74,16 @@ export async function callComputerSidecarAction(
     ComputerSidecarMethod,
     'capabilities' | 'listApps' | 'listWindows' | 'getAppState'
   >,
-  params: unknown
+  params: unknown,
+  /** Runs when the queued action is about to execute; throw to refuse it then. */
+  beforeRun?: () => void
 ): Promise<ComputerActionResult> {
   const validation = validateComputerSidecarPasteText(method, params)
   if (validation) {
     await validation
   }
   return normalizeComputerActionResult(
-    (await getComputerSidecar().call(method, params)) as ComputerActionResult
+    (await getComputerSidecar().call(method, params, beforeRun)) as ComputerActionResult
   )
 }
 
@@ -125,7 +127,7 @@ class ComputerSidecarProcess {
 
   constructor(private readonly entryPath: string) {}
 
-  call(method: ComputerSidecarMethod, params: unknown): Promise<unknown> {
+  call(method: ComputerSidecarMethod, params: unknown, beforeRun?: () => void): Promise<unknown> {
     const generation = this.queueGeneration
     const run = () => {
       if (generation !== this.queueGeneration) {
@@ -134,6 +136,8 @@ class ComputerSidecarProcess {
           'computer sidecar queue was invalidated; retry the computer-use request'
         )
       }
+      // Why here: a check made when the action was queued can be stale by the time it runs.
+      beforeRun?.()
       return this.send(method, params)
     }
     const result = this.queueTail ? this.queueTail.then(run, run) : run()

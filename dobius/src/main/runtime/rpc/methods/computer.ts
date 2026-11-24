@@ -15,6 +15,7 @@ import {
 } from '../../../computer/action-decision'
 import { journalComputerDecision } from '../../../computer/action-decision-journal'
 import {
+  namesSelf,
   PROTECTED_SELF_UI_REASON,
   protectedSelfUiActive,
   targetsSelf
@@ -65,7 +66,11 @@ async function runDecidedAction(
   }
   const { confirmRisky: _confirmRisky, ...forwarded } = params
   try {
-    const result = await callComputerSidecarAction(method, forwarded)
+    const result = await callComputerSidecarAction(method, forwarded, () => {
+      if (protectedSelfUiActive() && namesSelf(params.app)) {
+        throw new RuntimeClientError('invalid_argument', PROTECTED_SELF_UI_REASON)
+      }
+    })
     rememberComputerSnapshot(params.app, result)
     await journalComputerDecision({ ...entry, outcome: 'ok' })
     return result

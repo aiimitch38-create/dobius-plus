@@ -2,9 +2,9 @@
 // window's top frame may call these (same check as the live voice), because
 // Accept makes a card and Send texts someone. Send also needs:
 //   - the draft's fingerprint as shown, so a swapped recipient or text fails;
-//   - Carson's click on a native confirm naming the exact person and words.
-// While the list or the confirm is open, Dobius+ computer-use refuses to act
-// on Dobius+ (protected-self-ui.ts), so an agent cannot click Send.
+//   - a native confirm naming the exact person and words (a readable preview);
+//   - Touch ID in TextIntake.sendDraft: THE gate, since no agent can press a finger.
+// The protected-self-ui holds are defense in depth only (see that file).
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import type { TextIntakeResult, TextIntakeView } from '../../shared/text-intake'
 import { holdProtectedSelfUi, releaseProtectedSelfUi, withProtectedSelfUi } from '../computer/protected-self-ui'
@@ -16,6 +16,8 @@ const EMPTY: TextIntakeView = { contacts: [], suggestions: [], drafts: [] }
 const REVIEW_HOLD = 'text-intake-review'
 const CONFIRM_HOLD = 'text-intake-send-confirm'
 const watched = new Set<string>()
+// Why a counter: two confirms open at once each hold their own key, so the first to close never lifts the other's.
+let confirmCounter = 0
 
 type Trusted = (event: Electron.IpcMainInvokeEvent) => boolean
 /** True only when Carson clicked Send in the native confirm. */
@@ -69,7 +71,10 @@ async function confirmedSend(
     return { ok: false, error: prepared.error, view: intake.view() }
   }
   const { toName, toHandle } = prepared.draft
-  const yes = await withProtectedSelfUi(CONFIRM_HOLD, () => confirm(event, { toName, toHandle, text: prepared.text }))
+  confirmCounter += 1
+  const yes = await withProtectedSelfUi(`${CONFIRM_HOLD}:${confirmCounter}`, () =>
+    confirm(event, { toName, toHandle, text: prepared.text })
+  )
   if (!yes) {
     return { ok: false, error: 'Not sent.', view: intake.view() }
   }

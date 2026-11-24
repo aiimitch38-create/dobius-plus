@@ -1,8 +1,10 @@
-// Approval screens agents must never operate (Codex P1 on 7.17). While one is
-// open (the "From texts" review list, or the native Send confirm), Dobius+
-// computer-use refuses every action aimed at Dobius+ itself, so ADAM cannot
-// click Carson's Send for him. A hold is named so the same screen can release
-// it, and a renderer that dies without releasing only over-protects.
+// Approval screens agents should not operate (7.17). While one is open (the
+// "From texts" review list, or the native Send confirm), Dobius+ computer-use
+// refuses actions and snapshots aimed at Dobius+ itself.
+// DEFENSE IN DEPTH ONLY: the main renderer can lift its own hold, and an agent
+// with a shell can script clicks without computer-use. Sending a text is gated
+// by Touch ID (text-intake-wiring.ts), which neither can pass. A hold is named
+// so its own screen releases it; a renderer that dies only over-protects.
 import type { ComputerListWindowsResult } from '../../shared/computer-use-runtime-types'
 
 const holds = new Set<string>()
@@ -31,6 +33,11 @@ export async function withProtectedSelfUi<T>(key: string, work: () => Promise<T>
   } finally {
     releaseProtectedSelfUi(key)
   }
+}
+
+/** Sync check used when a queued action finally runs: by name or pid only. */
+export function namesSelf(app: unknown, selfPid: number = process.pid): boolean {
+  return typeof app === 'string' && (SELF_NAME.test(app) || app.trim() === String(selfPid))
 }
 
 // Why a name check too: when the window list cannot be read, the target is

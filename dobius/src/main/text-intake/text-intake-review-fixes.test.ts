@@ -15,6 +15,7 @@ function intakeWith(contacts: { name: string; handle: string; startRowid?: numbe
     createCard: () => ({ id: 't' }),
     sendText,
     sendUnavailable: () => null,
+    authorizeSend: async () => null,
     appendThread: async () => undefined,
     tap: () => undefined
   })

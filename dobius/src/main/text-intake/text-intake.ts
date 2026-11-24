@@ -33,6 +33,11 @@ export type TextIntakeDeps = {
   sendText: (handle: string, text: string) => Promise<void>
   /** Null when a text can go out now, else why not. */
   sendUnavailable: () => string | null
+  /**
+   * Carson proves he is there (Touch ID in main): null when he did, else why
+   * not. This is the gate an agent cannot pass: no click or script presses a finger.
+   */
+  authorizeSend: (draft: { toName: string; toHandle: string }) => Promise<string | null>
   appendThread: (row: AdamThreadRow) => Promise<void>
   /** Taps Carson with a fixed template (never the message text). */
   tap: (text: string) => void
@@ -270,7 +275,7 @@ export class TextIntake {
     }
   }
 
-  /** Carson's Send, after his confirm: the only way a draft goes out. */
+  /** Carson's Send, then his Touch ID: the only way a draft goes out. */
   async sendDraft(id: string, fingerprint: unknown, edited?: unknown): Promise<TextIntakeResult> {
     const prepared = this.prepareSend(id, fingerprint, edited)
     if (!prepared.ok) {
@@ -281,7 +286,18 @@ export class TextIntake {
     if (unavailable) {
       return this.result(unavailable)
     }
+    // Why 'sending' before Touch ID: a second Send for this draft is refused while the first waits.
     this.setDraft(id, { status: 'sending', text })
+    let refused: string | null
+    try {
+      refused = await this.deps.authorizeSend({ toName: draft.toName, toHandle: draft.toHandle })
+    } catch (error) {
+      refused = `Touch ID failed: ${error instanceof Error ? error.message : String(error)}`
+    }
+    if (refused) {
+      this.setDraft(id, { status: draft.status, text: draft.text })
+      return this.result(`Not sent: ${refused}`)
+    }
     try {
       await this.deps.sendText(draft.toHandle, text)
     } catch (error) {

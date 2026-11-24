@@ -11,6 +11,7 @@ vi.mock('../communications/shared/api/tauriChannels', () => ({
 
 import {
   boardDispatchInternals,
+  fenceSafe,
   resetBoardDispatchForTest,
   setBoardDispatchEnabled
 } from './board-dispatch'
@@ -332,5 +333,14 @@ describe('claim failures (N9)', () => {
       't1',
       expect.objectContaining({ status: 'review' })
     )
+  })
+})
+
+describe('fenceSafe (Codex round 2, 7.17)', () => {
+  it('escapes & first, so <div> and a literal &lt;div&gt; stay distinct', () => {
+    expect(fenceSafe('<div>')).toBe('&lt;div&gt;')
+    expect(fenceSafe('&lt;div&gt;')).toBe('&amp;lt;div&amp;gt;')
+    expect(fenceSafe('<div>')).not.toBe(fenceSafe('&lt;div&gt;'))
+    expect(fenceSafe('a & b')).toBe('a &amp; b')
   })
 })

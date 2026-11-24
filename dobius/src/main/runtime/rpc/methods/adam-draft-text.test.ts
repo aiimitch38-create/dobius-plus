@@ -14,6 +14,7 @@ const intake = new TextIntake({
   createCard: () => ({ id: 't' }),
   sendText,
   sendUnavailable: () => null,
+  authorizeSend: async () => null,
   appendThread: async () => undefined,
   tap: () => undefined
 })

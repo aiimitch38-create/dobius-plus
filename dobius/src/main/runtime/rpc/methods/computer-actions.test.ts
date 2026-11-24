@@ -148,7 +148,7 @@ describe('computer action RPC methods', () => {
       clickCount: 2,
       mouseButton: 'left',
       noScreenshot: true
-    })
+    }, expect.any(Function))
     expect(computerMocks.callComputerSidecarAction).toHaveBeenNthCalledWith(
       2,
       'performSecondaryAction',
@@ -156,7 +156,7 @@ describe('computer action RPC methods', () => {
         app: 'Finder',
         elementIndex: 0,
         action: 'Raise'
-      }
+      }, expect.any(Function)
     )
     expect(computerMocks.callComputerSidecarAction).toHaveBeenNthCalledWith(3, 'drag', {
       app: 'Finder',
@@ -164,7 +164,7 @@ describe('computer action RPC methods', () => {
       fromY: 2,
       toX: 3,
       toY: 4
-    })
+    }, expect.any(Function))
   })
 
   it('dispatches keyboard and text actions through the sidecar', async () => {
@@ -179,19 +179,19 @@ describe('computer action RPC methods', () => {
       app: 'Finder',
       text: 'hello',
       noScreenshot: true
-    })
+    }, expect.any(Function))
     expect(computerMocks.callComputerSidecarAction).toHaveBeenNthCalledWith(2, 'pressKey', {
       app: 'Finder',
       key: 'Return'
-    })
+    }, expect.any(Function))
     expect(computerMocks.callComputerSidecarAction).toHaveBeenNthCalledWith(3, 'hotkey', {
       app: 'Finder',
       key: 'CmdOrCtrl+L'
-    })
+    }, expect.any(Function))
     expect(computerMocks.callComputerSidecarAction).toHaveBeenNthCalledWith(4, 'pasteText', {
       app: 'Finder',
       text: 'long text'
-    })
+    }, expect.any(Function))
   })
 
   it('leaves oversized computer paste text to async sidecar validation', async () => {
@@ -226,12 +226,12 @@ describe('computer action RPC methods', () => {
       elementIndex: 0,
       direction: 'down',
       pages: 2
-    })
+    }, expect.any(Function))
     expect(computerMocks.callComputerSidecarAction).toHaveBeenNthCalledWith(2, 'setValue', {
       app: 'Finder',
       elementIndex: 1,
       value: ''
-    })
+    }, expect.any(Function))
   })
 })
 

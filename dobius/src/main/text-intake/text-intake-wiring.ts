@@ -2,6 +2,7 @@
 // (thread row, live call or Mac notification, same rate limits) on their own
 // budget, so a busy texter never uses up ADAM's own taps. A tap is always a
 // fixed template with the contact's name, never the message text.
+import { systemPreferences } from 'electron'
 import { join } from 'node:path'
 import type { AdamThreadRow } from '../../shared/speech-types'
 import { getImessageBridgeConfig } from '../imessage-bridge/bridge-config'
@@ -27,6 +28,32 @@ export function textSendUnavailable(platform: NodeJS.Platform = process.platform
   return getImessageBridgeConfig().enabled ? null : 'Turn on the iMessage bridge in Settings first.'
 }
 
+export const TOUCH_ID_REQUIRED = 'Sending needs Touch ID on this Mac'
+
+type TouchId = Pick<typeof systemPreferences, 'canPromptTouchID' | 'promptTouchID'>
+
+/**
+ * Touch ID before any text goes out (Codex round 2 on 7.17): computer-use and
+ * osascript can click, but nothing but Carson's finger passes this. No click
+ * fallback: without Touch ID, nothing is sent.
+ */
+export async function touchIdAuthorizeSend(
+  draft: { toName: string },
+  touchId: TouchId = systemPreferences,
+  platform: NodeJS.Platform = process.platform
+): Promise<string | null> {
+  if (platform !== 'darwin' || typeof touchId.canPromptTouchID !== 'function' || !touchId.canPromptTouchID()) {
+    return TOUCH_ID_REQUIRED
+  }
+  try {
+    await touchId.promptTouchID(`send a text to ${draft.toName}`)
+    return null
+  } catch {
+    // Why a fixed reason: the prompt rejects for cancel, lockout or failure alike, and all mean "no".
+    return 'Touch ID was not confirmed.'
+  }
+}
+
 export function startTextIntake(wiring: TextIntakeWiring): TextIntake {
   const notifier = new AdamNotifier({
     enabled: wiring.tapsOn,
@@ -39,6 +66,7 @@ export function startTextIntake(wiring: TextIntakeWiring): TextIntake {
     createCard: (input) => vertexTaskStore.create(input),
     sendText: sendImessage,
     sendUnavailable: () => textSendUnavailable(),
+    authorizeSend: (draft) => touchIdAuthorizeSend(draft),
     appendThread: wiring.appendThread,
     tap: (text) =>
       void notifier.notify(text, false).catch((error: unknown) => {

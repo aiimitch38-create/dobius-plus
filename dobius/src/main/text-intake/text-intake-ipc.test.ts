@@ -28,6 +28,7 @@ function setup(confirm = vi.fn(async () => true)) {
     createCard,
     sendText,
     sendUnavailable: () => null,
+    authorizeSend: async () => null,
     appendThread: async () => undefined,
     tap: () => undefined
   })
@@ -124,6 +125,30 @@ describe('text intake IPC: Send needs Carson', () => {
     invoke('textIntake:reviewVisible', TRUSTED, true)
     expect(protectedSelfUiActive()).toBe(true)
     invoke('textIntake:reviewVisible', TRUSTED, false)
+    expect(protectedSelfUiActive()).toBe(false)
+  })
+})
+
+describe('text intake IPC: overlapping confirms', () => {
+  it('each confirm holds its own key, so the first to close never lifts the other', async () => {
+    const opened: (() => void)[] = []
+    const confirm = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          opened.push(() => resolve(false))
+        })
+    )
+    const { intake, draftId, fingerprint } = setup(confirm)
+    const second = intake.createDraft('Brett', 'second')
+    const secondFp = intake.view().drafts.find((d) => d.id === second.id)?.fingerprint
+    const a = invoke('textIntake:sendDraft', TRUSTED, draftId, fingerprint) as Promise<unknown>
+    const b = invoke('textIntake:sendDraft', TRUSTED, second.id, secondFp) as Promise<unknown>
+    await vi.waitFor(() => expect(opened).toHaveLength(2))
+    opened[0]()
+    await a
+    expect(protectedSelfUiActive()).toBe(true)
+    opened[1]()
+    await b
     expect(protectedSelfUiActive()).toBe(false)
   })
 })
