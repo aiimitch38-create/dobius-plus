@@ -267,6 +267,12 @@ export type VertexTaskKitchen = {
   stopPending?: string
 }
 
+/** The answer to Carson's "Send to kitchen" / "Remove". `error` is a short
+ *  fixed line the card shows; it never holds card or terminal text. */
+export type VertexTaskKitchenMarkResult =
+  | { ok: true; task: VertexTask }
+  | { ok: false; error: string }
+
 export type VertexTaskLink = {
   id: string
   label: string

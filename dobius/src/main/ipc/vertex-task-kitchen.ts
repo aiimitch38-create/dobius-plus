@@ -13,13 +13,15 @@
 
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 
-import type { VertexTask } from '../../shared/vertex-task-types'
+import type { VertexTask, VertexTaskKitchenMarkResult } from '../../shared/vertex-task-types'
 import { withProtectedSelfUi } from '../computer/protected-self-ui'
-import { requireTouchId } from '../imessage-bridge/touch-id-gate'
+import { requireTouchId, TOUCH_ID_REQUIRED } from '../imessage-bridge/touch-id-gate'
 import { kitchenMarkPatch, pumpKitchenSoon } from '../vertex/kitchen'
 import { vertexTaskStore } from '../vertex/vertex-task-store'
 
 const TITLE_MAX = 60
+const NOT_SENT = 'Not sent.'
+const refusedWith = (error: string): VertexTaskKitchenMarkResult => ({ ok: false, error })
 let confirmCounter = 0
 
 /** The stored card with its own fields only (never an inherited mark). */
@@ -42,18 +44,18 @@ export function registerVertexTaskKitchenHandler(
   ipcMain.removeHandler('vertexTasks:setKitchen')
   ipcMain.handle(
     'vertexTasks:setKitchen',
-    async (event, args: { taskId: string; on: boolean }): Promise<VertexTask | null> => {
+    async (event, args: { taskId: string; on: boolean }): Promise<VertexTaskKitchenMarkResult> => {
       if (!args || typeof args.taskId !== 'string' || !args.taskId.trim() || typeof args.on !== 'boolean') {
-        return null
+        return refusedWith(NOT_SENT)
       }
       if (!isOperatorSender(event)) {
         console.warn('[vertex-tasks] setKitchen refused: not a first-party app window')
-        return null
+        return refusedWith(NOT_SENT)
       }
       const task = storedCard(args.taskId)
       const patch = task ? kitchenMarkPatch(task, args.on, Date.now()) : null
       if (!task || !patch) {
-        return null
+        return refusedWith(args.on ? 'Not sent: this card cannot go to the kitchen now.' : 'Not removed.')
       }
       if (args.on) {
         confirmCounter += 1
@@ -61,8 +63,11 @@ export function registerVertexTaskKitchenHandler(
           requireTouchId(promptReason(task))
         )
         if (refused) {
-          console.warn(`[vertex-tasks] setKitchen not confirmed: ${refused}`)
-          return null
+          return refusedWith(
+            refused === TOUCH_ID_REQUIRED
+              ? 'Not sent: the kitchen needs Touch ID on this Mac.'
+              : 'Not sent: Touch ID was cancelled.'
+          )
         }
         // Why re-read: the prompt was open for a while; only the card Carson
         // was asked about, still waiting and unmarked, is sent.
@@ -73,15 +78,14 @@ export function registerVertexTaskKitchenHandler(
           now.description !== task.description ||
           !kitchenMarkPatch(now, true, 0)
         ) {
-          console.warn('[vertex-tasks] setKitchen refused: the card changed while Touch ID was open')
-          return null
+          return refusedWith('Not sent: the card changed while Touch ID was open.')
         }
       }
       const updated = vertexTaskStore.update(args.taskId, patch)
       if (updated && args.on) {
         pumpKitchenSoon()
       }
-      return updated
+      return updated ? { ok: true, task: updated } : refusedWith(NOT_SENT)
     }
   )
 }

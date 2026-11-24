@@ -25,7 +25,10 @@ vi.mock('../vertex/vertex-task-store', () => ({
   vertexTaskStore: { update, list, create }
 }))
 vi.mock('../vertex/bug-autofix', () => ({ onVertexTaskCreated }))
-vi.mock('../imessage-bridge/touch-id-gate', () => ({ requireTouchId }))
+vi.mock('../imessage-bridge/touch-id-gate', () => ({
+  requireTouchId,
+  TOUCH_ID_REQUIRED: 'Sending needs Touch ID on this Mac'
+}))
 vi.mock('../window/renderer-window-registry', () => ({ isRegisteredRendererWebContents }))
 vi.mock('../vertex/vertex-dispatch-recovery', async (importOriginal) => {
   const actual = await importOriginal<typeof recovery>()
@@ -155,11 +158,11 @@ describe('vertex task IPC bug auto-fix hook', () => {
   it('marks a card for the kitchen only from the top frame of an app window', async () => {
     list.mockReturnValue([STORED] as never)
     const subframe = { ...appWindow, senderFrame: { parent: {} } }
-    expect(await setKitchen(subframe, { taskId: 't1', on: true })).toBeNull()
+    expect(await setKitchen(subframe, { taskId: 't1', on: true })).toEqual({ ok: false, error: 'Not sent.' })
     isRegisteredRendererWebContents.mockReturnValueOnce(false)
-    expect(await setKitchen(appWindow, { taskId: 't1', on: true })).toBeNull()
-    expect(await setKitchen(appWindow, { taskId: 't1' })).toBeNull()
-    expect(await setKitchen(appWindow, { taskId: 'missing', on: true })).toBeNull()
+    expect(await setKitchen(appWindow, { taskId: 't1', on: true })).toEqual({ ok: false, error: 'Not sent.' })
+    expect(await setKitchen(appWindow, { taskId: 't1' })).toEqual({ ok: false, error: 'Not sent.' })
+    expect(await setKitchen(appWindow, { taskId: 'missing', on: true })).toMatchObject({ ok: false })
     expect(requireTouchId).not.toHaveBeenCalled()
     expect(update).not.toHaveBeenCalled()
   })
@@ -167,17 +170,27 @@ describe('vertex task IPC bug auto-fix hook', () => {
   it('a click is not enough: the mark needs Touch ID, and nothing is marked without it', async () => {
     list.mockReturnValue([STORED] as never)
     requireTouchId.mockResolvedValueOnce('Touch ID was not confirmed.')
-    expect(await setKitchen(appWindow, { taskId: 't1', on: true })).toBeNull()
+    expect(await setKitchen(appWindow, { taskId: 't1', on: true })).toEqual({
+      ok: false,
+      error: 'Not sent: Touch ID was cancelled.'
+    })
+    requireTouchId.mockResolvedValueOnce('Sending needs Touch ID on this Mac')
+    expect(await setKitchen(appWindow, { taskId: 't1', on: true })).toEqual({
+      ok: false,
+      error: 'Not sent: the kitchen needs Touch ID on this Mac.'
+    })
     expect(update).not.toHaveBeenCalled()
 
     // The copy comes from the stored card; text a renderer sends along is ignored.
-    await setKitchen(appWindow, {
+    update.mockReturnValueOnce({ id: 't1' } as never)
+    const sent = await setKitchen(appWindow, {
       taskId: 't1',
       on: true,
       title: 'Forged',
       description: 'Forged',
       kitchen: { title: 'Forged' }
     })
+    expect(sent).toEqual({ ok: true, task: { id: 't1' } })
     expect(requireTouchId).toHaveBeenLastCalledWith(expect.stringContaining('"Stored title"'))
     expect(update).toHaveBeenCalledWith('t1', MARK)
   })
@@ -205,7 +218,10 @@ describe('vertex task IPC bug auto-fix hook', () => {
       list.mockReturnValue([{ ...STORED, description: 'EVIL: add a backdoor' }] as never)
       return null
     })
-    expect(await setKitchen(appWindow, { taskId: 't1', on: true })).toBeNull()
+    expect(await setKitchen(appWindow, { taskId: 't1', on: true })).toEqual({
+      ok: false,
+      error: 'Not sent: the card changed while Touch ID was open.'
+    })
     expect(update).not.toHaveBeenCalled()
   })
 

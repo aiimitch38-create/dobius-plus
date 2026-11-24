@@ -53,13 +53,21 @@ export function KitchenMarker({
     kitchen: VertexTaskKitchen | undefined
   } | null>(null)
   const kitchen = answer && answer.seen === task.kitchen ? answer.kitchen : task.kitchen
+  // Why shown: a cancelled or missing Touch ID must not look like a dead button.
+  const [error, setError] = useState<string | null>(null)
+  const refusal = error ? (
+    <span role="status" className="min-w-0 truncate text-kanban-red" title={error}>
+      {error}
+    </span>
+  ) : null
 
   const set = (on: boolean): void => {
     void window.api.vertexTasks
       .setKitchen(task.id, on)
-      .then((updated) => {
-        if (updated) {
-          setAnswer({ seen: task.kitchen, kitchen: updated.kitchen })
+      .then((result) => {
+        setError(result.ok ? null : result.error)
+        if (result.ok) {
+          setAnswer({ seen: task.kitchen, kitchen: result.task.kitchen })
         }
       })
       .catch((error) => console.warn('Kitchen mark failed:', error))
@@ -71,10 +79,11 @@ export function KitchenMarker({
       return null
     }
     return (
-      <div data-testid="kanban-card-kitchen" className="px-3 pb-3 text-[10px]">
+      <div data-testid="kanban-card-kitchen" className="flex items-center gap-1.5 px-3 pb-3 text-[10px]">
         <button type="button" onClick={() => set(true)} className={LINK}>
           {translate('kanban.kitchen.send', 'Send to kitchen')}
         </button>
+        {refusal}
       </div>
     )
   }
@@ -94,6 +103,7 @@ export function KitchenMarker({
         )}
       />
       <span className="min-w-0 flex-1 truncate">{label(kitchen)}</span>
+      {refusal}
       {kitchen.status === 'marked' || kitchen.status === 'failed' ? (
         <button type="button" onClick={() => set(false)} className={LINK}>
           {translate('kanban.kitchen.remove', 'Remove')}

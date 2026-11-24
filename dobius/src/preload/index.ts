@@ -283,6 +283,7 @@ import type {
   VertexTaskAttachment,
   VertexTaskAttachmentInput,
   VertexTaskInput,
+  VertexTaskKitchenMarkResult,
   VertexTaskOpResult,
   VertexTaskPatch,
   VertexTaskStatus
@@ -2150,7 +2151,7 @@ const api = {
     move: (taskId: string, to: VertexTaskStatus, toIndex: number): Promise<VertexTask | null> =>
       ipcRenderer.invoke('vertexTasks:move', { taskId, to, toIndex }),
     remove: (taskId: string): Promise<boolean> => ipcRenderer.invoke('vertexTasks:remove', taskId),
-    setKitchen: (taskId: string, on: boolean): Promise<VertexTask | null> =>
+    setKitchen: (taskId: string, on: boolean): Promise<VertexTaskKitchenMarkResult> =>
       ipcRenderer.invoke('vertexTasks:setKitchen', { taskId, on }),
     claim: (args: {
       taskId: string

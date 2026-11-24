@@ -27,7 +27,7 @@ afterEach(() => {
 
 describe('KitchenMarker', () => {
   it('offers "Send to kitchen" on a waiting card only while the kitchen is on', async () => {
-    setKitchen.mockResolvedValue({ kitchen: { status: 'marked', markedAt: 1, updatedAt: 1 } })
+    setKitchen.mockResolvedValue({ ok: true, task: { kitchen: { status: 'marked', markedAt: 1, updatedAt: 1 } } })
     render(<KitchenMarker task={{ id: 't1', status: 'backlog' }} />)
     fireEvent.click(screen.getByRole('button', { name: 'Send to kitchen' }))
     expect(setKitchen).toHaveBeenCalledWith('t1', true)
@@ -43,8 +43,23 @@ describe('KitchenMarker', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 
+  it('says why a card was not sent when Touch ID is cancelled or missing', async () => {
+    setKitchen.mockResolvedValueOnce({ ok: false, error: 'Not sent: Touch ID was cancelled.' })
+    render(<KitchenMarker task={{ id: 't1', status: 'backlog' }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Send to kitchen' }))
+    expect((await screen.findByRole('status')).textContent).toBe('Not sent: Touch ID was cancelled.')
+    // Still unmarked, and a second try that works clears the message.
+    setKitchen.mockResolvedValueOnce({
+      ok: true,
+      task: { kitchen: { status: 'marked', markedAt: 1, updatedAt: 1 } }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send to kitchen' }))
+    expect(await screen.findByText(/In the kitchen queue/)).toBeTruthy()
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
   it('lets Carson take back a card that has not started', () => {
-    setKitchen.mockResolvedValue(null)
+    setKitchen.mockResolvedValue({ ok: false, error: 'Not removed.' })
     render(
       <KitchenMarker
         task={{ id: 't1', status: 'backlog', kitchen: { status: 'marked', markedAt: 1, updatedAt: 1 } }}
